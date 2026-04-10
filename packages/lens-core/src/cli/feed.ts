@@ -154,11 +154,14 @@ async function feedCheck(opts: CommandOptions) {
 
   const allNew = results.flatMap((r) => r.articles);
 
+  const errors = results.filter((r) => r.error).map((r) => ({ feed: r.feed.title || r.feed.url, error: r.error }));
+
   if (allNew.length === 0) {
     if (opts.json) {
-      console.log(JSON.stringify({ new_articles: 0, results: [] }));
+      console.log(JSON.stringify({ new_articles: 0, errors, results: [] }));
     } else {
       log("\nNo new articles found across all feeds.");
+      if (errors.length) log(`(${errors.length} feed(s) had errors)`);
     }
     return;
   }
@@ -202,8 +205,7 @@ async function feedCheck(opts: CommandOptions) {
       log(`  FAILED: ${msg}\n`);
       failed++;
       ingestResults.push({ url: article.url, title: article.title, status: "error", error: msg });
-      // Mark as ingested anyway to avoid retrying broken URLs
-      markIngested(article.feedId, article.url);
+      // Do NOT mark as ingested — allow retry on next feed check
     }
   }
 

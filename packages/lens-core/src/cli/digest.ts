@@ -33,10 +33,14 @@ export async function showDigest(args: string[], opts: CommandOptions) {
 
   const db = getDb();
 
-  // Find all recently created objects
-  const recent = db
-    .prepare("SELECT id, type, data FROM objects WHERE updated_at > ? ORDER BY updated_at DESC")
-    .all(since) as { id: string; type: string; data: string }[];
+  // Find recently created objects (use created_at from object data, not cache updated_at)
+  const all = db.prepare("SELECT id, type, data FROM objects").all() as { id: string; type: string; data: string }[];
+  const recent = all.filter((row) => {
+    try {
+      const obj = JSON.parse(row.data);
+      return (obj.created_at || obj.ingested_at || "") > since;
+    } catch { return false; }
+  });
 
   if (recent.length === 0) {
     if (opts.json) {

@@ -8,49 +8,47 @@
  * - "contradicts": Create new Note with contradicts link on both sides
  */
 
-import { readFileSync, writeFileSync } from "fs";
-import matter from "gray-matter";
 import { generateId, type Note, type NoteRole } from "../core/types";
 import { saveObject, readObject } from "../core/storage";
-import { objectPath } from "../core/paths";
 import type { CompilationResult, ExtractedNote } from "./compilation-agent";
 
 export interface ProcessedObjects {
   notes_new: string[];
-  notes_reinforced: string[];     // existing notes that got new evidence
-  notes_contradicted: string[];   // pairs [new, existing]
-  notes_skipped: number;          // duplicates where evidence was merged
+  notes_reinforced: string[];
+  notes_contradicted: string[];
+  notes_skipped: number;
 }
 
-/** Append evidence to an existing Note's markdown file */
-function appendEvidenceToNote(noteId: string, newEvidence: { text: string; source: string; locator?: string }) {
-  const filePath = objectPath(noteId);
-  const raw = readFileSync(filePath, "utf-8");
-  const parsed = matter(raw);
+/** Read an existing Note, mutate it, and re-save via saveObject (keeps file + cache in sync) */
+function updateExistingNote(noteId: string, mutate: (data: Record<string, any>) => void): boolean {
+  const existing = readObject(noteId);
+  if (!existing) return false;
 
-  // Add to evidence array
-  const evidence = parsed.data.evidence || [];
-  evidence.push(newEvidence);
-  parsed.data.evidence = evidence;
+  mutate(existing.data);
 
-  // Rewrite file
-  const content = matter.stringify(parsed.content, parsed.data);
-  writeFileSync(filePath, content, "utf-8");
+  const obj = { ...existing.data, id: noteId } as Note;
+  saveObject(obj, existing.content);
+  return true;
+}
+
+/** Append evidence to an existing Note */
+function appendEvidenceToNote(noteId: string, newEvidence: { text: string; source: string; locator?: string }): boolean {
+  return updateExistingNote(noteId, (data) => {
+    const evidence = data.evidence || [];
+    evidence.push(newEvidence);
+    data.evidence = evidence;
+  });
 }
 
 /** Add a contradicts reference to an existing Note */
-function addContradictsToNote(noteId: string, contradictingId: string) {
-  const filePath = objectPath(noteId);
-  const raw = readFileSync(filePath, "utf-8");
-  const parsed = matter(raw);
-
-  const contradicts = parsed.data.contradicts || [];
-  if (!contradicts.includes(contradictingId)) {
-    contradicts.push(contradictingId);
-    parsed.data.contradicts = contradicts;
-    const content = matter.stringify(parsed.content, parsed.data);
-    writeFileSync(filePath, content, "utf-8");
-  }
+function addContradictsToNote(noteId: string, contradictingId: string): boolean {
+  return updateExistingNote(noteId, (data) => {
+    const contradicts = data.contradicts || [];
+    if (!contradicts.includes(contradictingId)) {
+      contradicts.push(contradictingId);
+      data.contradicts = contradicts;
+    }
+  });
 }
 
 /** Infer NoteRole from which optional fields are present */
@@ -79,60 +77,48 @@ export function processAgentOutput(
   // Process all notes
   for (const en of result.notes) {
     const relation = en.relation_to_existing || "new";
-    const existingId = en.existing_claim_id;
+    const existingId = en.existing_note_id;
 
     switch (relation) {
       case "duplicate": {
-        // Merge evidence into existing note, don't create new
+        // Merge evidence into existing note
         if (existingId && en.evidence_text) {
-          try {
-            appendEvidenceToNote(existingId, {
-              text: en.evidence_text,
-              source: sourceId,
-              locator: en.evidence_locator,
-            });
+          const ok = appendEvidenceToNote(existingId, {
+            text: en.evidence_text,
+            source: sourceId,
+            locator: en.evidence_locator,
+          });
+          if (ok) {
             processed.notes_reinforced.push(existingId);
             log(`  Reinforced: ${existingId} -- added evidence`);
-          } catch (e) {
-            // If existing note not found, create as new
+            processed.notes_skipped++;
+          } else {
+            // Existing note not found — create as new instead of losing data
+            log(`  Warning: existing note ${existingId} not found, creating new`);
             createNewNote(en, sourceId, now, processed, log);
           }
+        } else {
+          // Missing existingId or evidence — create as new instead of silently dropping
+          log(`  Warning: duplicate missing required fields, creating as new`);
+          createNewNote(en, sourceId, now, processed, log);
         }
-        processed.notes_skipped++;
         break;
       }
 
       case "supports": {
-        // Create new note with supports field
         const id = createNewNote(en, sourceId, now, processed, log);
         if (existingId && id) {
-          try {
-            const filePath = objectPath(id);
-            const raw = readFileSync(filePath, "utf-8");
-            const parsed = matter(raw);
-            parsed.data.supports = [existingId];
-            writeFileSync(filePath, matter.stringify(parsed.content, parsed.data), "utf-8");
-          } catch {}
+          updateExistingNote(id, (data) => { data.supports = [existingId]; });
           log(`  Supports: ${existingId}`);
         }
         break;
       }
 
       case "contradicts": {
-        // Create new note + set contradicts on both sides
         const id = createNewNote(en, sourceId, now, processed, log);
         if (existingId && id) {
-          try {
-            // Mark new note as contradicting existing
-            const filePath = objectPath(id);
-            const raw = readFileSync(filePath, "utf-8");
-            const parsed = matter(raw);
-            parsed.data.contradicts = [existingId];
-            writeFileSync(filePath, matter.stringify(parsed.content, parsed.data), "utf-8");
-
-            // Mark existing note as contradicted by new
-            addContradictsToNote(existingId, id);
-          } catch {}
+          updateExistingNote(id, (data) => { data.contradicts = [existingId]; });
+          addContradictsToNote(existingId, id);
           processed.notes_contradicted.push(id, existingId);
           log(`  Contradicts: ${existingId}`);
         }

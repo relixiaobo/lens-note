@@ -164,14 +164,18 @@ function showSourceContributions(
   console.log(`${data.word_count} words · ${data.source_type} · ${data.ingested_at?.substring(0, 10)}`);
   console.log(`${"━".repeat(50)}\n`);
 
-  // Find all notes sourced from this source
+  // Find all notes sourced from this source (both "source" and "evidence" backlinks)
   const backlinks = getBacklinks(id);
-  const notes = backlinks
-    .filter((l) => l.rel === "source" && l.from_id.startsWith("note_"))
-    .map((l) => {
-      const obj = readObject(l.from_id);
+  const noteIds = new Set(
+    backlinks
+      .filter((l) => (l.rel === "source" || l.rel === "evidence") && l.from_id.startsWith("note_"))
+      .map((l) => l.from_id)
+  );
+  const notes = [...noteIds]
+    .map((noteId) => {
+      const obj = readObject(noteId);
       return obj ? {
-        id: l.from_id,
+        id: noteId,
         text: obj.data.text,
         role: obj.data.role || "observation",
         qualifier: obj.data.qualifier,

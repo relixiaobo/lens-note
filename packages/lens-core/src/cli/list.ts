@@ -45,10 +45,13 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     items.push({ id, ...obj.data });
   }
 
-  // Apply filters
+  // Apply filters (derive effective role from fields if role hint is missing)
   const roleFilter = flags.role as string | undefined;
   if (roleFilter) {
-    items = items.filter((item) => item.role === roleFilter);
+    items = items.filter((item) => {
+      const effectiveRole = item.role || inferRoleFromFields(item);
+      return effectiveRole === roleFilter;
+    });
   }
 
   const scopeFilter = flags.scope as string | undefined;
@@ -167,4 +170,14 @@ function parseDays(s: string): number {
     case "y": return n * 365;
     default: return n;
   }
+}
+
+/** Derive role from which optional fields are present (fallback when role hint is missing) */
+function inferRoleFromFields(item: Record<string, any>): string {
+  if (item.evidence?.length) return "claim";
+  if (item.sees || item.ignores) return "frame";
+  if (item.question_status) return "question";
+  if (item.bridges?.length) return "connection";
+  if (item.entries?.length) return "structure_note";
+  return "observation";
 }

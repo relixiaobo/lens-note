@@ -16,7 +16,7 @@ import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 // ============================================================
 // Types for extraction output
@@ -37,7 +37,7 @@ export interface ExtractedNote {
   question_status?: "open" | "tentative_answer";
   bridges?: string[];
   relation_to_existing?: "new" | "supports" | "contradicts" | "duplicate";
-  existing_claim_id?: string;
+  existing_note_id?: string;
 }
 
 export interface CompilationResult {
@@ -76,7 +76,7 @@ const ExtractionSchema = Type.Object({
       Type.Literal("new"), Type.Literal("supports"),
       Type.Literal("contradicts"), Type.Literal("duplicate"),
     ])),
-    existing_claim_id: Type.Optional(Type.String()),
+    existing_note_id: Type.Optional(Type.String()),
   })),
 });
 
@@ -95,7 +95,7 @@ You are NOT an extractor that mines articles for facts. You are a THINKER who re
 ## Your Tools
 
 1. **lens_query**: Run lens CLI commands to explore existing knowledge.
-   - lens list claims --scope big_picture --json   (see core beliefs)
+   - lens list notes --scope big_picture --json      (see core beliefs)
    - lens search "keyword" --json                   (find related notes)
    - lens show <id> --json                           (read a note in full)
    - lens links <id> --json                          (see connections — FOLLOW THEM)
@@ -131,7 +131,7 @@ A good note is NOT "the article says X." A good note is:
 
 ## When NOT to Write a Note
 
-- The article says something you already have a note about → DON'T create a duplicate. Set relation_to_existing="duplicate" with the existing_claim_id to add this as new evidence.
+- The article says something you already have a note about → DON'T create a duplicate. Set relation_to_existing="duplicate" with the existing_note_id to add this as new evidence.
 - The article restates common knowledge → skip
 - The article makes a point that's trivially obvious → skip
 
@@ -150,7 +150,7 @@ The number follows from thinking, not from a target.
 - scope: big_picture (core insight) / detail (supporting point)
 - structure_type: taxonomy/causal/description/timeline/argument/content/story/process/relationships
 - relation_to_existing: new / supports / contradicts / duplicate
-- existing_claim_id: if supports/contradicts/duplicate, which existing note
+- existing_note_id: if supports/contradicts/duplicate, which existing note
 
 ## Frame Fields (only if the article introduces a genuinely novel perspective)
 - sees / ignores / assumptions
@@ -216,39 +216,37 @@ export async function runCompilationAgent(
     label: "Query Lens Knowledge Base",
     parameters: LensQuerySchema,
     execute: async (toolCallId, params) => {
-      let cmd = params.command.trim();
+      const cmd = params.command.trim();
+
+      // Parse command into subcommand + args
+      const parts = cmd.replace(/^lens\s+/, "").split(/\s+/);
+      const subcommand = parts[0];
+
+      // Allowlist of read-only subcommands
+      const ALLOWED = new Set(["list", "show", "search", "links", "context", "status", "digest"]);
+      if (!subcommand || !ALLOWED.has(subcommand)) {
+        return {
+          content: [{ type: "text" as const, text: `Error: only read commands allowed (${[...ALLOWED].join(", ")}). Got: "${subcommand}"` }],
+          details: {},
+        };
+      }
 
       // Ensure --json flag
-      if (!cmd.includes("--json")) cmd += " --json";
-
-      // Security: only allow lens commands
-      if (!cmd.startsWith("lens ")) {
-        return {
-          content: [{ type: "text" as const, text: "Error: command must start with 'lens'" }],
-          details: {},
-        };
-      }
-
-      // Don't allow write commands
-      if (cmd.includes("ingest") || cmd.includes("note") || cmd.includes("init") || cmd.includes("feed")) {
-        return {
-          content: [{ type: "text" as const, text: "Error: only read commands are allowed (list, show, search, links, context, status)" }],
-          details: {},
-        };
-      }
+      const args = parts.slice(1);
+      if (!args.includes("--json")) args.push("--json");
 
       try {
-        // Run via the current process's bun
         const bunPath = process.execPath || "bun";
         const mainPath = new URL("../main.ts", import.meta.url).pathname;
-        const lensCmd = cmd.replace(/^lens\s+/, "");
-        const output = execSync(`"${bunPath}" run "${mainPath}" ${lensCmd}`, {
+
+        // execFileSync: no shell, no injection. argv array only.
+        const output = execFileSync(bunPath, ["run", mainPath, subcommand, ...args], {
           encoding: "utf-8",
           timeout: 10000,
           env: { ...process.env },
         });
 
-        log(`  lens_query: ${cmd.substring(0, 60)}...`);
+        log(`  lens_query: lens ${subcommand} ${args.slice(0, 3).join(" ")}...`);
 
         return {
           content: [{ type: "text" as const, text: output.substring(0, 8000) }], // cap output
