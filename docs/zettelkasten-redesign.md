@@ -291,35 +291,105 @@ CREATE INDEX idx_links_to ON links(to_id, rel);
 
 ## 5. The AI Agent
 
-### 5.1 Extraction Standard
+### 5.1 Notes Grow Over Time
+
+A Note is NOT frozen at creation. It evolves as new sources confirm, enrich, or challenge it:
+
+```
+Lifecycle of a Note:
+
+  Created (from Article A):
+    text: "Testing in production is underrated"
+    role: observation
+    (no evidence, no qualifier)
+
+  Updated (Article B provides evidence):
+    evidence: [{text: "Netflix runs 100% of experiments in prod...", source: src_02}]
+    qualifier: presumably
+    role: claim          ← promoted from observation
+    
+  Updated (Article C adds more evidence):
+    evidence: [{...from B...}, {text: "Google's Beyondcorp assumes prod...", source: src_03}]
+    qualifier: likely     ← strengthened
+
+  Updated (Article D from a different domain):
+    body: enriched with new context about healthcare systems
+    related: [{id: note_XX, note: "similar principle in clinical trials"}]
+    
+  Updated (3 independent sources now confirm):
+    qualifier: certain    ← fully substantiated
+```
+
+### 5.2 What the Agent Can Do to Existing Notes
+
+| Action | What Changes | When |
+|---|---|---|
+| **add_evidence** | Append to `evidence[]` | New source provides supporting quote |
+| **strengthen** | `qualifier` upgrades (likely → certain) | Multiple independent sources confirm |
+| **weaken** | `qualifier` downgrades (certain → likely) | New counter-evidence found |
+| **enrich** | Body text expanded | New source adds context or explanation |
+| **add_link** | New entry in `supports/contradicts/related` | Connection to new Note discovered |
+| **promote** | `role` changes (observation → claim), fields added | Evidence arrives for a bare observation |
+
+Each update records its reason for traceability.
+
+### 5.3 Extraction Standard
 
 The Agent does NOT target a fixed number of Notes per article. It targets RELATIONSHIPS to existing knowledge:
 
 | What the Agent finds | Action |
 |---|---|
-| Genuinely new insight (not in knowledge base) | Create Note |
-| Contradiction with existing Note | Create Note + `contradicts` link |
-| New evidence for existing Note | Update existing Note's `evidence[]` |
-| New perspective not yet seen | Create Note with `sees/ignores` |
-| Genuinely open question | Create Note with `question_status: open` |
-| Already known (duplicate) | Do not create |
+| Genuinely new insight | **Create** new Note |
+| New evidence for existing Note | **Update** existing Note (add_evidence) |
+| Strengthens existing Note | **Update** existing Note (strengthen qualifier) |
+| Contradicts existing Note | **Create** new Note + `contradicts` link |
+| Weakens existing Note | **Update** existing Note (weaken qualifier) |
+| New perspective not yet seen | **Create** Note with `sees/ignores` |
+| Genuinely open question | **Create** Note with `question_status` |
+| New context for existing Note | **Update** existing Note (enrich body) |
+| Surprising cross-domain link | **Create** Connection note (bridges) |
+| Already fully known | **Skip** (no action) |
 
-**The number of Notes is a RESULT of what's genuinely new, not a target.**
+**The number of new Notes is a RESULT of what's genuinely new. The number of updates is a RESULT of what enriches existing knowledge. Neither is a target.**
 
-An article that covers mostly known territory might produce 1-2 Notes. A breakthrough paper might produce 10. The Agent decides based on exploration.
+An article about a well-covered topic might create 1 new Note but UPDATE 5 existing ones. A breakthrough paper might create 10 new Notes. The Agent decides based on exploration.
 
-### 5.2 Agent's Process
+### 5.4 Agent's Process
 
 ```
 1. Read the source document
 2. Explore existing knowledge (lens search, lens list, lens links)
-3. Identify what's genuinely new, contradicting, or supporting
-4. Create Notes with links to existing Notes
-5. Optionally create Connection notes for surprising cross-domain links
-6. Do NOT create structure notes (post-hoc, user-initiated)
+3. For each key idea in the article:
+   a. Search for similar existing Notes
+   b. If found: decide whether to UPDATE (add evidence, strengthen, enrich) or CREATE (contradiction, new angle)
+   c. If not found: CREATE new Note
+4. Discover cross-domain connections → CREATE Connection notes
+5. Do NOT create structure notes (post-hoc, user-initiated)
 ```
 
-### 5.3 Agent's Tools
+### 5.5 Agent's Output
+
+```typescript
+interface CompilationResult {
+  // New Notes
+  new_notes: ExtractedNote[];
+  
+  // Updates to existing Notes
+  updates: NoteUpdate[];
+}
+
+interface NoteUpdate {
+  existing_id: string;
+  action: "add_evidence" | "strengthen" | "weaken" | "enrich" | "add_link" | "promote";
+  evidence?: { text: string; source: string };    // for add_evidence / promote
+  new_qualifier?: string;                          // for strengthen / weaken
+  body_addition?: string;                          // for enrich
+  link?: { rel: string; target: string };          // for add_link
+  reason: string;                                  // why this update (traceability)
+}
+```
+
+### 5.6 Agent's Tools
 
 ```
 lens list notes [--role] [--scope] [--since]    Browse
@@ -327,7 +397,7 @@ lens show <id> --json                            Inspect
 lens search "<query>" --json                     Search
 lens links <id> --json                           Relationships
 lens context "<query>" --json                    Context pack
-submit_extraction(...)                           Submit results
+submit_extraction(...)                           Submit new notes + updates
 ```
 
 The Agent uses the same CLI tools as any other agent. No special tools.
@@ -383,6 +453,12 @@ New Insights
       → supports existing: "Compilation > interpretation"
   ■■  "Observation-first design outperforms problem-first"
 
+Growing Notes
+  📎 "High quality is cheaper" — new evidence from Article X
+  ⬆ "Cruft slows development" — confidence: likely → certain (3 sources)
+  ✎ "Design dissolving in behavior" — enriched with Fukasawa's methodology
+  🎓 "Testing in production works" — promoted: observation → claim
+
 New Connections
   🔗 "Without thought design" ↔ "Vibe coding"
      Both: tools disappearing into user behavior
@@ -390,16 +466,14 @@ New Connections
 New Tensions
   🔥 "More context always better" ↔ "Over-stuffing hurts"
 
-New Evidence
-  📎 "High quality is cheaper" — new supporting evidence from article X
-
 New Questions
   ? Can "design dissolving in behavior" apply to API design?
 
-8 new Notes · 5 new links · from 3 sources
+5 new Notes · 4 updated Notes · 6 new links · from 3 sources
 ```
 
-Grouped by RELATIONSHIP TYPE. If structure notes exist, their titles can optionally appear as context labels.
+Grouped by RELATIONSHIP TYPE: new / growing / connections / tensions / questions.
+"Growing Notes" shows how existing knowledge evolved — not just what's new, but what CHANGED.
 
 ---
 
