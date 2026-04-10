@@ -23,7 +23,7 @@ function parseFeedXml(xml: string): ParsedFeed {
       items: (feed.entries || []).map((e) => ({
         url: e.links?.find((l: any) => l.rel === "alternate" || !l.rel)?.href || e.links?.[0]?.href || "",
         title: e.title || "",
-        published: e.published instanceof Date ? e.published.toISOString() : undefined,
+        published: e.published ? String(e.published) : undefined,
       })),
     };
   }
@@ -35,7 +35,7 @@ function parseFeedXml(xml: string): ParsedFeed {
       items: (feed.items || []).map((i) => ({
         url: i.link || "",
         title: i.title || "",
-        published: i.pubDate instanceof Date ? i.pubDate.toISOString() : undefined,
+        published: i.pubDate ? String(i.pubDate) : undefined,
       })),
     };
   }
@@ -58,7 +58,7 @@ function parseFeedXml(xml: string): ParsedFeed {
       items: (feed.items || []).map((i) => ({
         url: i.url || "",
         title: i.title || "",
-        published: i.date_published instanceof Date ? i.date_published.toISOString() : undefined,
+        published: i.date_published ? String(i.date_published) : undefined,
       })),
     };
   }

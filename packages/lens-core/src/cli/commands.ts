@@ -137,12 +137,3 @@ export const commands: Record<string, CommandHandler> = {
   "rebuild-index": rebuildIndexCommand,
 };
 
-/** Commands that are implemented and ready to use */
-export const implementedCommands = new Set([
-  "init", "status", "note", "show", "search", "rebuild-index", "programme",
-]);
-
-/** Commands that are planned but not yet implemented */
-export const plannedCommands = new Set([
-  "ingest", "context",
-]);
