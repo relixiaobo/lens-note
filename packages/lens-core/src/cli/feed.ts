@@ -179,15 +179,18 @@ async function feedCheck(opts: CommandOptions) {
     return;
   }
 
-  // Ingest new articles
-  log(`\nIngesting ${allNew.length} new article(s)...\n`);
+  // Apply --limit
+  const limit = Number(opts.limit) || allNew.length;
+  const toIngest = allNew.slice(0, limit);
+
+  log(`\nIngesting ${toIngest.length} article(s)${limit < allNew.length ? ` (limited from ${allNew.length})` : ""}...\n`);
   const { ingestSource } = await import("./ingest");
 
   let success = 0;
   let failed = 0;
   const ingestResults: { url: string; title: string; status: string; error?: string }[] = [];
 
-  for (const article of allNew) {
+  for (const article of toIngest) {
     log(`--- ${article.title} ---`);
     try {
       await ingestSource(article.url, { ...opts, json: false });
