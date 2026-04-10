@@ -124,18 +124,21 @@ async function compile(
       source_id: sourceId,
       title,
       compiled: {
-        claims: processed.claims.length,
+        claims_new: processed.claims_new.length,
+        claims_reinforced: processed.claims_reinforced.length,
+        claims_skipped: processed.claims_skipped,
+        claims_contradicted: processed.claims_contradicted.length / 2,
         frames: processed.frames.length,
         questions: processed.questions.length,
         programme: processed.programme,
-        claim_ids: processed.claims,
-        frame_ids: processed.frames,
-        question_ids: processed.questions,
       },
     }, null, 2));
   } else {
     log(`\nCompilation complete:`);
-    log(`  ${processed.claims.length} Claims`);
+    log(`  ${processed.claims_new.length} new Claims`);
+    if (processed.claims_reinforced.length) log(`  📎 ${processed.claims_reinforced.length} existing Claims reinforced (evidence added)`);
+    if (processed.claims_skipped) log(`  ⊘ ${processed.claims_skipped} duplicates merged`);
+    if (processed.claims_contradicted.length) log(`  🔥 ${processed.claims_contradicted.length / 2} contradiction(s) detected`);
     log(`  ${processed.frames.length} Frames`);
     log(`  ${processed.questions.length} Questions`);
     if (processed.programme) {

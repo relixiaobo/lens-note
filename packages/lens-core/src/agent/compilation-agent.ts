@@ -1,10 +1,9 @@
 /**
  * Compilation Agent.
  *
- * A short-lived agent that reads a source document, explores existing
- * knowledge in ~/.lens/, and extracts Claims, Frames, and Questions.
- *
- * Uses pi-agent-core for the agent loop and pi-ai for LLM calls.
+ * A short-lived agent that reads a source document, compares with existing
+ * knowledge, and extracts NEW Claims, Frames, and Questions. It deduplicates
+ * against existing Claims and identifies contradictions.
  */
 
 import { Agent } from "@mariozechner/pi-agent-core";
@@ -14,6 +13,7 @@ import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { readdirSync, readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { paths } from "../core/paths";
+import matter from "gray-matter";
 
 // ============================================================
 // Types for extraction output
@@ -28,6 +28,9 @@ export interface ExtractedClaim {
   evidence_locator?: string;
   structure_type?: string;
   warrant_description?: string;
+  // Dedup/relation fields
+  relation_to_existing?: "new" | "supports" | "contradicts" | "duplicate";
+  existing_claim_id?: string; // if supports/contradicts/duplicate, which existing claim
 }
 
 export interface ExtractedFrame {
@@ -63,13 +66,16 @@ const ExtractionSchema = Type.Object({
     voice: Type.Union([
       Type.Literal("extracted"), Type.Literal("restated"), Type.Literal("synthesized"),
     ]),
-    scope: Type.Union([
-      Type.Literal("big_picture"), Type.Literal("detail"),
-    ]),
+    scope: Type.Union([Type.Literal("big_picture"), Type.Literal("detail")]),
     evidence_text: Type.String(),
     evidence_locator: Type.Optional(Type.String()),
     structure_type: Type.Optional(Type.String()),
     warrant_description: Type.Optional(Type.String()),
+    relation_to_existing: Type.Optional(Type.Union([
+      Type.Literal("new"), Type.Literal("supports"),
+      Type.Literal("contradicts"), Type.Literal("duplicate"),
+    ])),
+    existing_claim_id: Type.Optional(Type.String()),
   })),
   frames: Type.Array(Type.Object({
     name: Type.String(),
@@ -85,55 +91,80 @@ const ExtractionSchema = Type.Object({
 });
 
 // ============================================================
-// Build existing knowledge context
+// Build existing knowledge context (FULL, not just 5 claims)
 // ============================================================
 
-function getExistingKnowledgeSummary(): string {
+interface ExistingClaim {
+  id: string;
+  statement: string;
+  qualifier: string;
+  scope: string;
+}
+
+function getExistingKnowledge(): { programmes: string[]; claims: ExistingClaim[] } {
+  const programmes: string[] = [];
+  const claims: ExistingClaim[] = [];
+
+  // Read all programmes
+  if (existsSync(paths.programmes)) {
+    for (const f of readdirSync(paths.programmes).filter(f => f.endsWith(".md"))) {
+      try {
+        const content = readFileSync(join(paths.programmes, f), "utf-8");
+        const parsed = matter(content);
+        programmes.push(`${f.replace(".md", "")}: ${parsed.data.title || "(untitled)"}`);
+      } catch {}
+    }
+  }
+
+  // Read ALL claims (statement + qualifier + scope + id)
+  if (existsSync(paths.claims)) {
+    for (const f of readdirSync(paths.claims).filter(f => f.endsWith(".md"))) {
+      try {
+        const content = readFileSync(join(paths.claims, f), "utf-8");
+        const parsed = matter(content);
+        if (parsed.data.statement) {
+          claims.push({
+            id: f.replace(".md", ""),
+            statement: parsed.data.statement,
+            qualifier: parsed.data.qualifier || "tentative",
+            scope: parsed.data.scope || "detail",
+          });
+        }
+      } catch {}
+    }
+  }
+
+  return { programmes, claims };
+}
+
+function formatExistingKnowledge(knowledge: { programmes: string[]; claims: ExistingClaim[] }): string {
   const parts: string[] = [];
 
-  if (existsSync(paths.programmes)) {
-    const pgms = readdirSync(paths.programmes).filter(f => f.endsWith(".md"));
-    if (pgms.length > 0) {
-      parts.push("Existing Programmes:");
-      for (const f of pgms.slice(0, 10)) {
-        try {
-          const content = readFileSync(join(paths.programmes, f), "utf-8");
-          const titleMatch = content.match(/title:\s*['"]?(.+?)['"]?\s*$/m);
-          parts.push(`- ${f.replace(".md", "")}: ${titleMatch?.[1] || "(untitled)"}`);
-        } catch {}
-      }
-    }
+  if (knowledge.programmes.length) {
+    parts.push("EXISTING PROGRAMMES:");
+    for (const p of knowledge.programmes) parts.push(`  - ${p}`);
   }
 
-  if (existsSync(paths.claims)) {
-    const claimCount = readdirSync(paths.claims).filter(f => f.endsWith(".md")).length;
-    if (claimCount > 0) {
-      parts.push(`\nExisting Claims: ${claimCount} total`);
-      const files = readdirSync(paths.claims).filter(f => f.endsWith(".md")).slice(-5);
-      for (const f of files) {
-        try {
-          const content = readFileSync(join(paths.claims, f), "utf-8");
-          const stmtMatch = content.match(/statement:\s*[>|]?\s*\n?\s*(.+)/m);
-          if (stmtMatch) parts.push(`- "${stmtMatch[1].substring(0, 80)}"`);
-        } catch {}
-      }
+  if (knowledge.claims.length) {
+    parts.push(`\nEXISTING CLAIMS (${knowledge.claims.length} total):`);
+    parts.push("Check each new claim against these. Mark duplicates and contradictions.");
+    for (const c of knowledge.claims) {
+      parts.push(`  [${c.id}] [${c.qualifier}] [${c.scope}] "${c.statement}"`);
     }
-  }
-
-  if (parts.length === 0) {
-    return "No existing knowledge yet. This is the first source being compiled.";
+  } else {
+    parts.push("No existing claims. This is the first source being compiled.");
   }
 
   return parts.join("\n");
 }
 
 // ============================================================
-// System prompt (static — source content goes in user message)
+// System prompt
 // ============================================================
 
 const SYSTEM_PROMPT = `You are a Compilation Agent for lens, a structured cognition compiler.
 
-Your task: read a source document and extract structured knowledge objects.
+Your task: read a source document, compare with existing knowledge, and extract ONLY genuinely new or conflicting insights.
 
 ## What to Extract
 
@@ -141,12 +172,23 @@ Your task: read a source document and extract structured knowledge objects.
 2. **Frames** — Perspectives the article uses
 3. **Questions** — Genuine open questions raised
 
+## CRITICAL: Deduplication
+
+Before creating each claim, check the EXISTING CLAIMS list provided. For each potential claim:
+
+- If an existing claim says essentially the SAME thing (even with different wording): set relation_to_existing="duplicate" and existing_claim_id to that claim's ID. Still include the evidence_text — it will be added to the existing claim as additional evidence.
+- If an existing claim says something RELATED that this new evidence SUPPORTS: set relation_to_existing="supports" and existing_claim_id.
+- If an existing claim says something this article CONTRADICTS: set relation_to_existing="contradicts" and existing_claim_id.
+- If no existing claim is similar: set relation_to_existing="new" (or omit the field).
+
+This is the most important part of your job. Do NOT create duplicate claims.
+
 ## Claim Rules
 - statement: clear, falsifiable assertion
 - evidence_text: verbatim quote from source (50-300 chars)
 - qualifier: certain / likely / presumably / tentative
 - voice: extracted / restated / synthesized
-- scope: big_picture (overarching insight, the key takeaway) / detail (specific evidence, data point, supporting argument). Aim for 3-5 big_picture claims and the rest as detail.
+- scope: big_picture (overarching insight, key takeaway) / detail (specific evidence, supporting argument). Aim for 3-5 big_picture claims.
 - structure_type: taxonomy / causal / description / timeline / argument / content / story / process / relationships
 - warrant_description (optional): what perspective makes this valid
 
@@ -161,8 +203,8 @@ Your task: read a source document and extract structured knowledge objects.
 
 ## Standards
 - 5-15 claims, 1-4 frames, 2-6 questions
-- Quality over quantity
-- Every claim grounded in source text
+- Quality over quantity — skip trivial claims
+- SKIP claims that duplicate existing ones (mark as "duplicate" instead)
 
 Call submit_extraction with your results.
 If the document has a coherent theme, set suggested_programme to a descriptive title.
@@ -186,24 +228,24 @@ export async function runCompilationAgent(
   const log = onProgress || (() => {});
 
   log("Building knowledge context...");
-  const existingKnowledge = getExistingKnowledgeSummary();
+  const knowledge = getExistingKnowledge();
+  const knowledgeText = formatExistingKnowledge(knowledge);
+  log(`Found ${knowledge.claims.length} existing claims, ${knowledge.programmes.length} programmes`);
 
   log("Starting Compilation Agent...");
 
-  // Accumulated result (merge across multiple tool calls)
   const result: CompilationResult = { claims: [], frames: [], questions: [] };
   let toolCalled = false;
 
   const submitTool: AgentTool<typeof ExtractionSchema> = {
     name: "submit_extraction",
-    description: "Submit extracted Claims, Frames, and Questions from the source document",
+    description: "Submit extracted Claims, Frames, and Questions from the source document. Mark duplicates and contradictions with existing claims.",
     label: "Submit Extraction",
     parameters: ExtractionSchema,
     execute: async (toolCallId, params) => {
       const p = params as CompilationResult;
       toolCalled = true;
 
-      // Merge (not replace) — agent may call multiple times for long docs
       result.claims.push(...p.claims);
       result.frames.push(...p.frames);
       result.questions.push(...p.questions);
@@ -211,12 +253,18 @@ export async function runCompilationAgent(
         result.suggested_programme = p.suggested_programme;
       }
 
-      log(`Received: ${p.claims.length} claims, ${p.frames.length} frames, ${p.questions.length} questions`);
+      // Count relations
+      const newCount = p.claims.filter(c => !c.relation_to_existing || c.relation_to_existing === "new").length;
+      const dupCount = p.claims.filter(c => c.relation_to_existing === "duplicate").length;
+      const supCount = p.claims.filter(c => c.relation_to_existing === "supports").length;
+      const conCount = p.claims.filter(c => c.relation_to_existing === "contradicts").length;
+
+      log(`Received: ${p.claims.length} claims (${newCount} new, ${dupCount} duplicate, ${supCount} supports, ${conCount} contradicts), ${p.frames.length} frames, ${p.questions.length} questions`);
 
       return {
         content: [{
           type: "text" as const,
-          text: `Extraction received: ${p.claims.length} claims, ${p.frames.length} frames, ${p.questions.length} questions. Total so far: ${result.claims.length} claims, ${result.frames.length} frames, ${result.questions.length} questions.`,
+          text: `Extraction received. ${newCount} new claims, ${dupCount} duplicates, ${supCount} supporting, ${conCount} contradicting.`,
         }],
         details: {},
       };
@@ -227,7 +275,6 @@ export async function runCompilationAgent(
 
   const agent = new Agent({
     initialState: {
-      // System prompt is STATIC — no untrusted content here
       systemPrompt: SYSTEM_PROMPT,
       model,
       tools: [submitTool],
@@ -239,14 +286,13 @@ export async function runCompilationAgent(
     },
   });
 
-  // User message contains the source content (isolated from system prompt)
-  const userMessage = `## Existing Knowledge\n\n${existingKnowledge}\n\n---\n\n## Source Document\n\n**Title**: ${sourceTitle}\n\n<source_document>\n${sourceContent}\n</source_document>\n\nExtract Claims, Frames, and Questions from the source document above. Call submit_extraction with your results.`;
+  const userMessage = `## Existing Knowledge\n\n${knowledgeText}\n\n---\n\n## Source Document\n\n**Title**: ${sourceTitle}\n\n<source_document>\n${sourceContent}\n</source_document>\n\nExtract Claims, Frames, and Questions. For each claim, check against the existing claims list above and mark the relationship (new/duplicate/supports/contradicts).`;
 
   await agent.prompt(userMessage);
   await agent.waitForIdle();
 
   if (!toolCalled) {
-    throw new Error("Compilation Agent did not produce any extraction. The LLM may have refused or encountered an error.");
+    throw new Error("Compilation Agent did not produce any extraction.");
   }
 
   // Validate structure_type values
