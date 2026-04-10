@@ -100,7 +100,7 @@ You are NOT an extractor that mines articles for facts. You are a THINKER who re
    - lens show <id> --json                           (read a note in full)
    - lens links <id> --json                          (see connections — FOLLOW THEM)
    - lens context "topic" --json                     (get assembled context)
-   - lens list programmes --json                     (see research themes)
+   - lens list notes --role structure_note --json       (see index entry points)
 
 2. **submit_extraction**: Submit your notes.
 

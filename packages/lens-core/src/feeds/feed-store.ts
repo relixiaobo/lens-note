@@ -18,7 +18,6 @@ export interface Feed {
   last_checked_at?: string;
   etag?: string; // for conditional fetch
   last_modified?: string; // for conditional fetch
-  programme_id?: string; // optional: auto-assign articles to this Programme
   ingested_urls: string[];
 }
 
