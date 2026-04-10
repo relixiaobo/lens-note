@@ -15,7 +15,7 @@ Companion documents:
 
 ## One-liner
 
-Lens is an **understanding compiler** — it compiles the raw information that people read, discuss, and think about into structured cognitive objects such as Claims, Frames, Questions, and more, organizes them into Programmes (research programmes), and enables both humans and agents to reason further based on this understanding.
+Lens is an **understanding compiler** — it compiles the raw information that people read, discuss, and think about into structured Notes (universal knowledge cards linked in a Zettelkasten-inspired graph), and enables both humans and agents to reason further based on this understanding.
 
 English version:
 
@@ -82,93 +82,55 @@ lens does not promise "automatic correctness." What it promises is:
 
 ## V0 Type System
 
-**v0.1 (as built)**: 6 object types — Source, Claim, Frame, Question, Programme, Thread. Evidence is stored inline in Claims (no separate Excerpt type). ConceptAnatomy and Anomaly are deferred to v0.2.
+**v0.2 (current — Zettelkasten-native redesign)**: 3 object types — **Source, Note, Thread**. Note is a universal knowledge card with optional fields expressing cognitive roles (claim, frame, question, observation, connection, structure_note). Links are the only structure — no categories, no containers. See [`zettelkasten-redesign.md`](./zettelkasten-redesign.md) for the complete v0.2 design.
 
-**Full V0 vision**: 5 content types (Claim / Frame / Question / ConceptAnatomy / Anomaly) + 1 meta-structure (Programme) + Source + Thread.
+**v0.1 (historical)**: 6 object types — Source, Claim, Frame, Question, Programme, Thread. Replaced by v0.2's unified model.
 
-The complete schema, field semantics, and incremental scenario handling for each type are in [`methodology.md`](./methodology.md). Only brief introductions are given below.
+The complete schema, field semantics, and incremental scenario handling for each type are in [`schema.md`](./schema.md). Only brief introductions are given below.
 
-### Programme (Meta-structure / Container)
+### Source (Provenance)
 
-A complete unit of cognitive inquiry, drawing on Lakatos's research programme structure:
+Where content came from. Not knowledge — provenance. Contains the original text and metadata (title, author, URL, source_type, word_count).
 
-```
-Programme
-├── Hard Core          ← Unshakable core Frames
-├── Protective Belt    ← Revisable Claims + auxiliary Frames
-├── Open Questions     ← Current open question tree
-├── Anomalies          ← Unresolved counterexamples
-└── Concept Anatomies  ← Concept anatomies within this programme
-```
+### Note (Universal Knowledge Card)
 
-All content types belong to at least one Programme. Using lens is not "managing a bunch of notes" — it is "maintaining several Programmes, each with its own core and periphery."
-
-### Excerpt (substrate) — Simplified in v0.1
-
-Raw evidence fragments — the ground truth for all other types. In the original design, Excerpt was a separate type. **In v0.1, evidence is stored inline in Claims** (as an `evidence[]` array), and the Source file retains the full original text. This simplification reduced complexity without losing traceability.
-
-### Claim (Full Toulmin structure + Miller structure types + Reif elaboration)
-
-Extracted falsifiable assertions. The biggest difference from all existing products: **not flat fact + tag, but full Toulmin structure + knowledge structure type + elaboration dimensions**:
+The single knowledge type. One idea per card. Required fields: `id`, `type`, `text`, `created_at`. Everything else is optional. The optional fields express cognitive roles:
 
 ```
-Claim = statement + evidence (Excerpts) + warrant (Frame)
-      + backing + qualifier + rebuttals
-      + voice: extracted | restated | synthesized
-      + confidence (Bayesian history)
-      + contradicts / supports / refines relationships
-      + structure_type: one of 9 knowledge structures (Miller)
-      + elaboration: position across 5 dimensions (Reif)
-      + is_boundary: whether it spans multiple Programmes
+Note = text (always present)
+     + evidence[] / qualifier / voice     (makes it a claim)
+     + sees / ignores / assumptions[]     (makes it a frame)
+     + question_status                    (makes it a question)
+     + bridges[]                          (makes it a connection)
+     + role: structure_note + entries[]   (makes it an index entry)
+     + scope: big_picture / detail        (Reif/Miller hierarchy)
+     + structure_type                     (Miller knowledge structure)
+     + supports[] / contradicts[] / refines[] / related[]  (links)
+     + source                             (provenance)
 ```
 
-`warrant: FrameId` truly binds Frame and Claim — a Claim is not a floating fact; it is **a fact under a particular Frame**. Change the Frame, and the same Data does not yield the same Claim.
+**Role** is a soft hint (`claim | frame | question | observation | connection | structure_note`). It tells the display layer how to render, but does NOT constrain the card. A Note can have both `evidence` (claim) and `sees` (frame) simultaneously.
 
-`structure_type` specifies the **structural pattern** this Claim uses to express itself (causal / timeline / taxonomy / argument / ...), and `elaboration` specifies its position on the **detail hierarchy** — these two fields allow the same Claim to be precisely located by structure or by level.
+**Structure notes replace Programme**: A Note with `role: structure_note` and `entries[]` serves as an index entry — a sparse, post-hoc navigational aid pointing to entry-point Notes. No container membership, no auto-creation. Suggested by `lens suggest-index` after clusters form.
 
-### Frame (Viewfinder)
+### Thread (Conversation)
 
-A perspective for looking at the world — the origin of the product name.
+A conversation about Notes. Not knowledge — interaction. Links to Notes via `references[]`. Notes don't know about Threads; backlinks from SQLite cache enable "which Threads discuss this Note?" queries.
 
-```
-Frame = name + sees + ignores + assumptions
-      + useful_when + failure_modes
-      + held_by (who holds it) + exemplar_claims
-      + robustness (independent sources + supporting claim count)
-```
+### Programme Is Gone (v0.2)
 
-Why Frame is not a special case of Entity: Frame is "a perspective for looking at the world"; Entity is "the thing being looked at." A company can be viewed through many Frames — an economics frame sees P/E ratio, an engineering frame sees technical debt. Frame and Entity do not overlap.
+The word "Programme" does not exist in v0.2. What it did is now done by:
 
-### Question (IBIS + Strong Inference enhanced)
+| Programme function | v0.2 equivalent |
+|---|---|
+| Container for Claims | **Gone.** Notes link to each other, no container. |
+| Research theme | **Structure note** (a Note with `role: structure_note` + `entries[]`). |
+| `lens programme list` | `lens list notes --role structure_note` |
+| `lens programme show` | `lens show <note_id>` (for a structure note) |
 
-Open inquiry questions. The true center of Lens — Claims and Frames revolve around Questions.
+### ConceptAnatomy (v0.3 — Li Jigang cognitive operations)
 
-```
-Question = text + parent_question + sub_questions
-         + alternative_hypotheses (mutually exclusive candidate claims)
-         + discriminating_evidence (criteria for differentiation)
-         + status: open | tentative_answer | resolved | superseded
-```
-
-Supports the natural growth of second-order / third-order question trees (drawing on Li Jigang's idea of "a master question continuously generating good sub-questions").
-
-### ConceptAnatomy (8-layer Concept Anatomy)
-
-From Li Jigang's ljg-learn. Deep concept anatomy triggered on demand, across 8 dimensions:
-
-```
-layers:
-  history     (evolutionary history)
-  dialectic   (opposites)
-  phenomena   (real-world manifestations)
-  language    (etymology and semantics)
-  form        (structural form)
-  existence   (ontological status)
-  aesthetics  (poetic dimension)
-  meta        (meta-reflection)
-```
-
-**This is lens's most distinctive differentiator** — no other product does this.
+From Li Jigang's ljg-learn. Deep concept anatomy triggered on demand via `lens run <id> anatomy`. Planned for v0.3 along with other cognitive operations (rank, roundtable, drill).
 
 ## Methodological Spine
 
@@ -176,10 +138,11 @@ The lens type system is not an arbitrary combination; it is a synthesis of **5 t
 
 | Scale | Tradition | Contribution |
 |---|---|---|
-| Macro structure | **Lakatos** Research Programmes | Programme = Hard Core + Belt + Questions + Anomalies |
-| Detail hierarchy | **Reif + Miller** Hierarchical Knowledge Org | 5 elaboration dimensions + 9 knowledge structure types + Knowledge Maps |
+| Card model | **Luhmann** Zettelkasten | Cards + links, no categories. Structure emerges. Index sparse and post-hoc. |
+| Macro structure | **Lakatos** Research Programmes | Hard Core / Protective Belt concepts reinterpreted via qualifier + scope fields |
+| Detail hierarchy | **Reif + Miller** Hierarchical Knowledge Org | scope (big_picture/detail) + 9 knowledge structure types |
 | Cycle dynamics | **Popper** P1→TT→EE→P2 | Problems are continuously replaced by deeper problems |
-| Local structure | **Toulmin** Argumentation Model | Claim = statement + data + warrant + qualifier + rebuttal |
+| Local structure | **Toulmin** Argumentation Model | evidence + qualifier + voice as optional fields on Note |
 | Belief dynamics | **Bayesian** updating | Confidence evolves traceably with evidence |
 
 Full discussion of supplementary traditions (Klein sensemaking, Kuhn paradigms, Strong Inference, Laudan problems-as-units, etc.) is in [`methodology.md`](./methodology.md).
@@ -217,24 +180,28 @@ The Skill tells the agent:
 
 MCP is a protocol supported by 5/7 mainstream agents, but CLI already covers 100% of agents. MCP is merely a ~100-line typed wrapper around the CLI. It will be added in v0.3 or when the community demands it.
 
-### V0.1 Command List (As Built)
+### V0.2 Command List (Current)
 
 ```bash
-# Core
-lens init                                      # first-time setup (~/.lens/)
-lens ingest <url|file>                         # fetch + Compilation Agent → Claims/Frames/Questions
-lens note "<text>"                             # quick note
-lens show <id>                                 # show any object (source: contributions, claim: evidence)
+# Explore
+lens list notes [--role claim|frame|question|...] [--scope big_picture] [--since 7d]
+lens list sources                              # list all sources
+lens list notes --role structure_note          # browse index entries (replaces programme list)
+lens show <id>                                 # show any object with full detail
 lens search "<query>"                          # FTS5 full-text search
+lens links <id>                                # show relationships for a note
 lens context "<query>"                         # agent-ready JSON context pack
-lens context "<query>" --scope big_picture     # overview only (3-5 core Claims)
 
-# Programmes
-lens programme list                            # list all Programmes with member counts
-lens programme show <id>                       # 2-level display: Overview + Details (use --full)
+# Write
+lens ingest <url|file>                         # fetch + Compilation Agent → Source + Notes + links
+lens note "<text>"                             # quick observation
+
+# Operations
+lens lint                                      # health check: orphans, missing links, implicit contradictions
+lens suggest-index                             # analyze link graph, propose structure notes
 
 # Digest (temporal views)
-lens digest                                    # today's new insights, tensions, perspectives
+lens digest                                    # today's new insights, growing notes, connections, tensions
 lens digest week                               # this week
 lens digest month                              # this month (compact)
 lens digest year                               # this year (compact)
@@ -247,33 +214,34 @@ lens feed check                                # check all feeds, compile new ar
 lens feed check --dry-run                      # check without compiling
 lens feed remove <id|url>                      # unsubscribe
 
-# Maintenance
+# System
+lens init                                      # first-time setup (~/.lens/)
 lens status                                    # system status (object counts, cache size)
 lens rebuild-index                             # rebuild SQLite cache from markdown files
 
 # All commands support --json for agent consumption
 ```
 
-### V0.2+ Additional Commands (not implemented in v0.1)
+### V0.3+ Additional Commands (not implemented yet)
 
 ```bash
-# v0.2
+# v0.3 — Li Jigang cognitive operations
+lens run <id> anatomy                          # concept anatomy
+lens run <cluster> rank                        # rank reduction
+lens run <topic> roundtable                    # roundtable discussion
+lens run <id> drill                            # essence drilling
+
+# v0.3 — Additional source types
 lens ingest <file.pdf>                         # PDF (via Marker)
 lens ingest --chat <export>                    # ChatGPT / Claude.ai / Claude Code conversation exports
-lens run <source_id> concept-anatomy <concept> # 8-layer concept anatomy
-lens programme split <id> --into <n1> <n2>     # split
-lens programme merge <id1> <id2>               # merge
-lens programme health <id>                     # Lakatos health diagnosis
-lens contradictions list / show / resolve      # contradiction management
-lens pull                                      # manually trigger auto-check
 ```
 
 ### Synchronous vs Asynchronous
 
-- **Synchronous layer (sub-second)**: `search`, `show`, `context`, `note`, `status`, `digest`, `programme list/show`, `feed list`
-- **Longer-running**: `ingest` (fetch + compile), `feed check` (check all feeds + compile new articles)
+- **Synchronous layer (sub-second)**: `search`, `show`, `context`, `note`, `list`, `links`, `status`, `digest`, `feed list`
+- **Longer-running**: `ingest` (fetch + compile), `feed check` (check all feeds + compile new articles), `lint`
 
-In v0.1, all commands run synchronously (blocking). Job-based async execution may be added in v0.2.
+All commands run synchronously (blocking). Job-based async execution may be added in a future version.
 
 ## Storage Layout
 
@@ -281,12 +249,9 @@ Default path `~/.lens/`, or placed in an iCloud sync path at `~/Library/Mobile D
 
 ```
 ~/.lens/ (or iCloud sync location)
-├── sources/src_01HXYZ.md      # Every object = type/id.md
-├── claims/clm_01HXYZ.md      # Frontmatter (≤20 lines) + body, evidence inline
-├── frames/frm_01HXYZ.md
-├── questions/q_01HXYZ.md
-├── programmes/pgm_01HXYZ.md  # Minimal: title + description (members reverse-queried)
-├── threads/thr_01HXYZ.md
+├── notes/note_01HXYZ.md       # All knowledge cards (claim, frame, question, observation, connection, structure_note)
+├── sources/src_01HXYZ.md      # Provenance records
+├── threads/thr_01HXYZ.md      # Conversations
 ├── raw/                       # Original files (HTML, etc.)
 │   └── src_01HXYZ.html
 ├── feeds.json                 # RSS feed subscriptions
@@ -294,39 +259,33 @@ Default path `~/.lens/`, or placed in an iCloud sync path at `~/Library/Mobile D
 └── config.yaml
 ```
 
+3 directories for objects (`notes/`, `sources/`, `threads/`). 3 ID prefixes (`note_`, `src_`, `thr_`).
+
 **Markdown files are the source of truth**; SQLite is a derived cache (rebuildable via `lens rebuild-index`). Benefits:
 
 - Humans can directly open, view, and edit them
 - Git can diff them
 - iCloud / Dropbox / Syncthing sync them directly (SQLite has data corruption risks with file-level sync; individual files do not)
 - If lens is discontinued, users' data remains plain text
-- Relationships are inlined in frontmatter (e.g. `evidence: [...]`, `programme: pgm_id`), no separate relations file needed
+- Relationships are inlined in frontmatter (e.g. `evidence: [...]`, `supports: [note_id]`), no separate relations file needed
 
-## Things Not in V0.1 (Explicitly Deferred)
+## Things Not in V0.2 (Explicitly Deferred)
 
 Each item has a specific reason for deferral:
 
-- ❌ **GUI (Tauri 2 desktop app)** — v0.2. v0.1 validated the core loop with CLI only
-- ❌ **Li Jigang's remaining operations** (roundtable / rank / paper-river / writes) — v0.1 only does extract. The rest are v0.2+
-- ❌ **ConceptAnatomy (8-layer concept anatomy)** — v0.2. v0.1 first validates base Claim/Frame/Question extraction quality
-- ❌ **Programme split / merge** — v0.2. v0.1 only supports create / add-to-belt
-- ❌ **Knowledge Maps visualization** — v0.2. v0.1 uses CLI views to validate the core loop
-- ❌ **Chat growing source incremental updates** — v0.2. v0.1 only supports immutable source ingest
-- ❌ **Auto-check / growing source mechanism** — v0.2. v0.1 requires explicit `lens ingest` or `lens feed check`
-- ❌ **Bayesian confidence numerical updates** — v0.2. v0.1 uses four levels (`certain / likely / presumably / tentative`), assigned by the LLM in one pass
-- ❌ **Contradiction detection (Anomaly detection)** — v0.2. v0.1 first ensures single-source extraction quality
-- ❌ **PDF extraction (Marker)** — v0.2. v0.1 avoids the installation friction of Python dependencies
-- ❌ **Embedding / semantic search** — v0.2. v0.1 uses FTS5 only
-- ⚠️ **Multi-user, collaboration** — v0 is single-machine single-user; multi-user is an entirely different product dimension
-- ✅ **Multi-device sync (via iCloud)** — place `~/.lens/` at the iCloud path. lens has zero sync infrastructure
+- ❌ **Li Jigang cognitive operations** (anatomy / rank / roundtable / drill) — v0.3. `lens run` commands
+- ❌ **GUI (Tauri 2 desktop app)** — v1.0+. CLI continues to be sufficient for validation
+- ❌ **Knowledge Maps visualization** — v1.0+. Requires GUI
+- ❌ **Chat growing source incremental updates** — v0.3. v0.2 only supports immutable source ingest
+- ❌ **Auto-check / growing source mechanism** — v0.3. v0.2 requires explicit `lens ingest` or `lens feed check`
+- ❌ **PDF extraction (Marker)** — v0.3. Avoids the installation friction of Python dependencies
+- ❌ **Embedding / semantic search** — v0.3. v0.2 uses FTS5 only
 - ❌ **MCP server** — v0.3. CLI first needs to stabilize
 - ❌ **Browser extension** — v0.3
+- ⚠️ **Multi-user, collaboration** — v0 is single-machine single-user; multi-user is an entirely different product dimension
+- ✅ **Multi-device sync (via iCloud)** — place `~/.lens/` at the iCloud path. lens has zero sync infrastructure
 - ❌ **Batch ingest watcher** — v0 uses explicit `lens ingest`; no inbox folder monitoring
-- ❌ **Causal Model / Script / Analogy / Generator types** — LLM-unfriendly, v1+
-- ❌ **Lineage (paper provenance tracing)** — requires web search infrastructure, v1+
-- ❌ **Automatic Programme creation** — the system only proposes; humans decide
-- ❌ **Automatic Hard Core modification** — the system only warns; humans decide
-- ❌ **Automatic Anomaly resolution** — never automatic; must be an explicit decision by human or agent
+- ❌ **Automatic structure note creation** — the system only proposes (via `lens suggest-index`); humans decide
 
 ## Word Choice Is the First Architectural Decision of the Product
 
@@ -350,14 +309,15 @@ Each item has a specific reason for deferral:
 - Claim and Frame have epistemic content (assertions about reality, perspectives on the world), not machine by-products
 - Saying claim and frame directly is more specific and more human
 
-### Why "Programme" instead of "topic" / "project"
+### Why was "Programme" removed in v0.2?
 
-- "Programme" comes directly from Lakatos's Methodology of Scientific Research Programmes
-- "topic" implies content classification (passive); "Programme" implies ongoing inquiry (active)
-- "project" implies deadlines and deliverables; Programme is **open-ended cognitive exploration**
-- Using academic terminology is meant to **align with seriousness** — this is not "organizing notes"; it is "conducting research"
+- In v0.1, Programme was a Lakatos-inspired container (Hard Core + Protective Belt + Open Questions)
+- In v0.2, the Zettelkasten-native redesign revealed that **containers are unnecessary** — links between Notes create implicit structure
+- What Programme did is now handled by **structure notes** — Notes with `role: structure_note` and `entries[]` pointing to entry-point Notes
+- Structure notes are created post-hoc (after link clusters form), not auto-created per article
+- This aligns with Luhmann's Zettelkasten principle: structure is emergent, not imposed
 
-**The word "artifact" does not appear anywhere in this document**. When an umbrella term is needed, use "structure"; preferably use the specific type name directly.
+**The word "artifact" does not appear anywhere in this document**. When an umbrella term is needed, use "Note"; preferably use the specific role name directly (claim, frame, question, etc.).
 
 ## Intellectual Sources
 
@@ -404,7 +364,7 @@ Complete publication information, links, and relevance to lens for each source a
 
 Most design questions have been answered by methodology.md and v0.1 implementation. Status:
 
-1. **Programme naming granularity**: Should users create broad Programmes like "AI Memory Systems" or narrow ones like "mem0 vs Zep comparison"? V0 does not enforce a choice; this will be decided by observing usage. **Still open.**
+1. **Structure note granularity**: Should structure notes cover broad themes like "AI Memory Systems" or narrow ones like "mem0 vs Zep comparison"? `lens suggest-index` will analyze link density to propose candidates. **Still open.**
 2. **How human feedback triggers recompilation**: How do highlight / comment / tag become compiler signals? V0 uses a simple `lens note --re` trigger. **Still open.**
 3. **First LLM provider**: ✅ **Resolved** — Anthropic Claude Sonnet 4.6 via pi-ai. pi-ai provides the abstraction layer for future provider swaps.
 4. **CLI binary language**: ✅ **Resolved** — TypeScript, compiled to single binary via `bun build --compile`. 63MB binary, acceptable startup time.
@@ -423,8 +383,8 @@ The core of Lens is a CLI tool, but the complete consumer-facing product form ha
 │  lens.app (Tauri 2 desktop app)  ← core              │
 │  ┌────────────────────────────────────────────┐    │
 │  │  React 19 GUI                                │    │
-│  │  (Reader / Programme / Knowledge Maps /     │    │
-│  │   Anomaly Queue / Settings)                  │    │
+│  │  (Note Graph / Note Detail / Structure Note │    │
+│  │   Navigation / Knowledge Maps / Settings)    │    │
 │  ├────────────────────────────────────────────┤    │
 │  │  lens-core sidecar (Bun-compiled TS)        │    │
 │  │  (Compilation Agent / Extractors / LLM)       │    │
@@ -455,33 +415,32 @@ The core of Lens is a CLI tool, but the complete consumer-facing product form ha
 
 ### Responsibilities of Each Layer
 
-**1. lens CLI (v0.1, complete) → lens.app (Tauri 2 desktop application, v0.2)**
-- **v0.1 (current)**: CLI-only, Bun-compiled single binary (63MB)
-- **v0.2 (planned)**: One binary that is both GUI and CLI. `lens` (no args) opens GUI; `lens ingest` etc. runs CLI mode
-- **GUI** (v0.2): Reader / Programme Dashboard / Claim Detail / Settings; Knowledge Maps / Anomaly Queue
-- **CLI** is for power users and agents (v0.1 complete)
-- Tech stack: Bun + bun:sqlite + pi-ai + pi-agent-core + Defuddle + Turndown + feedsmith (see [`architecture.md`](./architecture.md)); Tauri 2 + React 19 added in v0.2
+**1. lens CLI (v0.2, current) → lens.app (Tauri 2 desktop application, v1.0+)**
+- **v0.2 (current)**: CLI-only, Bun-compiled single binary (63MB). 3 types: Source, Note, Thread.
+- **v1.0+ (planned)**: One binary that is both GUI and CLI. `lens` (no args) opens GUI; `lens ingest` etc. runs CLI mode
+- **GUI** (v1.0+): Note graph / Note detail / Structure note navigation / Knowledge Maps / Settings
+- **CLI** is for power users and agents (v0.2 complete)
+- Tech stack: Bun + bun:sqlite + pi-ai + pi-agent-core + Defuddle + Turndown + feedsmith (see [`architecture.md`](./architecture.md)); Tauri 2 + React 19 added in v1.0+
 
 **2. Browser Extension (web ingest, v0.3)**
 - One-click `Compile with lens` while reading web pages
-- Highlighted text → automatically creates Excerpt
+- Highlighted text → automatically creates a Note
 - Underlying mechanism: calls the local lens daemon via localhost HTTP
-- v0.1 / v0.2 uses CLI `lens ingest <url>` manually instead
+- v0.2 uses CLI `lens ingest <url>` manually instead
 
-**3. Knowledge Maps view** (v0.2, integrated into lens.app)
+**3. Knowledge Maps view** (v1.0+, integrated into lens.app)
 - The visual layer contributed by Reif + Miller
 - View types:
-  - Programme Map (radial layout of Hard Core + Belt + Questions + Anomalies)
-  - Claim Graph (directed graph of Toulmin supports/contradicts)
-  - Frame Landscape (multi-viewfinder comparison of sees/ignores/assumptions)
-  - Question Tree (master question → second-order → third-order hierarchical expansion)
-- **Not a standalone "Web App"** — it is a React view inside lens.app, alongside Reader / Programme Dashboard etc.
+  - Note Graph (directed graph of supports/contradicts/refines/related links)
+  - Scope Hierarchy (big_picture Notes with their detail supporters)
+  - Cluster View (densely linked Note groups, potential structure note candidates)
+- **Not a standalone "Web App"** — it is a React view inside lens.app
 
 **4. Agent Plugin (MCP thin wrapper, v0.3)**
 - An extremely thin (~100 lines) MCP shim wrapping the `lens` CLI
 - Users add `lens` as an MCP server in Claude Code / Cursor
 - Essentially a thin wrapper, not a standalone product
-- **Key point**: In v0.1 / v0.2, agents can directly use `subprocess.run("lens", ...)` — MCP is just a more ergonomic wrapper
+- **Key point**: In v0.2, agents can directly use `subprocess.run("lens", ...)` — MCP is just a more ergonomic wrapper
 
 ### Data Location and Sync
 
@@ -497,17 +456,18 @@ See [`roadmap.md`](./roadmap.md) for details. Summary:
 | Phase | What Ships | Target Users |
 |---|---|---|
 | **v0.1** ✅ | CLI binary (Bun-compiled), 3 source types, RSS feeds, digest, scope hierarchy | Self + dogfooding |
-| **v0.2** | + Tauri desktop app (GUI) + Knowledge Maps + Growing sources + ConceptAnatomy + Multi-LLM | 20-50 beta testers |
-| **v0.3** | + Browser extension + MCP server + Audio/Image support | 100-500 users |
+| **v0.2** ✅ | Zettelkasten-native redesign: 3 types (Source, Note, Thread), links as only structure, agent as thinker | Self + dogfooding |
+| **v0.3** | + Li Jigang cognitive operations + Browser extension + MCP server + Audio/Image | 20-50 beta testers |
 | **v0.4** | + lens.xyz official launch | Public release |
 | **v1.0+** | + iOS/Android mobile (Tauri 2 mobile) | All platforms |
 
-**Key decisions (updated after v0.1)**:
-- **v0.1 ended up CLI-only** — GUI was deferred to v0.2 after realizing CLI was sufficient to validate the core hypothesis
-- **RSS feeds + digest emerged as essential** — they made dogfooding practical and provided a natural input pipeline
-- **Scope-based hierarchy was a key discovery** — big_picture/detail Claims dramatically improved readability
-- **Knowledge Maps in v0.2** — v0.1 focuses on the core loop first; v0.2 adds the visual layer
-- **Mobile in v1.0+** — but the tech stack (Tauri 2) reserves a path for mobile
+**Key decisions (updated after v0.2)**:
+- **v0.2 is a Zettelkasten-native redesign** — 3 types replace 6, Note is the universal card, links are the only structure
+- **Programme is gone** — replaced by structure notes (Notes with `role: structure_note`)
+- **Agent is a "thinker" not just "extractor"** — discovers relationships, updates existing Notes, does not target fixed output counts
+- **GUI deferred further** — CLI continues to be sufficient; GUI moved to v1.0+
+- **RSS feeds + digest remain essential** — they make dogfooding practical and provide a natural input pipeline
+- **Li Jigang cognitive operations in v0.3** — anatomy/rank/roundtable/drill as `lens run` commands
 
 ### Forms Explicitly Not Pursued
 
@@ -524,7 +484,7 @@ See [`roadmap.md`](./roadmap.md) for details. Summary:
 - **v0.1**: The Compilation Agent depends on **Anthropic Claude Sonnet 4.6 API** (structured extraction). Users' source text (articles, notes) will be sent to the Anthropic API for processing. No embedding in v0.1.
 - **v0.2**: Adds **Voyage AI API** (embedding) for semantic search
 - **v0.3+**: Plans to add a local inference mode (Ollama + nomic-embed) as an optional privacy mode
-- **Always local**: All compiled products (Claims / Frames / Questions), the index (SQLite), and copies of original text exist only on the user's local `~/.lens/`, never passing through any lens cloud service
+- **Always local**: All compiled products (Notes), the index (SQLite), and copies of original text exist only on the user's local `~/.lens/`, never passing through any lens cloud service
 
 **What this means for users**:
 - If your sources contain sensitive content (private conversations, confidential research), be aware that this content will pass through Anthropic's API
@@ -565,44 +525,53 @@ Lens **is not for everyone**. Forcing it to be "usable by all" would dilute its 
 
 **This is a tool that requires investment**. The more you put in, the greater the compounding returns.
 
-## V0.1 Minimum Viable (One-line Definition) — ✅ COMPLETE
+## V0.1 — ✅ COMPLETE (Historical)
+
+v0.1 validated LLM extraction quality with 6 types (Source, Claim, Frame, Question, Programme, Thread). See [`roadmap.md`](./roadmap.md) § v0.1 for details.
+
+## V0.2 — Current (Zettelkasten-Native Redesign) — ✅ COMPLETE
 
 ```
-v0.1 = Bun-compiled CLI binary (63MB, macOS)
+v0.2 = Zettelkasten-native redesign
 
-Core validation goal: Can an LLM extract structured understanding
-from real text that users trust?
-Result: YES — validated with real articles and RSS feeds.
+Core principle: All knowledge is Notes. Structure emerges from links.
 
-Can ingest 3 source types (all immutable):
-  - web_article (via Defuddle + Turndown → markdown)
-  - markdown / plain_text (pass-through)
-  - manual_note (direct CLI input)
+3 types: Source + Note + Thread
+3 directories: sources/ notes/ threads/
+3 ID prefixes: src_ note_ thr_
 
-Can compile sources into Claim / Frame / Question
-  (via Compilation Agent: short-lived agent per document, using pi-agent-core + pi-ai)
-Can organize into Programme meta-structures
-  (with scope-based 2-level hierarchy: big_picture + detail)
+Note is the universal knowledge card:
+  - Required: id, type, text, created_at
+  - Optional: evidence[], qualifier, voice, sees, ignores, assumptions[],
+    question_status, bridges[], entries[], supports[], contradicts[],
+    refines[], related[], scope, structure_type, source, status
+  - Role (soft hint): claim / frame / question / observation / connection / structure_note
 
-Added beyond original plan:
-  - RSS feed pipeline (feedsmith, OPML import, autodiscovery)
-  - Digest command (temporal views: day/week/month/year)
-  - Scope-based hierarchy on Claims (big_picture vs detail)
-  - Thread type for conversational flows
+Links are the only structure:
+  - supports / contradicts / refines / related
+  - No categories, no containers, no Programme
+
+Agent is a "thinker" not just "extractor":
+  - Explores existing knowledge before creating new Notes
+  - Updates existing Notes (add evidence, strengthen, enrich)
+  - Creates new Notes only for genuinely new insights
+  - Discovers cross-domain connections
+  - Does NOT create structure notes (post-hoc, user-initiated)
 
 CLI commands (all support --json):
-  - lens init / ingest / note / show / search / context
-  - lens programme list / show
+  - lens list notes [--role] [--scope] [--since]
+  - lens list sources / lens list notes --role structure_note
+  - lens show <id> / lens search / lens links <id> / lens context
+  - lens ingest <url|file> / lens note "<text>"
+  - lens lint / lens suggest-index
   - lens digest [day|week|month|year]
   - lens feed add / import / list / check / remove
-  - lens status / rebuild-index
+  - lens init / status / rebuild-index
 ```
 
-**v0.1 explicitly does not include**: GUI / Tauri app / chat growing source / auto-check / Bayesian updates / contradiction detection / PDF / Knowledge Maps / browser extension / MCP server / embedding.
+**Privacy note**: Compilation relies on the cloud-based Anthropic API. Users' original text will be sent to Anthropic for structured extraction. This is the "local-first storage + cloud-powered inference" model, not fully local inference (see "Privacy Boundary" section below).
 
-**Privacy note**: v0.1's compilation relies on the cloud-based Anthropic API. Users' original text will be sent to Anthropic for structured extraction. This is the "local-first storage + cloud-powered inference" model, not fully local inference (see "Privacy Boundary" section below).
-
-Detailed scope is in [`roadmap.md`](./roadmap.md) § v0.1. Technical implementation is in [`architecture.md`](./architecture.md).
+Detailed scope is in [`roadmap.md`](./roadmap.md) § v0.2. Design document: [`zettelkasten-redesign.md`](./zettelkasten-redesign.md).
 
 ## Working Principles
 

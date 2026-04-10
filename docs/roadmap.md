@@ -269,105 +269,121 @@ Phase 4 (Search + Polish) ✅   Phase 4b (Added Features) ✅
 
 ---
 
-## v0.2 — GUI + Intelligence + Visual Layer + Growing Sources
+## v0.2 — Zettelkasten-Native Redesign ✅ COMPLETE
 
-**Goal**: lens gets a complete GUI (Tauri 2 desktop app), visual layer (Knowledge Maps), can handle conversation-type sources, can detect contradictions, and is ready for 20-50 beta users.
+**Status**: ✅ COMPLETE — Type system redesigned, agent upgraded, CLI updated.
 
-v0.2 absorbs features deferred from v0.1 (marked with ⬆️), plus new features from the original v0.2.
+**Core design goal**: Simplify the type system to Zettelkasten principles. All knowledge is Notes. Structure emerges from links.
 
-### User Story
+**Design document**: [`zettelkasten-redesign.md`](./zettelkasten-redesign.md)
 
-As an independent writer **Chen**:
+### What Was Actually Built vs What Was Originally Planned
 
-1. I've been using lens for a month, with 50 Sources and 3 Programmes
-2. I want to **see my knowledge in a GUI** — not just CLI output
-3. I want to import ChatGPT discussions and Claude Code sessions into lens
-4. I want to see a **panoramic view** of Programmes (Knowledge Maps)
-5. I want to discover contradictions between two articles and make a decision
-6. I want to use **ConceptAnatomy to dissect** the concept of "emergence"
+The original v0.2 plan was "GUI + Intelligence + Visual Layer + Growing Sources." In practice, v0.2 became a **fundamental type system redesign** (Zettelkasten-native) that was more important than adding a GUI.
 
-**Acceptance criteria**: Chen can complete the above 6 steps through purely visual navigation.
+**What v0.2 delivered** (the redesign):
 
-### Scope
+- **Unified type system**: 3 types (Source, Note, Thread) replacing v0.1's 6 (Source, Claim, Frame, Question, Programme, Thread)
+- **Note as universal knowledge card**: One type with optional fields expressing cognitive roles
+  - `role` as soft hint: `claim | frame | question | observation | connection | structure_note`
+  - A Note can combine fields from multiple roles (e.g., both evidence and sees/ignores)
+- **Links as only structure**: `supports[]`, `contradicts[]`, `refines[]`, `related[]`
+  - No categories, no containers, no Programme membership
+  - Hierarchy emerges from `scope` + links (not containers)
+- **Programme replaced by structure notes**: Notes with `role: structure_note` + `entries[]`
+  - Never auto-created; suggested by `lens suggest-index` after link clusters form
+- **Agent redesigned as "thinker"**:
+  - Explores existing knowledge before creating new Notes
+  - 6 update actions: add_evidence, strengthen, weaken, enrich, add_link, promote
+  - Creates new Notes only for genuinely new insights
+  - Output quantity is a RESULT of novelty, not a target
+- **Storage simplified**: 3 directories (`notes/`, `sources/`, `threads/`), 3 ID prefixes (`note_`, `src_`, `thr_`)
+- **CLI updated**:
+  - `lens list notes [--role claim|frame|question|...] [--scope] [--since]`
+  - `lens links <id>` — show relationships
+  - `lens lint` — health check (orphans, missing links)
+  - `lens suggest-index` — propose structure notes
+  - No `programme` command (replaced by `lens list notes --role structure_note`)
+- **Migration path**: v0.1 Claim -> Note (role: claim), Frame -> Note (role: frame), etc.
 
-**Moved in from v0.1** ⬆️:
+**What was deferred from the original v0.2 plan** (moved to v0.3+):
 
-- ⬆️ **Tauri 2 desktop app** (macOS first) — lens-ui (React 19) + lens-tauri (Rust IPC shell)
-- ⬆️ **GUI views**: Welcome/Onboarding, Programme Dashboard, Reader, Claim Detail, Settings
-- ⬆️ **PDF extraction (Marker)**
-- ⬆️ **Chat conversation ingest** (ChatGPT / Claude.ai / Claude Code export)
-- ⬆️ **Growing source incremental append + divergence handling**
-- ⬆️ **Auto-check mechanism** (CLI invocation + GUI timer dual mode)
-- ⬆️ **Embedding integration (Voyage AI) + sqlite-vec semantic search**
-- ⬆️ **Semantic dedup**
-- ⬆️ **Contradiction detection (Anomaly detection) + Anomaly Queue GUI**
-- ⬆️ **Bayesian confidence numerical updates + confidence_history**
+- ❌ Tauri 2 desktop app / GUI (moved to v1.0+)
+- ❌ Knowledge Maps visualization (moved to v1.0+, requires GUI)
+- ❌ Chat conversation ingest / growing sources (moved to v0.3)
+- ❌ PDF extraction / Marker (moved to v0.3)
+- ❌ Embedding / semantic search (moved to v0.3)
+- ❌ ConceptAnatomy (replaced by `lens run <id> anatomy` in v0.3)
+- ❌ Multi LLM provider (deferred)
+- ❌ Bayesian confidence numerical updates (v0.2 uses qualifier tiers)
+- ❌ Contradiction detection as separate Anomaly type (v0.2 uses `contradicts[]` links instead)
 
-**New**:
+### What We Learned
 
-- **Knowledge Map views** (Reif + Miller contributed visualizations — from methodology.md this is "required")
-  - Programme Map (radial layout)
-  - Claim Graph (directed graph)
-  - Frame Landscape
-  - Question Tree
-- **ConceptAnatomy** full implementation (8-layer dissection)
-- **Programme management UI** (create / rename / archive / split / merge)
-- **Claim / Frame editor** (inline editing)
-- **Anomaly resolution UI**
-- **Multi LLM provider** (abstraction layer, supporting OpenAI + Claude)
-- **Keyboard shortcuts** (⌘K command palette)
-- **Export**: Source / Programme export as markdown
+- **6 types were too many** — the rigid Claim/Frame/Question distinction forced artificial classification
+- **Containers (Programme) were unnecessary** — link structure creates implicit clusters
+- **The agent should think, not just extract** — relationship-first approach produces higher quality output
+- **Notes should grow over time** — evidence accumulates, qualifiers update, body text enriches
+- **Luhmann was right** — cards + links + sparse index is the simplest sufficient model
 
-### Explicitly Not Doing
+### Exit Criteria (Retrospective)
 
-- ❌ Browser extension (v0.3)
-- ❌ MCP server (v0.3)
-- ❌ Mobile (v1.0+)
-- ❌ Multi-device sync UX
-
-### Exit Criteria
-
-- [ ] 20 beta users use it for 2 weeks with no critical bugs
-- [ ] Knowledge Map view is smooth with up to 1000 claims (< 500ms render)
-- [ ] All v0.1 CLI commands remain compatible
-- [ ] Schema migration from v0.1 to v0.2 is seamless (transparent to users)
-- [ ] Chat growing source incremental updates remain consistent after 10+ re-ingests
+- [x] Type system simplified to 3 types with clean migration path
+- [x] Agent redesigned with relationship-first approach
+- [x] CLI updated with new commands (list, links, lint, suggest-index)
+- [x] All v0.1 CLI commands either updated or replaced by equivalents
+- [x] Design document (zettelkasten-redesign.md) covers all aspects of the new model
 
 ---
 
-## v0.3 — Agent Integration & Browser
+## v0.3 — Cognitive Operations + Agent Integration + Growing Sources
 
-**Goal**: lens becomes part of the agent ecosystem while reducing browser ingest friction.
+**Goal**: lens gains Li Jigang cognitive operations, handles growing sources, and becomes part of the agent ecosystem.
 
 ### Scope
 
-**New**:
+**Li Jigang Cognitive Operations** (produce Notes from existing Notes — "compiler passes"):
+
+- `lens run <id> anatomy` — concept anatomy (multi-layer dissection)
+- `lens run <cluster> rank` — rank reduction (distill to essentials)
+- `lens run <topic> roundtable` — multi-perspective discussion
+- `lens run <id> drill` — essence drilling
+
+**Growing Sources + Additional Source Types**:
+
+- **Chat conversation ingest** (ChatGPT / Claude.ai / Claude Code export)
+- **Growing source incremental append + divergence handling**
+- **Auto-check mechanism** (periodic checking of growing sources)
+- **PDF extraction** (via Marker)
+- **Audio source type** (MLX Whisper on Apple Silicon, whisper.cpp elsewhere)
+- **Image source type** (via Claude Vision)
+
+**Agent Integration**:
 
 - **Browser Extension (Chrome / Firefox / Arc / Safari)**
   - One-click "Compile with lens" while reading a web page
-  - Highlighted text automatically becomes an Excerpt
   - Calls lens daemon via localhost HTTP
 - **MCP Server** (lens-mcp, optional)
   - ~100-line thin wrapper packaging lens CLI as MCP tools
-  - For agent hosts that prefer MCP (v0.1's CLI + Skill already covers all agents)
+  - For agent hosts that prefer MCP (CLI + Skill already covers all agents)
   - Tools: `lens_context` / `lens_search` / `lens_note` / `lens_show`
-- **Lens Daemon** (upgraded from v0.1's "ephemeral process" to a persistent service)
+- **Lens Daemon** (persistent service)
   - Starts localhost HTTP server on port 9999
   - Accepts requests from browser extension + MCP server
-  - Auto-check scheduler runs persistently (no longer only checks during CLI invocation)
-- **Audio source type**
-  - macOS Apple Silicon: MLX Whisper (Python sidecar)
-  - Other: whisper.cpp sidecar
-- **Image source type** (via Claude Vision)
-- **PDF scanned** (via Marker `--use_llm` or Tesseract)
+  - Auto-check scheduler runs persistently
+
+**Search + Intelligence**:
+
+- **Embedding integration** (Voyage AI or local nomic-embed) + sqlite-vec semantic search
 - **Local inference mode** (Ollama + nomic-embed, privacy mode)
 
 ### Exit Criteria
 
-- [ ] 100+ public beta users
+- [ ] Li Jigang cognitive operations produce high-quality Notes
+- [ ] 20-50 beta users
 - [ ] Browser extension publishable on Chrome Web Store
 - [ ] MCP server works in Claude Code / Cursor
-- [ ] Audio ingest quality is usable
+- [ ] Growing source incremental updates remain consistent after 10+ re-ingests
 
 ---
 
@@ -392,29 +408,31 @@ As an independent writer **Chen**:
 
 ---
 
-## v1.0 — Mobile + Multi-Device
+## v1.0 — GUI + Mobile + Multi-Device
 
-**Goal**: Cross-device + mobile.
+**Goal**: Desktop GUI + cross-device + mobile.
 
 ### Scope
 
+- **Tauri 2 desktop app** (macOS first) — lens-ui (React 19) + lens-tauri (Rust IPC shell)
+- **GUI views**: Note graph / Note detail / Structure note navigation / Settings
+- **Knowledge Maps visualization** (link graph, scope hierarchy, cluster views)
 - **iOS app** (Tauri 2 mobile, reusing React UI)
 - **Android app**
 - **Multi-device sync** (via iCloud / Dropbox / self-hosted solution)
-- **Collaborative Programmes** (multi-user collaboration, v1.0 stretch goal)
+- **Collaborative knowledge graphs** (multi-user collaboration, v1.0 stretch goal)
 
 ---
 
 ## Backlog (unassigned phase)
 
-- Programme templates (preset research programme templates)
 - Pluggable extractors (third parties can write extractors)
-- Local embedding (Ollama + nomic-embed)
-- Cross-language support (non-English Claim extraction)
-- Cross-Programme knowledge graph view
+- Cross-language support (non-English Note extraction)
 - LLM cost dashboard
 - Export formats (Notion / Roam / Obsidian / LaTeX)
 - Cloud sync (if user demand is significant)
+- Bayesian confidence numerical updates + confidence_history
+- Multi LLM provider (abstraction layer, supporting OpenAI + Claude + local)
 
 ---
 
@@ -422,6 +440,7 @@ As an independent writer **Chen**:
 
 - ❌ Cloud-hosted lens (violates local-first core principle)
 - ❌ lens becoming a task manager / project manager
-- ❌ lens becoming a general-purpose markdown editor (TipTap is used for specific Claim/Frame editing)
+- ❌ lens becoming a general-purpose markdown editor
 - ❌ Dedicated AI chat interface (lens does not replace Claude Code / ChatGPT, it only serves as their memory layer)
-- ❌ Social network / public Programme sharing (revisit in v1.5+)
+- ❌ Social network / public knowledge sharing (revisit in v1.5+)
+- ❌ Categories / tags / folders as primary structure (links only, per Zettelkasten principle)

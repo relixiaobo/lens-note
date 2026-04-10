@@ -18,15 +18,15 @@ This document is specifically prepared for **agents or developers encountering t
 
 > **lens = Structured cognition compiler for humans and agents.**
 
-**Compile** the content you read, discuss, and think about into structured cognitive objects (Claim / Frame / Question / Programme), so that **both humans and AI agents can continue reasoning based on this compiled understanding**.
+**Compile** the content you read, discuss, and think about into structured Notes — universal knowledge cards linked in a Zettelkasten-inspired knowledge graph — so that **both humans and AI agents can continue reasoning based on this compiled understanding**.
 
 **One-line comparison**:
 
 - **Obsidian / Logseq**: Let you **manually** organize your notes
 - **Mem0 / Letta**: Provide **automatic but low-quality** memory extraction for AI
-- **lens**: Make **high-quality, traceable, typed understanding** the shared substrate for humans and agents
+- **lens**: Make **high-quality, traceable, linked understanding** the shared substrate for humans and agents
 
-**Core thesis**: **Raw content is not the product. Processed understanding is the product.**
+**Core thesis**: **Raw content is not the product. Processed understanding is the product.** All knowledge is Notes. Structure emerges from links.
 
 **Detailed explanation**: Read [`positioning.md`](./positioning.md).
 
@@ -62,12 +62,13 @@ lens's documentation falls into two categories, **you should read them in order*
 1. **`README.md`** — 10-second overview
 2. **`docs/positioning.md`** — What the product is, who the users are, UX principles (15 min)
 3. **This document** (`docs/getting-started.md`) — The one you're reading now (10 min)
-4. **`docs/architecture.md`** — Tech stack / component architecture / process model (20 min)
-5. **`docs/schema.md`** — Precise schema for data types, **source of truth for the code** (30 min)
+4. **`docs/zettelkasten-redesign.md`** — v0.2 design document: the complete Zettelkasten-native model (20 min)
+5. **`docs/architecture.md`** — Tech stack / component architecture / process model (20 min)
+6. **`docs/schema.md`** — Precise schema for data types, **source of truth for the code** (30 min)
 
 ### Reference (consult as needed)
 
-- **`docs/methodology.md`** — 5 methodological spines (Lakatos / Reif+Miller / Popper / Toulmin / Bayes) + 12-step compilation lifecycle. **Theoretical background, must-read before modifying any compile step**
+- **`docs/methodology.md`** — 5 methodological spines (Lakatos / Reif+Miller / Popper / Toulmin / Bayes) + compilation lifecycle. **Theoretical background, must-read before modifying any compile step**
 - **`docs/source-pipeline.md`** — Acquisition / extraction / incremental update mechanisms for each source type (web/PDF/chat). **Must-read before working on ingest-related tasks**
 - **`docs/roadmap.md`** — Phased plan from v0.1 to v1.0. **Check which phase a feature belongs to before working on it**
 - **`docs/references.md`** — ~120 cited sources. **Consult when someone questions a design decision**
@@ -81,6 +82,7 @@ lens's documentation falls into two categories, **you should read them in order*
 If there are **conflicts** between documents, the following order determines which one wins:
 
 ```
+zettelkasten-redesign.md wins  everything (v0.2 design source of truth)
 schema.md 	wins 	methodology.md    # schema is executable constraint, methodology is conceptual
 architecture.md wins 	roadmap.md       # architecture determines tech stack
 positioning.md 	wins 	everything        # positioning is source of truth
@@ -92,68 +94,69 @@ If you find a conflict: **stop, raise it**, don't make assumptions on your own.
 
 ## 4. Core concepts cheat sheet
 
-### 4.1 Core types
+### 4.1 Core types (v0.2 — Zettelkasten-native)
 
-lens organizes everything around the following core types (v0.1 supported marked ✅, v0.2 marked 📋):
+lens organizes everything around 3 types. This is a major simplification from v0.1's 6 types:
 
-| Type | What it is | v0.1? | File path |
+| Type | What it is | ID Prefix | File path |
 |---|---|---|---|
-| **Programme** | Research programme / a complete unit of exploration | ✅ | `programmes/pgm_XXX.md` |
-| **Source** | Raw material (article/markdown/note) | ✅ | `sources/src_XXX.md` |
-| **Claim** | A falsifiable assertion (Toulmin structure, evidence inline) | ✅ | `claims/clm_XXX.md` |
-| **Frame** | A "lens for viewing the world" | ✅ | `frames/frm_XXX.md` |
-| **Question** | An open inquiry question | ✅ | `questions/q_XXX.md` |
-| **Thread** | A conversational thread with references | ✅ | `threads/thr_XXX.md` |
-| **Anomaly** | Contradiction / counterexample | 📋 v0.2 | `anomalies/anm_XXX.md` |
-| **ConceptAnatomy** | 8-layer concept dissection | 📋 v0.2 | `concept_anatomies/ca_XXX.md` |
+| **Source** | Provenance record (where content came from, not knowledge) | `src_` | `sources/src_XXX.md` |
+| **Note** | Universal knowledge card (one idea per card, with optional cognitive fields) | `note_` | `notes/note_XXX.md` |
+| **Thread** | A conversation about Notes (interaction, not knowledge) | `thr_` | `threads/thr_XXX.md` |
 
-**Note**: Excerpt was removed as a separate type in v0.1 — evidence is stored **inline** in Claims. The Source file retains the full original text.
+**Note** is the universal card with optional fields that express cognitive roles:
 
-### 4.2 Methodological spines (5 traditions)
+| Role (soft hint) | Key optional fields | What it represents |
+|---|---|---|
+| `claim` | evidence[], qualifier, voice | A substantiated assertion |
+| `frame` | sees, ignores, assumptions[] | A perspective / lens |
+| `question` | question_status | An open inquiry |
+| `observation` | (minimal, no extra fields) | A bare thought |
+| `connection` | bridges[] | A cross-domain link |
+| `structure_note` | entries[] | An index entry (replaces Programme) |
 
-lens's design isn't arbitrary — it's a synthesis of 5 academic traditions:
+**Key v0.2 principles**:
+- Role is a soft hint, not rigid classification. A Note can have both `evidence` (claim) and `sees` (frame) simultaneously.
+- Links are the only structure: `supports[]`, `contradicts[]`, `refines[]`, `related[]`. No categories, no containers.
+- Notes grow over time: new evidence strengthens them, new sources enrich them, qualifiers update.
+- The agent is a "thinker" not just an "extractor" — it discovers relationships to existing knowledge.
 
-1. **Lakatos Research Programmes**: Programme = Hard Core + Protective Belt + Open Questions + Anomalies
-2. **Reif + Miller Hierarchical Knowledge Organization**: 5 elaboration dimensions + 9 knowledge structure types
-3. **Popper Falsification Cycle**: P1 → TT → EE → P2 (problems are replaced by deeper problems)
-4. **Toulmin Argumentation**: Claim = Statement + Evidence + Warrant + Qualifier + Rebuttal
-5. **Bayesian**: confidence is a 0-1 numeric value with update history
+**Migration from v0.1**: Claim -> Note (role: claim), Frame -> Note (role: frame), Question -> Note (role: question), Programme -> Note (role: structure_note). See `zettelkasten-redesign.md` section 9 for details.
 
-**These 5 weren't picked randomly** — each is responsible for a different scale. See `methodology.md` for details.
+### 4.2 Methodological spines (multiple traditions)
 
-### 4.3 Compilation lifecycle
+lens's design is a synthesis of multiple academic traditions:
 
-In v0.1, compilation is performed by a **Compilation Agent** — a short-lived agent (powered by pi-agent-core + pi-ai with Claude Sonnet 4.6) that is spawned for each document ingest. The agent autonomously reads the source, explores existing knowledge in the vault, and extracts structured objects. It uses pi's built-in tools (read, grep, ls, bash) — no custom tools. The agent outputs structured JSON; lens-core then processes the output (ULID generation, zod schema validation, markdown file writing, SQLite cache update).
+1. **Luhmann Zettelkasten**: Cards independent, no categories, links as primary structure, index sparse and post-hoc
+2. **Reif + Miller Hierarchical Knowledge Organization**: scope (big_picture/detail) + 9 knowledge structure types
+3. **Toulmin Argumentation**: evidence + qualifier + voice as optional fields on Note
+4. **Karpathy LLM Wiki**: Compile at ingest time, not at query time
+5. **Li Jigang**: Cognitive operations (anatomy/rank/roundtable/drill) as `lens run` commands (v0.3)
 
-The following steps describe the conceptual phases of compilation. They are not a rigid sequential pipeline; instead, they happen as part of the agent's autonomous exploration:
+See `methodology.md` for details.
 
-```
-Step 0:  Source creation                                    ✅ v0.1 COMPLETE
-Step 1:  Evidence extraction (inline in Claims)            ✅ v0.1 COMPLETE
-Step 2:  Programme attribution                             ✅ v0.1 COMPLETE
-Step 3:  Claim extraction (Toulmin core + scope)           ✅ v0.1 COMPLETE
-Step 4:  Frame extraction                                  ✅ v0.1 COMPLETE
-Step 5:  Question extraction                               ✅ v0.1 COMPLETE
-Step 6:  Knowledge structure type identification (Miller)  📋 v0.2 (optional in v0.1 schema)
-Step 7:  Elaboration positioning (Reif 5 dimensions)       📋 v0.2 (optional in v0.1 schema)
-Step 8:  Dedup + Orphan auto-recovery                      📋 v0.2
-Step 9:  Conflict detection (Anomaly)                      📋 v0.2
-Step 10: Bayesian update                                   📋 v0.2
-Step 11: Boundary detection                                📋 v0.2
-Step 12: Programme health check                            📋 v0.2
-```
+### 4.3 Compilation lifecycle (v0.2)
 
-**v0.1 result**: Steps 0-5 are fully implemented and tested. The `scope` field (`big_picture` / `detail`) was added to Claims based on Reif/Miller + Minto Pyramid research, driving 2-level Programme display. Miller structure_type and Reif elaboration dimensions are optional fields in the schema, deferred to v0.2 for full implementation.
+In v0.2, the Compilation Agent is a **thinker**, not just an extractor. When ingesting a new source, it:
 
-See `methodology.md` § Compilation Lifecycle for details.
+1. Reads the source document
+2. Explores existing knowledge (`lens search`, `lens list`, `lens links`)
+3. For each key idea:
+   - Searches for similar existing Notes
+   - If found: decides whether to **UPDATE** (add evidence, strengthen, enrich) or **CREATE** (contradiction, new angle)
+   - If not found: **CREATE** new Note
+4. Discovers cross-domain connections and creates Connection notes
+5. Does NOT create structure notes (those are post-hoc, user-initiated)
+
+The number of new Notes is a RESULT of what's genuinely new. An article about a well-covered topic might create 1 new Note but UPDATE 5 existing ones. See `zettelkasten-redesign.md` sections 5.2-5.4 for details.
 
 ### 4.4 Two categories of Sources
 
 **Immutable** (one-time, fixed content):
-- web_article / markdown / plain_text / manual_note — **v0.1 supported**
-- pdf_paper — **v0.2** (depends on Marker Python installation)
+- web_article / markdown / plain_text / manual_note — **v0.1+ supported**
+- pdf_paper — **v0.3** (depends on Marker Python installation)
 
-**Growing** (living, may continue to grow) — **all v0.2**:
+**Growing** (living, may continue to grow) — **v0.3+**:
 - chat_conversation (ChatGPT / Claude.ai / Claude Code session)
 - Has 3 special fields: `external_id`, `growth_state`, `content_fingerprint`
 - Incrementally updated via auto-check mechanism
@@ -196,24 +199,22 @@ lens/
 ```
 
 **Key points**:
-- **Only `lens-core` exists** in v0.1 — all business logic lives here
-- **`lens-ui`** (React 19 + Tauri frontend) and **`lens-tauri`** (Rust IPC shell) are planned for v0.2
+- **Only `lens-core` exists** — all business logic lives here
 - lens-core compiles to a standalone CLI binary via `bun build --compile`
 
-### 5.2 Current architecture (v0.1 — CLI only)
+### 5.2 Current architecture (v0.2 — CLI only)
 
 ```
 lens-core (single Bun-compiled binary, 63MB)
 ├── CLI entry point (src/main.ts)
 ├── Compilation Agent (pi-agent-core + pi-ai)
-│   Reads source → explores existing knowledge → extracts Claims/Frames/Questions
+│   Reads source → explores existing knowledge → creates/updates Notes + links
 ├── Storage (File-as-Truth + SQLite derived cache)
 │   Markdown files = truth, bun:sqlite FTS5 = search cache
+│   3 directories: notes/ sources/ threads/
 ├── RSS feeds (feedsmith, OPML import, autodiscovery)
 └── Web extraction (Defuddle + Turndown → markdown)
 ```
-
-**Key design**: lens-core is an **independently usable CLI tool**. GUI (Tauri + React) planned for v0.2.
 
 ### 5.3 Key file locations (quick reference)
 
@@ -222,15 +223,13 @@ If you want to do X, where to start reading:
 | Task | Start here | Then read |
 |---|---|---|
 | Add a new source type | `packages/lens-core/src/sources/` | `source-pipeline.md` |
-| Modify the Claim schema | `packages/lens-core/src/core/types.ts` | `schema.md` |
-| Modify the Compilation Agent | `packages/lens-core/src/agent/` | `methodology.md` |
+| Modify the Note schema | `packages/lens-core/src/core/types.ts` | `schema.md` |
+| Modify the Compilation Agent | `packages/lens-core/src/agent/` | `zettelkasten-redesign.md` |
 | Add a CLI command | `packages/lens-core/src/cli/` | existing commands (e.g. `digest.ts`, `feed.ts`) |
 | Modify RSS feed handling | `packages/lens-core/src/feeds/` | `feed-store.ts`, `feed-checker.ts` |
 | Modify web extraction | `packages/lens-core/src/sources/web.ts` | Defuddle + Turndown docs |
 | Modify SQLite cache schema | `packages/lens-core/src/core/storage.ts` | `schema.md` |
-| Modify file storage format | `packages/lens-core/src/core/storage.ts` | `schema.md` §0.4-0.5 |
-| Add a React view (v0.2) | `packages/lens-ui/src/views/` (not yet created) | `architecture.md` § UI |
-| Modify IPC interfaces (v0.2) | `packages/lens-tauri/src/commands.rs` (not yet created) | Tauri docs |
+| Modify file storage format | `packages/lens-core/src/core/storage.ts` | `schema.md` |
 
 ---
 
@@ -243,12 +242,6 @@ If you want to do X, where to start reading:
 - **Bun** 1.1+ (runtime + compiler)
 - **pnpm** 9+ (monorepo workspace manager)
 - **Anthropic API key** (configured via `lens init` or `~/.lens/config.yaml`)
-
-**Only needed for v0.2**:
-- **Node.js** 20+ (if not using Bun)
-- **Rust** 1.77+ (for Tauri GUI, v0.2)
-- Python 3.11+ + `pip install marker-pdf` (PDF extraction, v0.2)
-- Xcode Command Line Tools (macOS, for Tauri v0.2)
 
 ### 6.2 Clone + Install
 
@@ -270,8 +263,6 @@ providers:
       api_key: sk-ant-***
       model: claude-sonnet-4-6
 ```
-
-**v0.1 only requires the Anthropic API key**. Embedding (Voyage AI), auto-check, and snapshot retention settings are v0.2 features.
 
 ### 6.4 Running Dev Mode
 
@@ -299,13 +290,16 @@ npx tsc --noEmit --project packages/lens-core/tsconfig.json    # Type check
 bun build --compile packages/lens-core/src/main.ts --outfile dist/lens  # Compile to binary (63MB)
 
 # Using the compiled binary
-./dist/lens ingest <url>         # Ingest a web article
-./dist/lens feed check           # Check all RSS feeds
-./dist/lens digest               # Today's new insights
-./dist/lens programme list       # List all Programmes
-./dist/lens context "<query>"    # Agent-ready context pack
-./dist/lens show <id>            # View any object
-./dist/lens status               # System status
+./dist/lens ingest <url>                        # Ingest a web article
+./dist/lens feed check                          # Check all RSS feeds
+./dist/lens digest                              # Today's new insights
+./dist/lens list notes --role structure_note    # List structure notes (replaces programme list)
+./dist/lens list notes --role claim             # List claim notes
+./dist/lens context "<query>"                   # Agent-ready context pack
+./dist/lens show <id>                           # View any object
+./dist/lens links <id>                          # Show relationships for a note
+./dist/lens status                              # System status
+./dist/lens lint                                # Health check: orphans, missing links
 ```
 
 ---
@@ -316,8 +310,8 @@ Before you start modifying code, **here is a checklist meant to be followed**:
 
 ### 7.1 Understand the scope
 
-- [ ] Which package am I modifying? `lens-core` (only package in v0.1) / `lens-ui` (v0.2) / `lens-tauri` (v0.2)
-- [ ] Which phase does my change belong to? v0.1 / v0.2 / v0.3 (check `roadmap.md`)
+- [ ] Which package am I modifying? `lens-core` (only package)
+- [ ] Which phase does my change belong to? v0.2 (current) / v0.3 / v1.0 (check `roadmap.md`)
 - [ ] If it's not in the current phase, confirm with the maintainer
 - [ ] Does my change involve the schema? If so, modify `schema.md` first
 
@@ -325,12 +319,10 @@ Before you start modifying code, **here is a checklist meant to be followed**:
 
 If you're modifying:
 
-- **Source extractor** → Read `source-pipeline.md` + look at existing extractors in `packages/lens-core/src/sources/`
-- **Compilation Agent** → Read `methodology.md` § Compilation Lifecycle + look at `packages/lens-core/src/agent/`
-- **Claim / Frame schema** → Read `schema.md` § 2.3 and § 2.4 + `packages/lens-core/src/core/types.ts`
-- **RSS feeds** → Look at `packages/lens-core/src/feeds/` (feed-store.ts, feed-checker.ts)
-- **UI views (v0.2)** → Read `architecture.md` § 2.5 + `packages/lens-ui/src/views/` (not yet created)
-- **IPC (v0.2)** → Read `architecture.md` § 2.2 + Tauri docs
+- **Source extractor** -> Read `source-pipeline.md` + look at existing extractors in `packages/lens-core/src/sources/`
+- **Compilation Agent** -> Read `zettelkasten-redesign.md` sections 5.1-5.5 + `packages/lens-core/src/agent/`
+- **Note schema** -> Read `schema.md` + `zettelkasten-redesign.md` section 2.2 + `packages/lens-core/src/core/types.ts`
+- **RSS feeds** -> Look at `packages/lens-core/src/feeds/` (feed-store.ts, feed-checker.ts)
 
 ### 7.3 Decision checks
 
@@ -348,57 +340,49 @@ If you're modifying:
 
 ### 7.5 Submission
 
-- [ ] Change involves schema → update `schema.md` accordingly
-- [ ] Change involves architecture → update `architecture.md` accordingly
-- [ ] Change involves user flow → update `positioning.md` or `source-pipeline.md` accordingly
+- [ ] Change involves schema -> update `schema.md` accordingly
+- [ ] Change involves architecture -> update `architecture.md` accordingly
+- [ ] Change involves user flow -> update `positioning.md` or `source-pipeline.md` accordingly
 - [ ] Commit message briefly references the task and design rationale
 
 ---
 
 ## 8. Common confusions Q&A
 
-### Q1: Why not just use Electron?
+### Q1: Where did Programme go?
 
-**A**: Tauri 2 is clearly superior to Electron in **memory, bundle size, startup speed, and security**. See `architecture.md` § 1.1.
+**A**: Programme was removed in v0.2. Its functions are now handled by **structure notes** — Notes with `role: structure_note` and an `entries[]` field pointing to entry-point Notes. Use `lens list notes --role structure_note` instead of `lens programme list`. See `zettelkasten-redesign.md` section 8.
 
-### Q2: Why are CLI and GUI the same binary?
+### Q2: Why only 3 types instead of 6?
 
-**A**: Power users need CLI, regular users need GUI, but maintaining two codebases is 2x the work. Launch `lens` without arguments for GUI, with arguments for CLI; both share the same `lens-core` sidecar. See `architecture.md` § 2.3.
+**A**: The v0.2 Zettelkasten-native redesign unified Claim, Frame, Question, and Programme into a single **Note** type with optional fields. Role is a soft hint, not a rigid classification. This means a Note can have both claim fields (evidence) and frame fields (sees/ignores) simultaneously. Structure emerges from links, not from type categories.
 
 ### Q3: Why not use a file watcher (chokidar) to monitor Claude Code sessions?
 
-**A**: fsevents is unreliable on iCloud / cross-mount points + daemon processes are complex + 5-minute staleness is sufficient for UX. Switched to **auto-check on CLI invocation** pattern instead. See `source-pipeline.md` § 1.
+**A**: fsevents is unreliable on iCloud / cross-mount points + daemon processes are complex + 5-minute staleness is sufficient for UX. Switched to **auto-check on CLI invocation** pattern instead. See `source-pipeline.md` section 1.
 
-### Q4: Why is v0.1 CLI-only? Wasn't a GUI planned?
+### Q4: A ChatGPT export is a zip containing 143 conversations — how do we store them?
 
-**A**: The original plan was to build a Tauri GUI in v0.1, but during implementation it became clear that **CLI was sufficient to validate the core hypothesis** (LLM extraction quality). Building the GUI would have delayed validation significantly. The CLI with `--json` output already serves agents, and commands like `lens show`, `lens programme show`, and `lens digest` provide adequate visibility for humans. GUI is planned for v0.2.
+**A**: **One Source per conversation**, `external_id = "chatgpt:conversation:{uuid}"`. On the next import, use `external_id` for dedup + incremental merge. See `source-pipeline.md` section 2.5.
 
-### Q5: A ChatGPT export is a zip containing 143 conversations — how do we store them?
-
-**A**: **One Source per conversation**, `external_id = "chatgpt:conversation:{uuid}"`. On the next import, use `external_id` for dedup + incremental merge. See `source-pipeline.md` § 2.5.
-
-### Q6: A Claim is supported by a certain turn in a ChatGPT conversation, and the user later edits that turn — what happens to the Claim?
-
-**A**: **replace_if_diverged + orphan auto-recovery**: The old version is kept as a history snapshot; the new version is recompiled; if all evidence for the old claim disappears, its status changes to `orphaned`; the dedup pipeline attempts auto-recovery (merging the orphan's history into the new claim). See `source-pipeline.md` § 3.3 and § 3.4.
-
-### Q7: How do I modify LLM prompts? How do I test after modifying them?
+### Q5: How do I modify LLM prompts? How do I test after modifying them?
 
 **A**: Prompts are in `packages/lens-core/src/core/llm/prompts/`. Each prompt file corresponds to one step of the compilation lifecycle. After modifying a prompt, run fixture-based regression tests (`tests/fixtures/` has real paper / conversation samples). **Don't commit prompt changes without running tests**.
 
-### Q8: How do I add a new CLI command?
+### Q6: How do I add a new CLI command?
 
 **A**:
-1. Check `positioning.md` § V0 Command List to confirm the command name follows naming conventions
+1. Check `positioning.md` command list to confirm the command name follows naming conventions
 2. Add a new file in `packages/lens-core/src/cli/` (e.g. `digest.ts`, `feed.ts`)
 3. Register it in `packages/lens-core/src/cli/commands.ts`
 4. Add tests
-5. Update the command list in `positioning.md` and `CLAUDE.md`
+5. Update the command list in `CLAUDE.md` and relevant docs
 
-### Q9: I found existing code that's inconsistent with the documentation — what do I do?
+### Q7: I found existing code that's inconsistent with the documentation — what do I do?
 
 **A**: **Stop, raise it**. Don't assume which one is correct. If it's a small typo you can fix it directly, but if it's a semantic conflict you **must discuss with the maintainer** — it could be outdated docs, or it could be incorrect code.
 
-### Q10: Can I modify schema.md?
+### Q8: Can I modify schema.md?
 
 **A**: Yes, but **be cautious**. schema.md is the source of truth for the code; modifying it may require migration. Process:
 1. First write a design note explaining why
@@ -411,20 +395,32 @@ If you're modifying:
 
 ## 9. Current project status (2026-04-09)
 
-**Phase**: v0.1 COMPLETE — CLI implementation done, preparing for v0.2
+**Phase**: v0.2 COMPLETE — Zettelkasten-native redesign implemented
 
 **v0.1 completed** (6 commits, TypeScript zero errors):
-- ✅ All design docs (positioning / methodology / schema / source-pipeline / architecture / roadmap)
-- ✅ Extraction quality spike validated
-- ✅ Full CLI implementation: ingest, show, search, context, programme, note, status, rebuild-index
-- ✅ Compilation Agent (pi-agent-core + pi-ai with Claude Sonnet 4.6)
-- ✅ File-as-Truth storage + bun:sqlite FTS5 derived cache
-- ✅ Web extraction (Defuddle + Turndown)
-- ✅ RSS feed pipeline (feedsmith + OPML import + autodiscovery)
-- ✅ Digest command (temporal views: day/week/month/year)
-- ✅ Scope-based hierarchy (big_picture/detail) on Claims
-- ✅ Bun-compiled single binary (63MB)
-- ✅ All commands support `--json` for agent consumption
+- All design docs (positioning / methodology / schema / source-pipeline / architecture / roadmap)
+- Extraction quality spike validated
+- Full CLI implementation with 6 types (Source, Claim, Frame, Question, Programme, Thread)
+- Compilation Agent (pi-agent-core + pi-ai with Claude Sonnet 4.6)
+- File-as-Truth storage + bun:sqlite FTS5 derived cache
+- Web extraction (Defuddle + Turndown)
+- RSS feed pipeline (feedsmith + OPML import + autodiscovery)
+- Digest command (temporal views: day/week/month/year)
+- Scope-based hierarchy (big_picture/detail) on Claims
+- Bun-compiled single binary (63MB)
+- All commands support `--json` for agent consumption
+
+**v0.2 completed** (Zettelkasten-native redesign):
+- Unified type system: 3 types (Source, Note, Thread) replacing 6
+- Note as universal knowledge card with optional cognitive fields
+- Role as soft hint (claim / frame / question / observation / connection / structure_note)
+- Links as only structure (supports / contradicts / refines / related)
+- Programme replaced by structure notes (Notes with role: structure_note)
+- Agent redesigned as "thinker" — discovers relationships, updates existing Notes
+- Storage simplified: `notes/` `sources/` `threads/` (3 directories)
+- ID prefixes simplified: `note_` `src_` `thr_` (3 prefixes)
+- CLI updated: `lens list notes --role <role>`, `lens links <id>`, `lens lint`
+- No `programme` command — replaced by `lens list notes --role structure_note`
 
 **Tech stack (as built)**:
 
@@ -432,7 +428,7 @@ If you're modifying:
 |---|---|
 | **Bun** | Runtime + compile to single binary (`bun build --compile`) |
 | **bun:sqlite** | Built-in SQLite binding. FTS5 search + links table. Derived cache. |
-| **pi-ai** | Unified LLM API (20+ providers). v0.1 uses Anthropic Claude Sonnet 4.6. |
+| **pi-ai** | Unified LLM API (20+ providers). Uses Anthropic Claude Sonnet 4.6. |
 | **pi-agent-core** | Agent runtime. Each ingest spawns a Compilation Agent. |
 | **Defuddle + linkedom** | Web article extraction (clean HTML) |
 | **Turndown** | HTML to Markdown conversion |
@@ -442,17 +438,11 @@ If you're modifying:
 | **zod** | Runtime schema validation |
 | **pnpm** | Monorepo workspace manager |
 
-**What changed from the original plan**:
-- GUI (Tauri 2 desktop app) deferred to v0.2 — CLI was sufficient to validate the core hypothesis
-- Excerpt removed as a separate type — evidence stored inline in Claims
-- Thread type added for conversational flows
-- RSS feeds, digest, and scope-based hierarchy added as natural extensions of the core loop
-
-**Next steps (v0.2)**:
-1. Build Tauri 2 GUI (lens-ui + lens-tauri packages)
-2. Add growing source support (chat conversations, auto-check)
-3. Add embedding + semantic search
-4. Add Knowledge Maps visualization
+**Next steps (v0.3)**:
+1. Li Jigang cognitive operations (`lens run <id> anatomy/rank/roundtable/drill`)
+2. Browser extension (Chrome / Firefox)
+3. MCP server (thin wrapper around CLI)
+4. Audio/Image source types
 
 ---
 
@@ -461,14 +451,14 @@ If you're modifying:
 ### If you're working on a specific development task
 
 1. Find which phase your task is in within `roadmap.md`
-2. Read the relevant domain doc (schema / source-pipeline / methodology)
+2. Read `zettelkasten-redesign.md` for the v0.2 model
 3. Look at existing code in the corresponding package
-4. Follow the checklist in § 7 and get started
+4. Follow the checklist in section 7 and get started
 
 ### If you're doing a system review
 
 1. Finish reading `README.md` + `positioning.md` + this document
-2. Read `methodology.md` (theory) + `schema.md` (data)
+2. Read `zettelkasten-redesign.md` (v0.2 design) + `schema.md` (data)
 3. Read `architecture.md` (technical) + `source-pipeline.md` (ingest)
 4. Scan `roadmap.md` to confirm scope
 
@@ -487,6 +477,7 @@ Read all the documents listed under "review," then:
 | I want to know... | Read this |
 |---|---|
 | What lens is | [`positioning.md`](./positioning.md) |
+| The v0.2 Zettelkasten-native model | [`zettelkasten-redesign.md`](./zettelkasten-redesign.md) |
 | Why it's designed this way | [`methodology.md`](./methodology.md) |
 | What the data looks like | [`schema.md`](./schema.md) |
 | How to ingest a source | [`source-pipeline.md`](./source-pipeline.md) |

@@ -5,20 +5,28 @@
 
 ## In One Sentence
 
-Lens is not a reader, not a RAG knowledge base, not a second brain. It is a **compiler for understanding** — it takes what you read, chat about, and think about, and compiles them into structured cognitive objects (Claim / Frame / Question / Programme), enabling both humans and AI agents to reason further based on this compiled understanding.
+Lens is not a reader, not a RAG knowledge base, not a second brain. It is a **compiler for understanding** — it takes what you read, chat about, and think about, and compiles them into structured Notes (claims, frames, questions, observations, connections), linked together in a Zettelkasten-inspired knowledge graph. Both humans and AI agents reason further based on this compiled understanding.
 
 ## Core Thesis
 
 **Raw content is not the product. Processed understanding is the product.**
 
-Information consumed through reading, chatting, and viewing is compiled into structured cognitive objects:
+**All knowledge is Notes. Structure emerges from links.**
 
-- **Claim** — A falsifiable assertion with Toulmin structure (evidence / warrant / qualifier)
-- **Frame** — A lens for viewing the world (sees / ignores / assumptions)
-- **Question** — An open inquiry question, supporting tree-like growth
-- **Programme** — Lakatos research programme structure: Hard Core + Protective Belt + Open Questions
+Information consumed through reading, chatting, and viewing is compiled into a unified knowledge card type:
 
-The original text is demoted to the **evidence layer**. The everyday objects of consumption are these structured objects, not the original text. See [`docs/positioning.md`](./docs/positioning.md) for details.
+- **Note** — A universal knowledge card (one idea per card) with optional cognitive fields:
+  - **Claim fields**: evidence, qualifier, voice (makes it a substantiated assertion)
+  - **Frame fields**: sees, ignores, assumptions (makes it a perspective)
+  - **Question field**: question_status (makes it an open inquiry)
+  - **Connection fields**: bridges (links cross-domain ideas)
+  - **Structure note**: role: structure_note + entries (replaces Programme as navigational index)
+- **Source** — Provenance record (where content came from, not knowledge itself)
+- **Thread** — A conversation about Notes (interaction, not knowledge)
+
+Role is a soft hint (`claim | frame | question | observation | connection | structure_note`), not a rigid classification. A Note can combine fields from multiple roles. Links (supports, contradicts, refines, related) are the only structure — no categories, no containers.
+
+The original text is demoted to the **evidence layer**. See [`docs/positioning.md`](./docs/positioning.md) for details.
 
 ## Who Is It For
 
@@ -29,7 +37,7 @@ The same body of understanding, accessed equally by both types of users.
 
 ## Intellectual Lineage
 
-The methodological backbone is synthesized from 5 traditions: **Lakatos** (research programmes), **Reif + Miller** (hierarchical knowledge organization), **Popper** (falsification cycles), **Toulmin** (argument structure), **Bayesian** (belief updating).
+The methodological backbone is synthesized from multiple traditions: **Luhmann** (Zettelkasten: cards + links, no categories), **Toulmin** (argument structure: evidence + qualifier), **Reif + Miller** (hierarchical knowledge organization: scope + structure types), **Karpathy** (compile at ingest time, not at query time), **Li Jigang** (cognitive operations: anatomy, rank, roundtable).
 
 Direct inspiration: [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), [Li Jigang ljg-skills](https://github.com/lijigang/ljg-skills).
 
@@ -37,20 +45,20 @@ See [`docs/methodology.md`](./docs/methodology.md) and [`docs/references.md`](./
 
 ## Product Form
 
-Lens is a **Tauri 2 desktop application** + CLI.
+Lens is a **CLI tool** (Bun-compiled single binary).
 
-- **v0.1**: Tauri desktop app (Reader / Programme Dashboard / Claim Detail / Settings) + CLI
-- **v0.2**: + Knowledge Maps visual layer + Contradiction detection + Chat ingest + Bayesian updating
-- **v0.3**: + Browser extension + MCP server + Audio/Image
-- **v1.0+**: + iOS / Android
+- **v0.1**: CLI-only. 6 types (Source, Claim, Frame, Question, Programme, Thread). Validated LLM extraction quality.
+- **v0.2**: Zettelkasten-native redesign. 3 types (Source, Note, Thread). Notes as universal cards with links as only structure. Agent becomes "thinker" not just "extractor" — discovers relationships and updates existing Notes.
+- **v0.3**: + Li Jigang cognitive operations (anatomy, rank, roundtable, drill) + Browser extension + MCP server
+- **v1.0+**: + GUI (Tauri 2 desktop app) + iOS / Android
 
-Tech stack: **Tauri 2 + React 19 + [pi-ai](https://github.com/badlogic/pi-mono) (LLM calls) + [pi-agent-core](https://github.com/badlogic/pi-mono) (Compilation Agent runtime) + SQLite (derived cache) + Bun-compiled core**. Storage: **Markdown files = truth, SQLite = derived cache**. See [`docs/architecture.md`](./docs/architecture.md) for details.
+Tech stack: **Bun + [pi-ai](https://github.com/badlogic/pi-mono) (LLM calls) + [pi-agent-core](https://github.com/badlogic/pi-mono) (Compilation Agent runtime) + SQLite (derived cache)**. Storage: **Markdown files = truth, SQLite = derived cache**. See [`docs/architecture.md`](./docs/architecture.md) for details.
 
-**Privacy note**: v0.1 compilation relies on the cloud-based Anthropic API (local-first storage + cloud inference). See [`docs/positioning.md`](./docs/positioning.md) § Privacy Boundaries for details.
+**Privacy note**: Compilation relies on the cloud-based Anthropic API (local-first storage + cloud inference). See [`docs/positioning.md`](./docs/positioning.md) § Privacy Boundaries for details.
 
 ## Status
 
-Design docs review complete. Ready to begin v0.1 implementation (run extraction quality spike first).
+v0.2 implementation complete. Zettelkasten-native redesign: 3 types (Source, Note, Thread), links as only structure, agent as thinker.
 
 ## Documentation
 
@@ -61,6 +69,7 @@ Design docs review complete. Ready to begin v0.1 implementation (run extraction 
 **Core design documents** (see each document for detailed content, not repeated here):
 
 - [`docs/positioning.md`](./docs/positioning.md) — Product positioning, UX principles, privacy boundaries
+- [`docs/zettelkasten-redesign.md`](./docs/zettelkasten-redesign.md) — **v0.2 design document: the complete Zettelkasten-native model**
 - [`docs/architecture.md`](./docs/architecture.md) — Tech stack, component architecture
 - [`docs/methodology.md`](./docs/methodology.md) — Methodological backbone, compilation lifecycle
 - [`docs/schema.md`](./docs/schema.md) — Type system precise specification (source of truth for code)
@@ -73,14 +82,11 @@ Design docs review complete. Ready to begin v0.1 implementation (run extraction 
 - [`spike/extraction-spike.ts`](./spike/extraction-spike.ts) — LLM extraction quality validation script (run before writing product code)
 - [`skills/lens.claude-skill.md`](./skills/lens.claude-skill.md) — Claude Code Skill definition (agent integration entry point)
 
-## Installation (v0.1 alpha, in development)
+## Installation (v0.2 alpha, in development)
 
 ```bash
 # CLI (agents and power users)
 npm install -g lens-cli
-
-# GUI (desktop)
-brew install --cask lens        # macOS
 
 # Agent integration (Claude Code)
 cp skills/lens.claude-skill.md ~/.claude/skills/
