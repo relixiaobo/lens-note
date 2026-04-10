@@ -32,6 +32,9 @@ importers:
       defuddle:
         specifier: ^0.15.0
         version: 0.15.0
+      feedsmith:
+        specifier: ^2.9.1
+        version: 2.9.1
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
@@ -616,9 +619,16 @@ packages:
   fast-xml-builder@1.1.4:
     resolution: {integrity: sha512-f2jhpN4Eccy0/Uz9csxh3Nu6q4ErKxf0XIsasomfOihuSUa3/xw6w8dnOtCDgEItQFJG8KyXPzQXzcODDrrbOg==}
 
+  fast-xml-parser@5.4.2:
+    resolution: {integrity: sha512-pw/6pIl4k0CSpElPEJhDppLzaixDEuWui2CUQQBH/ECDf7+y6YwA4Gf7Tyb0Rfe4DIMuZipYj4AEL0nACKglvQ==}
+    hasBin: true
+
   fast-xml-parser@5.5.8:
     resolution: {integrity: sha512-Z7Fh2nVQSb2d+poDViM063ix2ZGt9jmY1nWhPfHBOK2Hgnb/OW3P4Et3P/81SEej0J7QbWtJqxO05h8QYfK7LQ==}
     hasBin: true
+
+  feedsmith@2.9.1:
+    resolution: {integrity: sha512-XsHf3lv+i3juaUjE4FHB56nKN+lwvjJTmH3ZMVO4yELaeHV/siLygDlmfJXJoMzP9JZC+zYZUhPEH+9tL3ijzQ==}
 
   fetch-blob@3.2.0:
     resolution: {integrity: sha512-7yAQpD2UMJzLi1Dqv7qFYnPbaPx7ZfFK6PiIxQ4PfkGPyNyl2Ugx+a/umUonmKqjhM4DnfbMvdX6otXq83soQQ==}
@@ -1806,11 +1816,21 @@ snapshots:
     dependencies:
       path-expression-matcher: 1.4.0
 
+  fast-xml-parser@5.4.2:
+    dependencies:
+      fast-xml-builder: 1.1.4
+      strnum: 2.2.3
+
   fast-xml-parser@5.5.8:
     dependencies:
       fast-xml-builder: 1.1.4
       path-expression-matcher: 1.4.0
       strnum: 2.2.3
+
+  feedsmith@2.9.1:
+    dependencies:
+      entities: 7.0.1
+      fast-xml-parser: 5.4.2
 
   fetch-blob@3.2.0:
     dependencies:

@@ -2,7 +2,6 @@
  * Feed subscription storage.
  *
  * Stores RSS/Atom feed subscriptions in ~/.lens/feeds.json.
- * Tracks which articles have already been ingested (by URL).
  */
 
 import { existsSync, readFileSync, writeFileSync } from "fs";
@@ -13,10 +12,14 @@ import { ulid } from "ulid";
 export interface Feed {
   id: string;
   url: string;
-  title?: string; // auto-populated on first fetch
+  title?: string;
+  html_url?: string; // the website URL (not the feed URL)
   added_at: string;
   last_checked_at?: string;
-  ingested_urls: string[]; // URLs already ingested (dedup)
+  etag?: string; // for conditional fetch
+  last_modified?: string; // for conditional fetch
+  programme_id?: string; // optional: auto-assign articles to this Programme
+  ingested_urls: string[];
 }
 
 interface FeedStore {
@@ -34,16 +37,17 @@ function save(store: FeedStore) {
   writeFileSync(feedsPath, JSON.stringify(store, null, 2), "utf-8");
 }
 
-export function addFeed(url: string): Feed {
+export function addFeed(url: string, title?: string, htmlUrl?: string): Feed {
   const store = load();
 
-  // Check for duplicate
   const existing = store.feeds.find((f) => f.url === url);
   if (existing) throw new Error(`Feed already subscribed: ${url} (id: ${existing.id})`);
 
   const feed: Feed = {
     id: `feed_${ulid()}`,
     url,
+    title,
+    html_url: htmlUrl,
     added_at: new Date().toISOString(),
     ingested_urls: [],
   };
@@ -88,4 +92,41 @@ export function isIngested(feedId: string, url: string): boolean {
   const store = load();
   const feed = store.feeds.find((f) => f.id === feedId);
   return feed?.ingested_urls.includes(url) ?? false;
+}
+
+/** Import feeds from an OPML file */
+export function importOpml(xml: string): { added: Feed[]; skipped: string[] } {
+  const { parseOpml } = require("feedsmith");
+  const result = parseOpml(xml);
+  const outlines = result?.body?.outlines || [];
+
+  const added: Feed[] = [];
+  const skipped: string[] = [];
+  const store = load();
+
+  for (const outline of outlines) {
+    const feedUrl = outline.xmlUrl;
+    if (!feedUrl) continue;
+
+    // Skip if already subscribed
+    if (store.feeds.some((f) => f.url === feedUrl)) {
+      skipped.push(outline.title || outline.text || feedUrl);
+      continue;
+    }
+
+    const feed: Feed = {
+      id: `feed_${ulid()}`,
+      url: feedUrl,
+      title: outline.title || outline.text,
+      html_url: outline.htmlUrl,
+      added_at: new Date().toISOString(),
+      ingested_urls: [],
+    };
+
+    store.feeds.push(feed);
+    added.push(feed);
+  }
+
+  save(store);
+  return { added, skipped };
 }

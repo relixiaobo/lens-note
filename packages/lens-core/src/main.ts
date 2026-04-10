@@ -28,8 +28,12 @@ Commands:
   digest month          This month's digest
   digest year           This year in review
   programme list|show   Programme management
-  feed add|list|check   RSS feed subscription and auto-ingest
-  feed remove <id>      Unsubscribe from a feed
+  feed add <url>        Subscribe to an RSS feed (auto-discovers from website URLs)
+  feed import <opml>    Import feeds from OPML file
+  feed list             List subscriptions
+  feed check            Check feeds and compile new articles
+  feed check --dry-run  Check without compiling
+  feed remove <id>      Unsubscribe
   status                System status
   rebuild-index         Rebuild SQLite cache from markdown files
 

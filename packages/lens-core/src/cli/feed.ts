@@ -28,26 +28,95 @@ export async function handleFeed(sub: string, args: string[], opts: CommandOptio
       return feedList(mergedOpts);
     case "check":
       return feedCheck(mergedOpts);
+    case "import":
+      return feedImport(positional[1], mergedOpts);
     case "remove":
       return feedRemove(positional[1], mergedOpts);
     default:
       throw new Error(
-        `Unknown feed subcommand: ${subcommand}\nUsage: lens feed add|list|check|remove`
+        `Unknown feed subcommand: ${subcommand}\nUsage: lens feed add|list|check|import|remove`
       );
   }
 }
 
 async function feedAdd(url: string, opts: CommandOptions) {
-  if (!url) throw new Error("Usage: lens feed add <rss-url>");
+  if (!url) throw new Error("Usage: lens feed add <rss-url|website-url>");
 
-  const feed = addFeed(url);
+  let feedUrl = url;
+  let feedTitle: string | undefined;
+
+  // If URL doesn't look like a feed, try autodiscovery
+  if (!url.match(/\.(xml|rss|atom|json)$/) && !url.includes("/feed") && !url.includes("/rss")) {
+    const log = opts.json ? () => {} : (msg: string) => console.log(msg);
+    log(`Checking ${url} for RSS feed...`);
+
+    try {
+      const resp = await fetch(url, {
+        headers: { "User-Agent": "lens/0.1", Accept: "text/html" },
+        signal: AbortSignal.timeout(10000),
+      });
+      const html = await resp.text();
+
+      // Find <link rel="alternate" type="application/rss+xml"> or atom+xml
+      const feedMatch = html.match(
+        /<link[^>]*rel=["']alternate["'][^>]*type=["']application\/(rss|atom)\+xml["'][^>]*href=["']([^"']+)["'][^>]*>/i
+      ) || html.match(
+        /<link[^>]*href=["']([^"']+)["'][^>]*type=["']application\/(rss|atom)\+xml["'][^>]*>/i
+      );
+
+      if (feedMatch) {
+        const href = feedMatch[2] || feedMatch[1];
+        // Resolve relative URL
+        feedUrl = href.startsWith("http") ? href : new URL(href, url).href;
+        log(`  Discovered feed: ${feedUrl}`);
+      } else {
+        log(`  No RSS feed found. Subscribing to URL directly.`);
+      }
+    } catch {
+      // Can't fetch — just use the URL as-is
+    }
+  }
+
+  const feed = addFeed(feedUrl, feedTitle);
 
   if (opts.json) {
     console.log(JSON.stringify(feed, null, 2));
   } else {
-    console.log(`Subscribed to feed: ${feed.id}`);
-    console.log(`  URL: ${url}`);
-    console.log(`\nRun 'lens feed check' to fetch and ingest articles.`);
+    console.log(`Subscribed: ${feed.id}`);
+    console.log(`  URL: ${feedUrl}`);
+    console.log(`\nRun 'lens feed check' to fetch articles.`);
+  }
+}
+
+async function feedImport(filePath: string, opts: CommandOptions) {
+  if (!filePath) throw new Error("Usage: lens feed import <file.opml>");
+
+  const { existsSync, readFileSync } = await import("fs");
+  if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
+
+  const { importOpml } = await import("../feeds/feed-store");
+  const xml = readFileSync(filePath, "utf-8");
+  const { added, skipped } = importOpml(xml);
+
+  if (opts.json) {
+    console.log(JSON.stringify({
+      imported: added.length,
+      skipped: skipped.length,
+      feeds: added.map((f) => ({ id: f.id, title: f.title, url: f.url })),
+      skipped_titles: skipped,
+    }, null, 2));
+  } else {
+    console.log(`Imported ${added.length} feed(s) from OPML:`);
+    for (const f of added) {
+      console.log(`  ✅ ${f.title || f.url}`);
+    }
+    if (skipped.length) {
+      console.log(`\nSkipped ${skipped.length} (already subscribed):`);
+      for (const s of skipped) {
+        console.log(`  · ${s}`);
+      }
+    }
+    console.log(`\nRun 'lens feed check --dry-run' to see available articles.`);
   }
 }
 
