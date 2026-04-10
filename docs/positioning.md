@@ -80,9 +80,11 @@ lens does not promise "automatic correctness." What it promises is:
 - **Multiple perspectives coexist** — different Frames do not have to be forcibly reconciled
 - **Contradictions are not silenced** — discovered contradictions are surfaced to human/agent, not auto-resolved
 
-## V0 Type System: 5 Content Types + 1 Meta-structure
+## V0 Type System
 
-V0 supports **5 content types** (Excerpt / Claim / Frame / Question / ConceptAnatomy) + **1 meta-structure** (Programme).
+**v0.1 (as built)**: 6 object types — Source, Claim, Frame, Question, Programme, Thread. Evidence is stored inline in Claims (no separate Excerpt type). ConceptAnatomy and Anomaly are deferred to v0.2.
+
+**Full V0 vision**: 5 content types (Claim / Frame / Question / ConceptAnatomy / Anomaly) + 1 meta-structure (Programme) + Source + Thread.
 
 The complete schema, field semantics, and incremental scenario handling for each type are in [`methodology.md`](./methodology.md). Only brief introductions are given below.
 
@@ -101,9 +103,9 @@ Programme
 
 All content types belong to at least one Programme. Using lens is not "managing a bunch of notes" — it is "maintaining several Programmes, each with its own core and periphery."
 
-### Excerpt (substrate)
+### Excerpt (substrate) — Simplified in v0.1
 
-Raw evidence fragments — the ground truth for all other types. All Claims must cite at least one Excerpt.
+Raw evidence fragments — the ground truth for all other types. In the original design, Excerpt was a separate type. **In v0.1, evidence is stored inline in Claims** (as an `evidence[]` array), and the Source file retains the full original text. This simplification reduced complexity without losing traceability.
 
 ### Claim (Full Toulmin structure + Miller structure types + Reif elaboration)
 
@@ -204,49 +206,52 @@ lens ships with `skills/lens.claude-skill.md`, which users copy into their agent
 - **Other agents**: CLAUDE.md / custom instructions
 
 The Skill tells the agent:
-1. How to check and install lens (`npm install -g lens-cli`)
+1. How to check if lens is available and where to find the binary
 2. What commands are available and what arguments they accept
 3. When to use lens ("the user says to check their research")
 4. What the output format is
 
-**Agents can install lens themselves** — the Skill includes installation instructions, and agents automatically run `npm install -g lens-cli && lens init` the first time it is needed.
+**Agents use lens via CLI** — all commands support `--json` output. The Skill tells agents how to use `lens context`, `lens search`, etc.
 
 ### No MCP (v0.3 community can wrap)
 
 MCP is a protocol supported by 5/7 mainstream agents, but CLI already covers 100% of agents. MCP is merely a ~100-line typed wrapper around the CLI. It will be added in v0.3 or when the community demands it.
 
-### V0.1 Command List (Minimal Set)
+### V0.1 Command List (As Built)
 
 ```bash
-# Ingest (v0.1 only supports immutable sources)
-lens ingest <url>                              # web page (via Defuddle)
-lens ingest <file>                             # markdown / plain_text
-lens note "<text>" [--programme <id>]          # directly record a raw observation
+# Core
+lens init                                      # first-time setup (~/.lens/)
+lens ingest <url|file>                         # fetch + Compilation Agent → Claims/Frames/Questions
+lens note "<text>"                             # quick note
+lens show <id>                                 # show any object (source: contributions, claim: evidence)
+lens search "<query>"                          # FTS5 full-text search
+lens context "<query>"                         # agent-ready JSON context pack
+lens context "<query>" --scope big_picture     # overview only (3-5 core Claims)
 
-# Compile
-lens run <source_id> extract                   # extract claim/frame/question from source
+# Programmes
+lens programme list                            # list all Programmes with member counts
+lens programme show <id>                       # 2-level display: Overview + Details (use --full)
 
-# Query
-lens search "<query>" [--programme <id>]       # FTS5 full-text search
-lens show <id>                                 # read claim/frame/question/programme
-lens context "<intent>"                        # assemble relevant structures (most important)
+# Digest (temporal views)
+lens digest                                    # today's new insights, tensions, perspectives
+lens digest week                               # this week
+lens digest month                              # this month (compact)
+lens digest year                               # this year (compact)
 
-# Programme operations
-lens programme list
-lens programme show <id>                       # show Programme status
-lens programme create <title>                  # create new Programme
+# RSS Feeds
+lens feed add <url>                            # subscribe (auto-discovers RSS from website URLs)
+lens feed import <file.opml>                   # import from Reeder/Feedly/Inoreader
+lens feed list                                 # list subscriptions
+lens feed check                                # check all feeds, compile new articles
+lens feed check --dry-run                      # check without compiling
+lens feed remove <id|url>                      # unsubscribe
 
-# Browse
-lens list claims [--programme <id>] [--frame <id>]
-lens list frames
-lens list questions [--status open]
-lens sources
+# Maintenance
+lens status                                    # system status (object counts, cache size)
+lens rebuild-index                             # rebuild SQLite cache from markdown files
 
-# Meta
-lens status                                    # system status
-lens recompile <source_id>                     # recompile
-
-# All commands support --json
+# All commands support --json for agent consumption
 ```
 
 ### V0.2+ Additional Commands (not implemented in v0.1)
@@ -265,10 +270,10 @@ lens pull                                      # manually trigger auto-check
 
 ### Synchronous vs Asynchronous
 
-- **Synchronous layer (sub-second)**: `search`, `show`, `context`, `note`, `list`
-- **Asynchronous layer (job model)**: `ingest`, `run extract`, `recompile`
+- **Synchronous layer (sub-second)**: `search`, `show`, `context`, `note`, `status`, `digest`, `programme list/show`, `feed list`
+- **Longer-running**: `ingest` (fetch + compile), `feed check` (check all feeds + compile new articles)
 
-Asynchronous commands immediately return a `job_id`, queryable via `lens status`.
+In v0.1, all commands run synchronously (blocking). Job-based async execution may be added in v0.2.
 
 ## Storage Layout
 
@@ -276,20 +281,16 @@ Default path `~/.lens/`, or placed in an iCloud sync path at `~/Library/Mobile D
 
 ```
 ~/.lens/ (or iCloud sync location)
-├── programmes/                # Programme meta-structures
-│   └── pgm_01HXYZ.md
-├── sources/                   # Source metadata
-│   └── src_01HXYZ.md         # canonical markdown
-├── raw/                       # Original files (HTML, uploaded files, etc.)
-├── excerpts/
-│   └── exc_01HXYZ.md
-├── claims/
-│   └── clm_01HXYZ.md         # Concise frontmatter (≤ 20 lines) + body
-├── frames/
-│   └── frm_01HXYZ.md
-├── questions/
-│   └── q_01HXYZ.md
-├── index.sqlite               # DERIVED CACHE (FTS5 + relationship graph, rebuildable)
+├── sources/src_01HXYZ.md      # Every object = type/id.md
+├── claims/clm_01HXYZ.md      # Frontmatter (≤20 lines) + body, evidence inline
+├── frames/frm_01HXYZ.md
+├── questions/q_01HXYZ.md
+├── programmes/pgm_01HXYZ.md  # Minimal: title + description (members reverse-queried)
+├── threads/thr_01HXYZ.md
+├── raw/                       # Original files (HTML, etc.)
+│   └── src_01HXYZ.html
+├── feeds.json                 # RSS feed subscriptions
+├── index.sqlite               # DERIVED CACHE (FTS5 + links table, rebuildable)
 └── config.yaml
 ```
 
@@ -299,24 +300,27 @@ Default path `~/.lens/`, or placed in an iCloud sync path at `~/Library/Mobile D
 - Git can diff them
 - iCloud / Dropbox / Syncthing sync them directly (SQLite has data corruption risks with file-level sync; individual files do not)
 - If lens is discontinued, users' data remains plain text
-- Relationships are inlined in frontmatter (`evidence: [exc_id]`), no separate relations file needed
+- Relationships are inlined in frontmatter (e.g. `evidence: [...]`, `programme: pgm_id`), no separate relations file needed
 
-## Things Not in V0 (Explicitly Deferred)
+## Things Not in V0.1 (Explicitly Deferred)
 
 Each item has a specific reason for deferral:
 
+- ❌ **GUI (Tauri 2 desktop app)** — v0.2. v0.1 validated the core loop with CLI only
 - ❌ **Li Jigang's remaining operations** (roundtable / rank / paper-river / writes) — v0.1 only does extract. The rest are v0.2+
 - ❌ **ConceptAnatomy (8-layer concept anatomy)** — v0.2. v0.1 first validates base Claim/Frame/Question extraction quality
 - ❌ **Programme split / merge** — v0.2. v0.1 only supports create / add-to-belt
-- ❌ **Knowledge Maps visualization** — v0.2. v0.1 uses list/detail views to validate the core loop (see methodology.md for explanation)
+- ❌ **Knowledge Maps visualization** — v0.2. v0.1 uses CLI views to validate the core loop
 - ❌ **Chat growing source incremental updates** — v0.2. v0.1 only supports immutable source ingest
-- ❌ **Auto-check / growing source mechanism** — v0.2. v0.1 requires explicit `lens ingest` from users
+- ❌ **Auto-check / growing source mechanism** — v0.2. v0.1 requires explicit `lens ingest` or `lens feed check`
 - ❌ **Bayesian confidence numerical updates** — v0.2. v0.1 uses four levels (`certain / likely / presumably / tentative`), assigned by the LLM in one pass
 - ❌ **Contradiction detection (Anomaly detection)** — v0.2. v0.1 first ensures single-source extraction quality
 - ❌ **PDF extraction (Marker)** — v0.2. v0.1 avoids the installation friction of Python dependencies
+- ❌ **Embedding / semantic search** — v0.2. v0.1 uses FTS5 only
 - ⚠️ **Multi-user, collaboration** — v0 is single-machine single-user; multi-user is an entirely different product dimension
 - ✅ **Multi-device sync (via iCloud)** — place `~/.lens/` at the iCloud path. lens has zero sync infrastructure
 - ❌ **MCP server** — v0.3. CLI first needs to stabilize
+- ❌ **Browser extension** — v0.3
 - ❌ **Batch ingest watcher** — v0 uses explicit `lens ingest`; no inbox folder monitoring
 - ❌ **Causal Model / Script / Analogy / Generator types** — LLM-unfriendly, v1+
 - ❌ **Lineage (paper provenance tracing)** — requires web search infrastructure, v1+
@@ -398,13 +402,13 @@ Complete publication information, links, and relevance to lens for each source a
 
 ## Several Key Open Questions
 
-Most design questions have been answered by methodology.md. Still open:
+Most design questions have been answered by methodology.md and v0.1 implementation. Status:
 
-1. **Programme naming granularity**: Should users create broad Programmes like "AI Memory Systems" or narrow ones like "mem0 vs Zep comparison"? V0 does not enforce a choice; this will be decided by observing usage
-2. **How human feedback triggers recompilation**: How do highlight / comment / tag become compiler signals? V0 uses a simple `lens note --re` trigger
-3. **First LLM provider**: Anthropic only, or pre-build a provider abstraction? Leaning toward Anthropic only, but with an abstract interface for future swaps
-4. **CLI binary language**: TypeScript (slow startup but familiar ecosystem + fast iteration) / Rust (fast startup but slow development) / Go (middle ground). Leaning toward TypeScript for v0; hot paths can be rewritten later
-5. **Embedding model choice**: Local (ollama) or cloud (OpenAI/Voyage)? Local is better for privacy but worse in quality; v0 pre-builds an abstraction, defaults to cloud
+1. **Programme naming granularity**: Should users create broad Programmes like "AI Memory Systems" or narrow ones like "mem0 vs Zep comparison"? V0 does not enforce a choice; this will be decided by observing usage. **Still open.**
+2. **How human feedback triggers recompilation**: How do highlight / comment / tag become compiler signals? V0 uses a simple `lens note --re` trigger. **Still open.**
+3. **First LLM provider**: ✅ **Resolved** — Anthropic Claude Sonnet 4.6 via pi-ai. pi-ai provides the abstraction layer for future provider swaps.
+4. **CLI binary language**: ✅ **Resolved** — TypeScript, compiled to single binary via `bun build --compile`. 63MB binary, acceptable startup time.
+5. **Embedding model choice**: Deferred to v0.2. v0.1 uses FTS5 only, no embedding. **Still open for v0.2.**
 
 ## Product Form: 4 Surfaces + 1 Facade
 
@@ -451,13 +455,12 @@ The core of Lens is a CLI tool, but the complete consumer-facing product form ha
 
 ### Responsibilities of Each Layer
 
-**1. lens.app (Tauri 2 desktop application, v0.1 core)**
-- One binary that is both GUI and CLI
-- Running `lens` (no args) → opens GUI
-- Running `lens ingest` / `lens context` / ... → CLI mode
-- **GUI** provides: Reader / Programme Dashboard / Claim Detail / Settings (v0.1); Knowledge Maps / Anomaly Queue (v0.2)
-- **CLI** is for power users and agents
-- Tech stack: Tauri 2 + React 19 + pi-ai (LLM calls) + pi-agent-core (Compilation Agent runtime) + SQLite (derived cache) + Bun-compiled core (see [`architecture.md`](./architecture.md))
+**1. lens CLI (v0.1, complete) → lens.app (Tauri 2 desktop application, v0.2)**
+- **v0.1 (current)**: CLI-only, Bun-compiled single binary (63MB)
+- **v0.2 (planned)**: One binary that is both GUI and CLI. `lens` (no args) opens GUI; `lens ingest` etc. runs CLI mode
+- **GUI** (v0.2): Reader / Programme Dashboard / Claim Detail / Settings; Knowledge Maps / Anomaly Queue
+- **CLI** is for power users and agents (v0.1 complete)
+- Tech stack: Bun + bun:sqlite + pi-ai + pi-agent-core + Defuddle + Turndown + feedsmith (see [`architecture.md`](./architecture.md)); Tauri 2 + React 19 added in v0.2
 
 **2. Browser Extension (web ingest, v0.3)**
 - One-click `Compile with lens` while reading web pages
@@ -493,15 +496,16 @@ See [`roadmap.md`](./roadmap.md) for details. Summary:
 
 | Phase | What Ships | Target Users |
 |---|---|---|
-| **v0.1** | Tauri desktop app (GUI + CLI unified), 6 source types, Reader/Programme/Anomaly views | Self + 3-5 alpha testers |
-| **v0.2** | + Knowledge Maps visual layer + ConceptAnatomy + Multi-LLM provider | 20-50 beta testers |
+| **v0.1** ✅ | CLI binary (Bun-compiled), 3 source types, RSS feeds, digest, scope hierarchy | Self + dogfooding |
+| **v0.2** | + Tauri desktop app (GUI) + Knowledge Maps + Growing sources + ConceptAnatomy + Multi-LLM | 20-50 beta testers |
 | **v0.3** | + Browser extension + MCP server + Audio/Image support | 100-500 users |
 | **v0.4** | + lens.xyz official launch | Public release |
 | **v1.0+** | + iOS/Android mobile (Tauri 2 mobile) | All platforms |
 
-**Key decisions**:
-- **v0.1 is not CLI-only** — from the start it is a complete client; users need to be able to "see" what is in lens
-- **CLI and GUI share one binary** — the same `lens-core` sidecar is used by both the Tauri GUI and CLI, zero code duplication
+**Key decisions (updated after v0.1)**:
+- **v0.1 ended up CLI-only** — GUI was deferred to v0.2 after realizing CLI was sufficient to validate the core hypothesis
+- **RSS feeds + digest emerged as essential** — they made dogfooding practical and provided a natural input pipeline
+- **Scope-based hierarchy was a key discovery** — big_picture/detail Claims dramatically improved readability
 - **Knowledge Maps in v0.2** — v0.1 focuses on the core loop first; v0.2 adds the visual layer
 - **Mobile in v1.0+** — but the tech stack (Tauri 2) reserves a path for mobile
 
@@ -509,7 +513,7 @@ See [`roadmap.md`](./roadmap.md) for details. Summary:
 
 - ❌ **Mobile app** (not in v0; v1.0+ will use Tauri 2 mobile, iOS first)
 - ❌ **Cloud-hosted storage / multi-device sync service** — local-first storage is a core positioning principle
-- ❌ **Electron** — too heavy: 200MB bundle, 200MB memory, 2-second startup. lens uses **Tauri 2** (see [`architecture.md`](./architecture.md) § 1.1)
+- ❌ **Electron** — too heavy: 200MB bundle, 200MB memory, 2-second startup. GUI (v0.2) uses **Tauri 2** (see [`architecture.md`](./architecture.md) § 1.1)
 - ❌ **Pure Web App (SaaS)** — violates local-first storage
 - ❌ **Third-party integration network** (Slack/Notion/Readwise direct connections) — feature bloat trap
 
@@ -517,7 +521,8 @@ See [`roadmap.md`](./roadmap.md) for details. Summary:
 
 **Lens is "local-first storage + cloud-powered inference," not fully local inference.**
 
-- **v0.1 – v0.2**: The Compilation Agent depends on **Anthropic Claude API** (structured extraction) and **Voyage AI API** (embedding). Users' source text (articles, notes) will be sent to these cloud APIs for processing
+- **v0.1**: The Compilation Agent depends on **Anthropic Claude Sonnet 4.6 API** (structured extraction). Users' source text (articles, notes) will be sent to the Anthropic API for processing. No embedding in v0.1.
+- **v0.2**: Adds **Voyage AI API** (embedding) for semantic search
 - **v0.3+**: Plans to add a local inference mode (Ollama + nomic-embed) as an optional privacy mode
 - **Always local**: All compiled products (Claims / Frames / Questions), the index (SQLite), and copies of original text exist only on the user's local `~/.lens/`, never passing through any lens cloud service
 
@@ -560,36 +565,40 @@ Lens **is not for everyone**. Forcing it to be "usable by all" would dilute its 
 
 **This is a tool that requires investment**. The more you put in, the greater the compounding returns.
 
-## V0.1 Minimum Viable (One-line Definition)
+## V0.1 Minimum Viable (One-line Definition) — ✅ COMPLETE
 
 ```
-v0.1 = A Tauri 2 desktop app (macOS first) + CLI
+v0.1 = Bun-compiled CLI binary (63MB, macOS)
 
 Core validation goal: Can an LLM extract structured understanding
 from real text that users trust?
+Result: YES — validated with real articles and RSS feeds.
 
 Can ingest 3 source types (all immutable):
-  - web_article (via Defuddle)
+  - web_article (via Defuddle + Turndown → markdown)
   - markdown / plain_text (pass-through)
   - manual_note (direct CLI input)
 
 Can compile sources into Claim / Frame / Question
-  (via Compilation Agent: short-lived agent per document, using pi-agent-core)
+  (via Compilation Agent: short-lived agent per document, using pi-agent-core + pi-ai)
 Can organize into Programme meta-structures
+  (with scope-based 2-level hierarchy: big_picture + detail)
 
-GUI views (Tauri desktop app):
-  - Welcome / Onboarding (first-time API key setup + first ingest)
-  - Programme Dashboard (Programme list + Hard Core / Belt / Questions overview)
-  - Reader (source + excerpt view)
-  - Claim Detail (Toulmin structure display)
-  - Settings
+Added beyond original plan:
+  - RSS feed pipeline (feedsmith, OPML import, autodiscovery)
+  - Digest command (temporal views: day/week/month/year)
+  - Scope-based hierarchy on Claims (big_picture vs detail)
+  - Thread type for conversational flows
 
-CLI:
-  - lens (no args) → launch GUI
-  - lens ingest / context / show / search / ... → CLI commands
+CLI commands (all support --json):
+  - lens init / ingest / note / show / search / context
+  - lens programme list / show
+  - lens digest [day|week|month|year]
+  - lens feed add / import / list / check / remove
+  - lens status / rebuild-index
 ```
 
-**v0.1 explicitly does not include** (see "Things Not in V0" section): chat growing source / auto-check / Bayesian updates / contradiction detection / PDF / Knowledge Maps / browser extension / MCP server.
+**v0.1 explicitly does not include**: GUI / Tauri app / chat growing source / auto-check / Bayesian updates / contradiction detection / PDF / Knowledge Maps / browser extension / MCP server / embedding.
 
 **Privacy note**: v0.1's compilation relies on the cloud-based Anthropic API. Users' original text will be sent to Anthropic for structured extraction. This is the "local-first storage + cloud-powered inference" model, not fully local inference (see "Privacy Boundary" section below).
 

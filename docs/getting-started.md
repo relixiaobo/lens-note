@@ -100,12 +100,14 @@ lens organizes everything around the following core types (v0.1 supported marked
 |---|---|---|---|
 | **Programme** | Research programme / a complete unit of exploration | ✅ | `programmes/pgm_XXX.md` |
 | **Source** | Raw material (article/markdown/note) | ✅ | `sources/src_XXX.md` |
-| **Excerpt** | A passage extracted from a Source | ✅ | `excerpts/exc_XXX.md` |
-| **Claim** | A falsifiable assertion (Toulmin structure) | ✅ | `claims/clm_XXX.md` |
+| **Claim** | A falsifiable assertion (Toulmin structure, evidence inline) | ✅ | `claims/clm_XXX.md` |
 | **Frame** | A "lens for viewing the world" | ✅ | `frames/frm_XXX.md` |
-| **Question** | An open inquiry question (tree-structured) | ✅ | `questions/q_XXX.md` |
+| **Question** | An open inquiry question | ✅ | `questions/q_XXX.md` |
+| **Thread** | A conversational thread with references | ✅ | `threads/thr_XXX.md` |
 | **Anomaly** | Contradiction / counterexample | 📋 v0.2 | `anomalies/anm_XXX.md` |
 | **ConceptAnatomy** | 8-layer concept dissection | 📋 v0.2 | `concept_anatomies/ca_XXX.md` |
+
+**Note**: Excerpt was removed as a separate type in v0.1 — evidence is stored **inline** in Claims. The Source file retains the full original text.
 
 ### 4.2 Methodological spines (5 traditions)
 
@@ -121,19 +123,19 @@ lens's design isn't arbitrary — it's a synthesis of 5 academic traditions:
 
 ### 4.3 Compilation lifecycle
 
-In v0.1, compilation is performed by a **Compilation Agent** — a short-lived agent (powered by pi-agent-core) that is spawned for each document ingest. The agent autonomously reads the source, explores existing knowledge in the vault, and extracts structured objects. It uses pi's built-in tools (read, grep, ls, bash) — no custom tools. The agent outputs structured JSON; lens-core then processes the output (ULID generation, schema validation, file writing, cache update).
+In v0.1, compilation is performed by a **Compilation Agent** — a short-lived agent (powered by pi-agent-core + pi-ai with Claude Sonnet 4.6) that is spawned for each document ingest. The agent autonomously reads the source, explores existing knowledge in the vault, and extracts structured objects. It uses pi's built-in tools (read, grep, ls, bash) — no custom tools. The agent outputs structured JSON; lens-core then processes the output (ULID generation, zod schema validation, markdown file writing, SQLite cache update).
 
 The following steps describe the conceptual phases of compilation. They are not a rigid sequential pipeline; instead, they happen as part of the agent's autonomous exploration:
 
 ```
-Step 0:  Source creation                                    ✅ v0.1
-Step 1:  Excerpt segmentation                              ✅ v0.1
-Step 2:  Programme attribution                             ✅ v0.1
-Step 3:  Claim extraction (Toulmin core fields)            ✅ v0.1
-Step 4:  Frame extraction                                  ✅ v0.1
-Step 5:  Question extraction                               ✅ v0.1
-Step 6:  Knowledge structure type identification (Miller 9 types) 📋 depends on spike results
-Step 7:  Elaboration positioning (Reif 5 dimensions)       📋 depends on spike results
+Step 0:  Source creation                                    ✅ v0.1 COMPLETE
+Step 1:  Evidence extraction (inline in Claims)            ✅ v0.1 COMPLETE
+Step 2:  Programme attribution                             ✅ v0.1 COMPLETE
+Step 3:  Claim extraction (Toulmin core + scope)           ✅ v0.1 COMPLETE
+Step 4:  Frame extraction                                  ✅ v0.1 COMPLETE
+Step 5:  Question extraction                               ✅ v0.1 COMPLETE
+Step 6:  Knowledge structure type identification (Miller)  📋 v0.2 (optional in v0.1 schema)
+Step 7:  Elaboration positioning (Reif 5 dimensions)       📋 v0.2 (optional in v0.1 schema)
 Step 8:  Dedup + Orphan auto-recovery                      📋 v0.2
 Step 9:  Conflict detection (Anomaly)                      📋 v0.2
 Step 10: Bayesian update                                   📋 v0.2
@@ -141,7 +143,7 @@ Step 11: Boundary detection                                📋 v0.2
 Step 12: Programme health check                            📋 v0.2
 ```
 
-**Note**: Whether Step 6-7 (Miller structure_type / Reif elaboration) will be implemented in v0.1 depends on the test results from `spike/extraction-spike.ts`. If the LLM classification consistency is insufficient, these fields will be downgraded to optional or deferred to v0.2.
+**v0.1 result**: Steps 0-5 are fully implemented and tested. The `scope` field (`big_picture` / `detail`) was added to Claims based on Reif/Miller + Minto Pyramid research, driving 2-level Programme display. Miller structure_type and Reif elaboration dimensions are optional fields in the schema, deferred to v0.2 for full implementation.
 
 See `methodology.md` § Compilation Lifecycle for details.
 
@@ -176,36 +178,42 @@ See `positioning.md` § Working Principles for all 11.
 
 ```
 lens/
+├── CLAUDE.md             # Project context for agents (source of truth for current state)
 ├── docs/                 # All design documents (you are here)
 ├── spike/               # Pre-validation scripts (extraction-spike.ts)
 ├── skills/              # Agent skill definitions (lens.claude-skill.md)
 ├── packages/
-│   ├── lens-core/       # Bun-compiled TS sidecar (core engine + CLI)
-│   ├── lens-ui/         # React 19 + Tauri frontend
-│   └── lens-tauri/      # Rust shell (thin IPC layer)
-├── tests/
+│   └── lens-core/       # Bun-compiled TS CLI (core engine + all business logic)
+│       └── src/
+│           ├── main.ts           # CLI entry point
+│           ├── cli/              # Command handlers (commands.ts, ingest.ts, digest.ts, feed.ts, etc.)
+│           ├── core/             # Storage + types (types.ts, storage.ts, paths.ts)
+│           ├── agent/            # Compilation Agent (compilation-agent.ts, process-output.ts)
+│           ├── sources/          # Content extraction (web.ts, file.ts)
+│           └── feeds/            # RSS (feed-store.ts, feed-checker.ts)
+├── dist/lens             # Compiled binary (63MB)
 └── scripts/
 ```
 
 **Key points**:
-- **`lens-core`** carries 90% of the business logic (Compilation Agent / extractors / LLM calls)
-- **`lens-ui`** carries the UI views
-- **`lens-tauri`** writes minimal Rust (only IPC glue)
+- **Only `lens-core` exists** in v0.1 — all business logic lives here
+- **`lens-ui`** (React 19 + Tauri frontend) and **`lens-tauri`** (Rust IPC shell) are planned for v0.2
+- lens-core compiles to a standalone CLI binary via `bun build --compile`
 
-### 5.2 Dependencies between the three packages
+### 5.2 Current architecture (v0.1 — CLI only)
 
 ```
-lens-ui  ─┐
-          ├─→ (IPC via Tauri) ─→ lens-tauri ─→ (sidecar spawn) ─→ lens-core
-lens-ui  ─┘
-           └─ (can also call lens-core's mock interface directly for UI-only dev)
-
-lens-core runs independently:
-  - As a CLI binary: `lens ingest <url>`
-  - As a sidecar subprocess: lens-tauri launches it
+lens-core (single Bun-compiled binary, 63MB)
+├── CLI entry point (src/main.ts)
+├── Compilation Agent (pi-agent-core + pi-ai)
+│   Reads source → explores existing knowledge → extracts Claims/Frames/Questions
+├── Storage (File-as-Truth + SQLite derived cache)
+│   Markdown files = truth, bun:sqlite FTS5 = search cache
+├── RSS feeds (feedsmith, OPML import, autodiscovery)
+└── Web extraction (Defuddle + Turndown → markdown)
 ```
 
-**Key design**: lens-core **does not depend on** Tauri. It is an **independently publishable CLI tool**.
+**Key design**: lens-core is an **independently usable CLI tool**. GUI (Tauri + React) planned for v0.2.
 
 ### 5.3 Key file locations (quick reference)
 
@@ -215,14 +223,14 @@ If you want to do X, where to start reading:
 |---|---|---|
 | Add a new source type | `packages/lens-core/src/sources/` | `source-pipeline.md` |
 | Modify the Claim schema | `packages/lens-core/src/core/types.ts` | `schema.md` |
-| Modify the Compilation Agent | `packages/lens-core/src/core/compiler/` | `methodology.md` |
-| Add a CLI command | `packages/lens-core/src/cli/commands/` | existing commands |
-| Add a React view | `packages/lens-ui/src/views/` | `architecture.md` § UI |
-| Modify IPC interfaces | `packages/lens-tauri/src/commands.rs` | Tauri docs |
-| Modify LLM prompts | `packages/lens-core/src/core/llm/` | `methodology.md` |
-| Modify LLM provider | `packages/lens-core/src/core/llm/` | `architecture.md` §1.9 (pi-ai) |
+| Modify the Compilation Agent | `packages/lens-core/src/agent/` | `methodology.md` |
+| Add a CLI command | `packages/lens-core/src/cli/` | existing commands (e.g. `digest.ts`, `feed.ts`) |
+| Modify RSS feed handling | `packages/lens-core/src/feeds/` | `feed-store.ts`, `feed-checker.ts` |
+| Modify web extraction | `packages/lens-core/src/sources/web.ts` | Defuddle + Turndown docs |
 | Modify SQLite cache schema | `packages/lens-core/src/core/storage.ts` | `schema.md` |
 | Modify file storage format | `packages/lens-core/src/core/storage.ts` | `schema.md` §0.4-0.5 |
+| Add a React view (v0.2) | `packages/lens-ui/src/views/` (not yet created) | `architecture.md` § UI |
+| Modify IPC interfaces (v0.2) | `packages/lens-tauri/src/commands.rs` (not yet created) | Tauri docs |
 
 ---
 
@@ -232,19 +240,15 @@ If you want to do X, where to start reading:
 
 **Required**:
 
-- **Node.js** 20+ (or Bun 1.1+)
-- **pnpm** 9+
-- **Rust** 1.77+ (rustup recommended)
-- **Anthropic API key** (`ANTHROPIC_API_KEY` environment variable)
+- **Bun** 1.1+ (runtime + compiler)
+- **pnpm** 9+ (monorepo workspace manager)
+- **Anthropic API key** (configured via `lens init` or `~/.lens/config.yaml`)
 
 **Only needed for v0.2**:
+- **Node.js** 20+ (if not using Bun)
+- **Rust** 1.77+ (for Tauri GUI, v0.2)
 - Python 3.11+ + `pip install marker-pdf` (PDF extraction, v0.2)
-
-**macOS specific**:
-- **Xcode Command Line Tools** (`xcode-select --install`)
-
-**Linux specific**:
-- Tauri requires some system libs: `libwebkit2gtk-4.1-dev libssl-dev ...` (see [Tauri Linux prerequisites](https://v2.tauri.app/start/prerequisites/))
+- Xcode Command Line Tools (macOS, for Tauri v0.2)
 
 ### 6.2 Clone + Install
 
@@ -254,9 +258,9 @@ cd lens
 pnpm install
 ```
 
-### 6.3 Environment variables
+### 6.3 Configuration
 
-Create `~/.lens/config.yaml` (or `lens init` will create it):
+Run `lens init` to create `~/.lens/config.yaml`, or create it manually:
 
 ```yaml
 providers:
@@ -265,58 +269,43 @@ providers:
     anthropic:
       api_key: sk-ant-***
       model: claude-sonnet-4-6
-  
-  embedding:
-    default: voyage
-    voyage:
-      api_key: pa-***
-      model: voyage-3-large
-
-auto_check:
-  enabled: true
-  staleness_threshold: "5m"
-  sources:
-    claude_code: true
-
-sources:
-  snapshot_retention:
-    keep_first: true
-    keep_recent: 30
 ```
+
+**v0.1 only requires the Anthropic API key**. Embedding (Voyage AI), auto-check, and snapshot retention settings are v0.2 features.
 
 ### 6.4 Running Dev Mode
 
 ```bash
-# Start full Tauri dev environment (Rust + React HMR + sidecar watch)
-pnpm dev
+# Run lens-core CLI in dev mode (no compilation needed)
+bun run packages/lens-core/src/main.ts <command>
 
-# Run lens-core CLI only (without starting GUI)
-cd packages/lens-core
-pnpm dev  # TypeScript watch mode
-./dist/lens ingest https://example.com  # Run
-
-# Run lens-ui only (mock data mode)
-cd packages/lens-ui
-pnpm dev  # Vite dev server on localhost:5199
+# Examples:
+bun run packages/lens-core/src/main.ts init
+bun run packages/lens-core/src/main.ts ingest https://example.com
+bun run packages/lens-core/src/main.ts search "hopfield"
+bun run packages/lens-core/src/main.ts digest
+bun run packages/lens-core/src/main.ts feed list
 ```
 
 ### 6.5 Common commands
 
 ```bash
 # Development
-pnpm dev                  # Start full Tauri dev environment
-pnpm typecheck           # Typecheck all packages
-pnpm test                # Run all tests
-pnpm lint                # ESLint + Biome
+pnpm install                                                    # Install dependencies
+bun run packages/lens-core/src/main.ts <cmd>                   # Run CLI in dev mode
+npx tsc --noEmit --project packages/lens-core/tsconfig.json    # Type check
 
 # Build
-pnpm build:sidecar       # Compile lens-core to binary
-pnpm build:ui            # Compile React frontend
-pnpm build:app           # Compile Tauri app (macOS DMG)
+bun build --compile packages/lens-core/src/main.ts --outfile dist/lens  # Compile to binary (63MB)
 
-# Data debugging
-lens show <id>           # View any object
-lens status              # View status
+# Using the compiled binary
+./dist/lens ingest <url>         # Ingest a web article
+./dist/lens feed check           # Check all RSS feeds
+./dist/lens digest               # Today's new insights
+./dist/lens programme list       # List all Programmes
+./dist/lens context "<query>"    # Agent-ready context pack
+./dist/lens show <id>            # View any object
+./dist/lens status               # System status
 ```
 
 ---
@@ -327,7 +316,7 @@ Before you start modifying code, **here is a checklist meant to be followed**:
 
 ### 7.1 Understand the scope
 
-- [ ] Which package am I modifying? `lens-core` / `lens-ui` / `lens-tauri`
+- [ ] Which package am I modifying? `lens-core` (only package in v0.1) / `lens-ui` (v0.2) / `lens-tauri` (v0.2)
 - [ ] Which phase does my change belong to? v0.1 / v0.2 / v0.3 (check `roadmap.md`)
 - [ ] If it's not in the current phase, confirm with the maintainer
 - [ ] Does my change involve the schema? If so, modify `schema.md` first
@@ -337,10 +326,11 @@ Before you start modifying code, **here is a checklist meant to be followed**:
 If you're modifying:
 
 - **Source extractor** → Read `source-pipeline.md` + look at existing extractors in `packages/lens-core/src/sources/`
-- **Compilation Agent** → Read `methodology.md` § Compilation Lifecycle + look at `packages/lens-core/src/core/compiler/`
+- **Compilation Agent** → Read `methodology.md` § Compilation Lifecycle + look at `packages/lens-core/src/agent/`
 - **Claim / Frame schema** → Read `schema.md` § 2.3 and § 2.4 + `packages/lens-core/src/core/types.ts`
-- **UI views** → Read `architecture.md` § 2.5 + neighboring views in `packages/lens-ui/src/views/`
-- **IPC** → Read `architecture.md` § 2.2 + Tauri docs
+- **RSS feeds** → Look at `packages/lens-core/src/feeds/` (feed-store.ts, feed-checker.ts)
+- **UI views (v0.2)** → Read `architecture.md` § 2.5 + `packages/lens-ui/src/views/` (not yet created)
+- **IPC (v0.2)** → Read `architecture.md` § 2.2 + Tauri docs
 
 ### 7.3 Decision checks
 
@@ -352,7 +342,7 @@ If you're modifying:
 ### 7.4 Implementation
 
 - [ ] Write unit tests
-- [ ] Local `pnpm typecheck` + `pnpm test` all pass
+- [ ] Local `npx tsc --noEmit --project packages/lens-core/tsconfig.json` passes with zero errors
 - [ ] Manual dogfood (real data, not mock)
 - [ ] Update related documentation
 
@@ -379,9 +369,9 @@ If you're modifying:
 
 **A**: fsevents is unreliable on iCloud / cross-mount points + daemon processes are complex + 5-minute staleness is sufficient for UX. Switched to **auto-check on CLI invocation** pattern instead. See `source-pipeline.md` § 1.
 
-### Q4: Why build a client in v0.1? Can't we get CLI working first and then do the UI?
+### Q4: Why is v0.1 CLI-only? Wasn't a GUI planned?
 
-**A**: Users need to be able to "see" what's inside lens. A lens without UI is "writing into a black hole." This violates UX Principle 2 (complexity stays inside). See `architecture.md` § 0.1.
+**A**: The original plan was to build a Tauri GUI in v0.1, but during implementation it became clear that **CLI was sufficient to validate the core hypothesis** (LLM extraction quality). Building the GUI would have delayed validation significantly. The CLI with `--json` output already serves agents, and commands like `lens show`, `lens programme show`, and `lens digest` provide adequate visibility for humans. GUI is planned for v0.2.
 
 ### Q5: A ChatGPT export is a zip containing 143 conversations — how do we store them?
 
@@ -399,10 +389,10 @@ If you're modifying:
 
 **A**:
 1. Check `positioning.md` § V0 Command List to confirm the command name follows naming conventions
-2. Add a new file in `packages/lens-core/src/cli/commands/`
-3. Register it in `packages/lens-core/src/cli/main.ts`
+2. Add a new file in `packages/lens-core/src/cli/` (e.g. `digest.ts`, `feed.ts`)
+3. Register it in `packages/lens-core/src/cli/commands.ts`
 4. Add tests
-5. Update the command list in `positioning.md`
+5. Update the command list in `positioning.md` and `CLAUDE.md`
 
 ### Q9: I found existing code that's inconsistent with the documentation — what do I do?
 
@@ -421,25 +411,48 @@ If you're modifying:
 
 ## 9. Current project status (2026-04-09)
 
-**Phase**: Design docs review complete + preparing to begin v0.1 implementation
+**Phase**: v0.1 COMPLETE — CLI implementation done, preparing for v0.2
 
-**Completed**:
+**v0.1 completed** (6 commits, TypeScript zero errors):
 - ✅ All design docs (positioning / methodology / schema / source-pipeline / architecture / roadmap)
-- ✅ References (~120 cited sources)
-- ✅ Tech stack decision (Tauri 2 + React 19 + pi-ai + pi-agent-core + SQLite + Bun sidecar)
-- ✅ Documentation review: fixed contradictions, reduced v0.1 scope, added privacy statement, added schema validation plan
-- ✅ Compilation Agent architecture: compilation uses a short-lived agent (pi-agent-core) per document instead of a fixed step pipeline
+- ✅ Extraction quality spike validated
+- ✅ Full CLI implementation: ingest, show, search, context, programme, note, status, rebuild-index
+- ✅ Compilation Agent (pi-agent-core + pi-ai with Claude Sonnet 4.6)
+- ✅ File-as-Truth storage + bun:sqlite FTS5 derived cache
+- ✅ Web extraction (Defuddle + Turndown)
+- ✅ RSS feed pipeline (feedsmith + OPML import + autodiscovery)
+- ✅ Digest command (temporal views: day/week/month/year)
+- ✅ Scope-based hierarchy (big_picture/detail) on Claims
+- ✅ Bun-compiled single binary (63MB)
+- ✅ All commands support `--json` for agent consumption
 
-**v0.1 scope redefined** (after 2026-04-09 review):
-- v0.1 scope reduced from 7 phases / 30+ tasks to **4 phases / ~18 tasks**
-- Removed features (chat growing source / Bayesian / conflict detection / PDF / auto-check) moved to v0.2
-- Added **Phase 0: LLM Extraction Quality Spike** to validate extraction quality before writing production code
-- Added **LLM extraction quality exit criteria**
+**Tech stack (as built)**:
 
-**Next steps**:
-1. Run `spike/extraction-spike.ts` to validate LLM extraction quality
-2. Adjust schema based on spike results (which fields to keep/downgrade/remove)
-3. Proceed according to the Phase 1-4 task list in `roadmap.md` § v0.1
+| Technology | Purpose |
+|---|---|
+| **Bun** | Runtime + compile to single binary (`bun build --compile`) |
+| **bun:sqlite** | Built-in SQLite binding. FTS5 search + links table. Derived cache. |
+| **pi-ai** | Unified LLM API (20+ providers). v0.1 uses Anthropic Claude Sonnet 4.6. |
+| **pi-agent-core** | Agent runtime. Each ingest spawns a Compilation Agent. |
+| **Defuddle + linkedom** | Web article extraction (clean HTML) |
+| **Turndown** | HTML to Markdown conversion |
+| **feedsmith** | RSS/Atom/RDF/JSON Feed parsing + OPML import |
+| **gray-matter** | YAML frontmatter parsing for markdown files |
+| **ulid** | Time-sortable unique ID generation |
+| **zod** | Runtime schema validation |
+| **pnpm** | Monorepo workspace manager |
+
+**What changed from the original plan**:
+- GUI (Tauri 2 desktop app) deferred to v0.2 — CLI was sufficient to validate the core hypothesis
+- Excerpt removed as a separate type — evidence stored inline in Claims
+- Thread type added for conversational flows
+- RSS feeds, digest, and scope-based hierarchy added as natural extensions of the core loop
+
+**Next steps (v0.2)**:
+1. Build Tauri 2 GUI (lens-ui + lens-tauri packages)
+2. Add growing source support (chat conversations, auto-check)
+3. Add embedding + semantic search
+4. Add Knowledge Maps visualization
 
 ---
 
