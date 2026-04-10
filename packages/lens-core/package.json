@@ -1,0 +1,32 @@
+{
+  "name": "lens-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "src/main.ts",
+  "bin": {
+    "lens": "src/main.ts"
+  },
+  "scripts": {
+    "dev": "bun run --watch src/main.ts",
+    "build": "bun build --compile src/main.ts --outfile ../../dist/lens",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "lint": "echo 'TODO: add biome'"
+  },
+  "dependencies": {
+    "@mariozechner/pi-agent-core": "^0.66.1",
+    "@mariozechner/pi-ai": "^0.66.1",
+    "@sinclair/typebox": "^0.34.49",
+    "@types/turndown": "^5.0.6",
+    "defuddle": "^0.15.0",
+    "gray-matter": "^4.0.3",
+    "linkedom": "^0.18.12",
+    "turndown": "^7.2.4",
+    "ulid": "^3.0.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}

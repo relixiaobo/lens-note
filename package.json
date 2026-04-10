@@ -1,0 +1,16 @@
+{
+  "name": "lens",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter lens-core dev",
+    "build": "pnpm --filter lens-core build",
+    "typecheck": "pnpm --filter lens-core typecheck",
+    "test": "pnpm --filter lens-core test",
+    "lint": "pnpm --filter lens-core lint"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}
