@@ -7,25 +7,23 @@ Status: Design proposal (not yet implemented)
 
 ## 1. Core Principle
 
-**All knowledge is cards. Structure emerges from links.**
+**All knowledge is Notes. Structure emerges from links.**
 
-No categories. No folders. No containers. Cards link to each other. Over time, clusters of densely linked cards form naturally. Index entries are sparse post-hoc navigational aids — created when a cluster grows large enough to need an entry point.
+No categories. No folders. No containers. No Programme. Notes link to each other. Over time, clusters of densely linked Notes form naturally. Structure notes are sparse post-hoc entry points — Notes themselves, not a separate concept.
 
 ---
 
-## 2. Three Object Types
+## 2. Three Types
 
 ```
-Source  — Where content came from (metadata, not knowledge)
-Note    — A thought (one idea per card, with optional structure)
-Index   — A sparse entry point into a cluster of Notes (post-hoc)
+Source   — Where content came from (provenance, not knowledge)
+Note     — A thought (one idea per card, with optional structure fields)
+Thread   — A conversation about Notes (interaction, not knowledge)
 ```
-
-That's it. Everything is a Note.
 
 ### 2.1 Source
 
-A provenance record. Not a knowledge card — it records WHERE content came from.
+Provenance record + original content. Not a knowledge card.
 
 ```yaml
 ---
@@ -37,7 +35,7 @@ url: "https://martinfowler.com/articles/is-quality-worth-cost.html"
 source_type: web_article
 word_count: 2718
 raw_file: "raw/src_01HXY.html"
-ingested_at: "2026-04-10T14:23:01Z"
+ingested_at: "2026-04-10"
 ---
 [full article content in markdown]
 ```
@@ -46,317 +44,52 @@ ingested_at: "2026-04-10T14:23:01Z"
 
 The universal knowledge card. One idea per card.
 
-A Note has a small set of **required fields** and many **optional fields**. The optional fields express different cognitive roles — a Note with `evidence` is a substantiated claim; a Note with `sees/ignores` is a perspective; a Note with `question_status` is an open inquiry.
-
-```yaml
----
-id: note_01HXY
-type: note
-text: "High internal quality software is actually cheaper to produce"
-
-# Optional: Toulmin structure (makes this a substantiated claim)
-evidence:
-  - text: "this trade-off does not apply to software..."
-    source: src_01DEF
-qualifier: certain
-voice: extracted
-
-# Optional: Perspective (makes this a frame/lens)
-sees: "quality as ROI investment"
-ignores: "non-economic motivations for quality"
-assumptions: ["market rewards faster feature delivery"]
-
-# Optional: Question (makes this an open inquiry)
-question_status: open
-
-# Optional: Hierarchy (Reif/Miller)
-scope: big_picture
-
-# Optional: Structure type (Miller)
-structure_type: argument
-
-# Optional: Bridge (makes this a connection note)
-bridges: [note_01ABC, note_02DEF]
-
-# Optional: Role hint (for display, not for classification)
-role: claim  # claim | frame | question | observation | connection | structure_note
-
-# Links (the primary structure)
-supports: [note_05ABC]
-contradicts: [note_12DEF]
-refines: [note_08GHI]
-related:
-  - id: note_20JKL
-    note: "similar insight from a different domain"
-
-# Provenance
-source: src_01DEF
-status: active
-created_at: "2026-04-10T14:23:01Z"
----
-Fowler argues that the conventional quality-cost trade-off is inverted
-for internal software quality. The economic case is stronger than the
-moral case.
-```
-
-**Key properties:**
-
-- **One idea per card.** Atomic. Self-contained. Understandable alone.
-- **`text` is the only required field** (besides id/type/created_at). Everything else is optional.
-- **Role is soft.** `role: claim` hints to the UI "display this with Toulmin structure." But the card isn't constrained by its role. A card can be both a claim (has evidence) and a frame (has sees/ignores) and a connection (has bridges).
-- **Links are the only structure.** No `programmes` field. No container membership.
-
-### 2.3 Index
-
-A sparse entry point into a cluster of Notes. Created AFTER notes accumulate.
-
-```yaml
----
-id: idx_01HXY
-type: index
-title: "Software Quality"
-entries:
-  - note_01ABC
-  - note_05DEF
-  - note_09GHI
-created_at: "2026-04-10"
----
-Entry points into this topic:
-
-1. **note_01ABC** — "High quality is cheaper" (the core insight)
-2. **note_05DEF** — "Cruft accumulates inevitably" (why quality degrades)
-3. **note_09GHI** — Economic Cost-Benefit perspective
-
-From here, follow links to explore evidence, counter-arguments, and open questions.
-```
-
-**Key properties:**
-
-- **Sparse.** Points to 2-5 entry Notes, not all Notes about a topic.
-- **Post-hoc.** Created when a user notices a cluster, or when `lens suggest-index` detects one.
-- **Not a container.** Notes don't "belong to" an Index. The Index points to them; they don't point back.
-- **Target: ~5% of notes** should be reachable from Index entries (Luhmann's ratio).
-
----
-
-## 3. Links
-
-### 3.1 Link Types
+Required fields: `id`, `type`, `text`, `created_at`
+Everything else is optional. The optional fields express cognitive roles:
 
 ```
-Typed (clear relationship):
-  supports       — strengthens another note
-  contradicts    — weakens another note
-  refines        — more precise version of another note
+text              — the thought itself (always present)
 
-Untyped (association):
-  related        — some relationship (with optional prose note explaining why)
+Claim fields (makes this a substantiated assertion):
+  evidence[]      — supporting quotes with source attribution
+  qualifier       — certain / likely / presumably / tentative
+  voice           — extracted / restated / synthesized
 
-Special:
-  bridges        — Connection note linking 2+ cross-domain ideas
-  source         — provenance (which Source this came from)
+Frame fields (makes this a perspective):
+  sees            — what this perspective reveals
+  ignores         — what it overlooks
+  assumptions[]   — what it takes for granted
 
-Structural:
-  entries        — Index pointing to entry-point Notes
+Question field (makes this an open inquiry):
+  question_status — open / tentative_answer / resolved
+
+Hierarchy (Reif/Miller):
+  scope           — big_picture / detail
+
+Structure (Miller):
+  structure_type  — taxonomy / causal / argument / etc.
+
+Bridge (makes this a connection note):
+  bridges[]       — IDs of notes being connected
+
+Structure note (makes this an index entry):
+  role: structure_note
+  entries[]       — IDs of entry-point Notes
+
+Links (the primary structure):
+  supports[]      — Notes this strengthens
+  contradicts[]   — Notes this conflicts with
+  refines[]       — Notes this is a more precise version of
+  related[]       — Notes with some relationship (with optional prose note)
+
+Provenance:
+  source          — which Source this was extracted from
+  status          — active / superseded
 ```
 
-### 3.2 Links Are Primary
+**Role** is a soft hint (`role: claim | frame | question | observation | connection | structure_note`). It tells the display layer how to render, but does NOT constrain the card. A Note can have both `evidence` (claim) and `sees` (frame) simultaneously.
 
-There are no categories, folders, tags, or programmes. Links are the ONLY organizational mechanism.
-
-```
-Note A ──supports──→ Note B
-Note A ──contradicts──→ Note C
-Note D ──related("both about tools disappearing into behavior")──→ Note A
-Note E (connection) ──bridges──→ Note A, Note D
-```
-
-Over time, clusters of densely linked Notes emerge. These clusters ARE the user's research themes.
-
-### 3.3 How Links Are Stored
-
-In the Note's frontmatter (typed fields):
-
-```yaml
-supports: [note_05ABC]
-contradicts: [note_12DEF]
-related:
-  - id: note_20JKL
-    note: "similar insight about invisible infrastructure"
-```
-
-In SQLite cache (links table, for reverse queries):
-
-```sql
-SELECT from_id, rel FROM links WHERE to_id = 'note_01ABC';
--- "Who supports/contradicts/references this note?"
-```
-
----
-
-## 4. The AI Agent's Role
-
-### 4.1 What the Agent Does
-
-When `lens ingest <url>` is called:
-
-1. **Create Source card** — provenance record
-2. **Create Note cards** — 3-5 per article, high quality bar:
-   - Claims: assertion + evidence + qualifier (role: claim)
-   - Frames: perspective + sees/ignores (role: frame), only if genuinely novel (0-2 per article)
-   - Questions: open inquiries (role: question), only truly open (1-3 per article)
-   - Observations: interesting thoughts without evidence (role: observation)
-3. **Discover links** — the Agent's CORE job:
-   - Search existing Notes (`lens search`, `lens list`, `lens links`)
-   - Set `supports/contradicts/refines/related` on new Notes
-   - Create Connection notes for surprising cross-domain links (role: connection)
-
-### 4.2 What the Agent Does NOT Do
-
-- Does NOT create Index entries (post-hoc, user-initiated)
-- Does NOT classify or categorize
-- Does NOT extract every possible assertion (only pass quality bar)
-- Does NOT create Programme/container structures
-
-### 4.3 Quality Bar
-
-Each Note must pass ALL tests:
-
-**For claims (has evidence):**
-- Non-obvious (not common knowledge)
-- Independently valuable (makes sense without the article)
-- Referenceable (would cite this later)
-- Evidence-backed (article provides specific support)
-
-**For frames (has sees/ignores):**
-- Genuinely novel perspective (not "economic analysis" — that's generic)
-- Transferable (applies beyond this article)
-
-**For questions:**
-- Genuinely open (article doesn't answer it)
-- Important (worth investigating)
-
-**Target: 3-7 Notes per article, not 12.**
-
-### 4.4 Agent's Exploration (Using CLI Tools)
-
-```
-Agent reads article about "design dissolving in behavior"
-  → lens list notes --role claim --scope big_picture --json
-  → lens search "behavior design" --json
-  → lens search "disappear intuitive" --json
-  → Discovers: Note about "vibe coding" has a parallel insight
-  → Creates: Connection note bridging design + vibe coding
-  → Creates: 4 new claim Notes with links to existing Notes
-  → Does NOT create: Index or Programme
-```
-
----
-
-## 5. Navigation
-
-### 5.1 Three Paths
-
-```
-Search → Note → links → links → links    (keyword entry → graph traversal)
-Index → entry Notes → links → links       (curated entry → graph traversal)
-Digest → new Notes + connections + tensions (temporal entry → graph traversal)
-```
-
-All three converge on the same thing: **following links between Notes.**
-
-### 5.2 CLI Commands
-
-```
-Explore:
-  lens list notes [--role claim|frame|question|...] [--scope big_picture] [--since 7d]
-  lens show <id>                    Show full details
-  lens search "<query>"             Full-text search
-  lens links <id>                   Relationships (forward + backward with labels)
-  lens context "<query>"            Agent-ready context pack
-
-Write:
-  lens ingest <url|file>            Compile → Source + Notes + links
-  lens note "<text>"                Quick observation
-
-Index:
-  lens suggest-index                Analyze link graph, propose entry points
-  lens index create "<title>" --entries id1 id2 id3
-  lens index list
-
-RSS:
-  lens feed add|import|list|check|remove
-
-View:
-  lens digest [week|month|year]     New Notes + connections + tensions
-
-System:
-  lens init | status | rebuild-index
-```
-
-### 5.3 Digest
-
-```
-Today's Digest
-━━━━━━━━━━━━━━
-
-New Insights
-  ■■■ "Context windows are a programming environment"
-      → supports: "Compilation > interpretation"
-  ■■  "Observation-first design outperforms problem-first"
-
-New Connections
-  🔗 "Without thought design" ↔ "Vibe coding"
-     Both: tools disappearing into user's natural behavior
-
-New Tensions
-  🔥 "More context always better" ↔ "Over-stuffing hurts"
-
-New Questions
-  ? Can "design dissolving in behavior" apply to APIs?
-
-8 new Notes · 5 new links · from 3 sources
-```
-
-Not grouped by Programme/topic. Grouped by RELATIONSHIP TYPE.
-
----
-
-## 6. Storage
-
-### 6.1 File Layout
-
-```
-~/.lens/
-├── notes/                     # All Notes (type prefix in ID distinguishes role)
-│   ├── note_01HXY.md         #   Could be claim, frame, question, observation, connection
-│   ├── note_02ABC.md
-│   └── ...
-├── sources/                   # Source provenance records
-│   └── src_01HXY.md
-├── indexes/                   # Sparse entry points
-│   └── idx_01HXY.md
-├── raw/                       # Original files
-│   └── src_01HXY.html
-├── feeds.json                 # RSS subscriptions
-├── index.sqlite               # Derived cache (FTS5 + links)
-└── config.yaml
-```
-
-### 6.2 ID Prefixes
-
-```
-src_   → Source
-note_  → Note (any role)
-idx_   → Index
-```
-
-Only 3 prefixes. Simple.
-
-### 6.3 Frontmatter Constraint
-
-≤ 20 lines. A minimal Note:
-
+**Minimal Note** (an observation):
 ```yaml
 ---
 id: note_01HXY
@@ -367,131 +100,403 @@ created_at: "2026-04-10"
 ---
 ```
 
-5 lines. A full claim with links:
-
+**Substantiated claim**:
 ```yaml
 ---
-id: note_01HXY
+id: note_02ABC
 type: note
 text: "High internal quality software is actually cheaper"
 evidence:
-  - text: "this trade-off does not apply..."
+  - text: "this trade-off does not apply to software..."
     source: src_01DEF
 qualifier: certain
 scope: big_picture
 role: claim
-supports: [note_05ABC]
+supports: [note_05GHI]
+source: src_01DEF
+created_at: "2026-04-10"
+---
+Fowler argues that the conventional quality-cost trade-off is inverted.
+```
+
+**Perspective (frame)**:
+```yaml
+---
+id: note_03DEF
+type: note
+text: "Economic Cost-Benefit perspective on quality"
+sees: "quality as ROI investment"
+ignores: "non-economic motivations"
+assumptions: ["market rewards faster delivery"]
+role: frame
 source: src_01DEF
 created_at: "2026-04-10"
 ---
 ```
 
-12 lines. Well within the 20-line constraint.
+**Connection (bridge note)**:
+```yaml
+---
+id: note_04GHI
+type: note
+text: "Fukasawa's design and vibe coding both make tools disappear into behavior"
+bridges: [note_10MNO, note_15PQR]
+role: connection
+created_at: "2026-04-10"
+---
+Both are about invisible tools. But they diverge on stakes.
+```
+
+**Structure note (replaces Programme and Index)**:
+```yaml
+---
+id: note_05STR
+type: note
+text: "Software Quality"
+role: structure_note
+entries: [note_02ABC, note_08DEF, note_03DEF]
+created_at: "2026-04-10"
+---
+Entry points:
+1. note_02ABC — "High quality is cheaper" (core insight)
+2. note_08DEF — "Cruft accumulates inevitably"
+3. note_03DEF — Economic Cost-Benefit perspective
+```
+
+### 2.3 Thread
+
+A conversation about Notes. Not knowledge — interaction.
+
+```yaml
+---
+id: thr_01HXY
+type: thread
+title: "Is Fowler's quality argument too strong?"
+references: [note_02ABC, note_08DEF]
+started_from: note_02ABC
+created_at: "2026-04-10"
+---
+**You** · 2026-04-10
+I think the claim about quality being cheaper ignores startup contexts...
+
+**AI** · 2026-04-10
+Based on your knowledge base, Note note_15PQR about "initial low-quality
+advantage" addresses this — the window where low quality is cheaper exists
+but closes within weeks...
+```
+
+Thread links to Notes via `references`. Notes don't know about Threads (no thread field on Notes). Backlinks from SQLite cache enable "which Threads discuss this Note?" queries.
+
+---
+
+## 3. Links
+
+### 3.1 Types
+
+```
+Typed:
+  supports       — strengthens another Note
+  contradicts    — conflicts with another Note
+  refines        — more precise version of another Note
+
+Untyped:
+  related        — some relationship (with optional note: "why")
+
+Special:
+  bridges        — Connection note linking cross-domain ideas
+  entries        — Structure note pointing to entry-point Notes
+  source         — provenance (which Source)
+  references     — Thread referencing Notes
+```
+
+### 3.2 Links Are the Only Structure
+
+No categories. No folders. No tags. No Programme membership.
+
+A Note's position in the knowledge graph is defined entirely by its links to other Notes. Clusters emerge naturally from link density. Structure notes are optional navigational aids created post-hoc.
+
+### 3.3 Hierarchy Through Links (Reif + Luhmann)
+
+```
+Note A (scope: big_picture): "High quality is cheaper"
+  ← supports ← Note B (scope: detail): "Cruft slows dev within weeks"
+  ← supports ← Note C (scope: detail): "15x defect density"
+
+scope + supports links = implicit hierarchy
+No container needed.
+Hierarchy is recursive: Note B can be big_picture relative to its own supporters.
+```
+
+---
+
+## 4. Storage
+
+### 4.1 File Layout
+
+```
+~/.lens/
+├── notes/                     # All knowledge cards
+│   ├── note_01HXY.md         # claim, frame, question, observation, connection, structure_note
+│   └── ...
+├── sources/                   # Provenance records
+│   └── src_01HXY.md
+├── threads/                   # Conversations
+│   └── thr_01HXY.md
+├── raw/                       # Original files
+│   └── src_01HXY.html
+├── feeds.json                 # RSS subscriptions
+├── index.sqlite               # Derived cache
+└── config.yaml
+```
+
+3 directories for objects. 1 for raw files.
+
+### 4.2 IDs
+
+```
+note_  → Note (any role)
+src_   → Source
+thr_   → Thread
+```
+
+3 prefixes.
+
+### 4.3 SQLite Cache
+
+```sql
+CREATE VIRTUAL TABLE search_index USING fts5(
+  id, type, role, text, body, tokenize='porter unicode61'
+);
+
+CREATE TABLE objects (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,     -- 'note' | 'source' | 'thread'
+  role TEXT,              -- 'claim' | 'frame' | 'question' | 'observation' | 'connection' | 'structure_note'
+  data TEXT NOT NULL,
+  body TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE links (
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  rel TEXT NOT NULL,
+  note TEXT,
+  PRIMARY KEY (from_id, to_id, rel)
+);
+CREATE INDEX idx_links_to ON links(to_id, rel);
+```
+
+---
+
+## 5. The AI Agent
+
+### 5.1 Extraction Standard
+
+The Agent does NOT target a fixed number of Notes per article. It targets RELATIONSHIPS to existing knowledge:
+
+| What the Agent finds | Action |
+|---|---|
+| Genuinely new insight (not in knowledge base) | Create Note |
+| Contradiction with existing Note | Create Note + `contradicts` link |
+| New evidence for existing Note | Update existing Note's `evidence[]` |
+| New perspective not yet seen | Create Note with `sees/ignores` |
+| Genuinely open question | Create Note with `question_status: open` |
+| Already known (duplicate) | Do not create |
+
+**The number of Notes is a RESULT of what's genuinely new, not a target.**
+
+An article that covers mostly known territory might produce 1-2 Notes. A breakthrough paper might produce 10. The Agent decides based on exploration.
+
+### 5.2 Agent's Process
+
+```
+1. Read the source document
+2. Explore existing knowledge (lens search, lens list, lens links)
+3. Identify what's genuinely new, contradicting, or supporting
+4. Create Notes with links to existing Notes
+5. Optionally create Connection notes for surprising cross-domain links
+6. Do NOT create structure notes (post-hoc, user-initiated)
+```
+
+### 5.3 Agent's Tools
+
+```
+lens list notes [--role] [--scope] [--since]    Browse
+lens show <id> --json                            Inspect
+lens search "<query>" --json                     Search
+lens links <id> --json                           Relationships
+lens context "<query>" --json                    Context pack
+submit_extraction(...)                           Submit results
+```
+
+The Agent uses the same CLI tools as any other agent. No special tools.
+
+---
+
+## 6. Navigation + CLI
+
+### 6.1 Commands
+
+```
+Explore:
+  lens list notes [--role claim|frame|question|...] [--scope big_picture] [--since 7d]
+  lens list sources
+  lens list notes --role structure_note           # browse index entries
+  lens show <id>
+  lens search "<query>"
+  lens links <id>
+  lens context "<query>"
+
+Write:
+  lens ingest <url|file>                          # compile → Source + Notes + links
+  lens note "<text>"                              # quick observation
+
+Operations (v0.2):
+  lens lint                                       # health check: orphans, missing links, implicit contradictions
+  lens suggest-index                              # analyze link graph, propose structure notes
+
+Operations (v0.3):
+  lens run <id> anatomy                           # Li Jigang concept anatomy
+  lens run <cluster> rank                         # Li Jigang rank reduction
+  lens run <topic> roundtable                     # Li Jigang roundtable
+  lens run <id> drill                             # Li Jigang essence drilling
+
+RSS:
+  lens feed add|import|list|check|remove
+
+View:
+  lens digest [week|month|year]
+
+System:
+  lens init | status | rebuild-index
+```
+
+### 6.2 Digest (Without Programmes)
+
+```
+Today's Digest
+━━━━━━━━━━━━━━
+
+New Insights
+  ■■■ "Context windows are a programming environment"
+      → supports existing: "Compilation > interpretation"
+  ■■  "Observation-first design outperforms problem-first"
+
+New Connections
+  🔗 "Without thought design" ↔ "Vibe coding"
+     Both: tools disappearing into user behavior
+
+New Tensions
+  🔥 "More context always better" ↔ "Over-stuffing hurts"
+
+New Evidence
+  📎 "High quality is cheaper" — new supporting evidence from article X
+
+New Questions
+  ? Can "design dissolving in behavior" apply to API design?
+
+8 new Notes · 5 new links · from 3 sources
+```
+
+Grouped by RELATIONSHIP TYPE. If structure notes exist, their titles can optionally appear as context labels.
 
 ---
 
 ## 7. Theoretical Foundation
 
-### 7.1 From Luhmann
+### 7.1 Luhmann's Zettelkasten
+- Cards independent, no categories
+- Links as primary structure
+- Index sparse and post-hoc (structure notes)
+- Surprise from traversal
 
-- **Cards are independent.** No containers, no classification.
-- **Links are primary structure.** Cross-references + Folgezettel.
-- **Index is sparse and post-hoc.** ~5% coverage. Entry points, not catalogs.
-- **Hub notes (Strukturzettel).** Curated overviews created after cards accumulate.
-- **Surprise from traversal.** Following links leads to unexpected connections.
+### 7.2 Reif + Miller
+- scope (big_picture/detail) creates implicit hierarchy through links
+- structure_type (9 types) as optional metadata
+- Hierarchy is recursive, not containerized
 
-### 7.2 From Ahrens
+### 7.3 Li Jigang
+- Cognitive operations (anatomy/rank/roundtable/drill) are `lens run` commands (v0.3)
+- They produce Notes from existing Notes — "compiler passes"
+- Frame concept maps to `sees/ignores/assumptions` fields
 
-- **Fleeting → Literature → Permanent note pipeline.** In lens: Agent creates literature-level Notes, user/AI refine to permanent level.
-- **One idea per card.** Atomic, self-contained.
-- **Writing IS thinking.** The Note is the thought, not a record of it.
+### 7.4 Karpathy's LLM Wiki
+- Compile at ingest time, not at query time
+- Source is immutable, Notes are maintained
+- `lens lint` for health checks (v0.2)
 
-### 7.3 From Matuschak
+### 7.5 Toulmin
+- evidence/qualifier/voice as optional fields on Note
+- A Note with evidence IS a substantiated claim
+- A Note without evidence IS an observation
 
-- **Evergreen notes accumulate insight.** Notes are updated as new evidence arrives.
-- **Bridge notes explain connections.** The Connection role makes cross-domain links explicit.
-- **Titled as declarative phrases.** The `text` field IS the title (statement as title).
-
-### 7.4 From Toulmin (preserved from lens v0.1)
-
-- **Claim = statement + evidence + qualifier.** Optional fields on Note.
-- **Frame = sees + ignores + assumptions.** Optional fields on Note.
-- **Warrant: Frame justifies Claim.** Expressed as a link, not a container.
-
-### 7.5 From Reif/Miller (preserved from lens v0.1)
-
-- **scope: big_picture | detail.** Optional field on Note. Drives progressive disclosure.
-- **structure_type.** Optional field (taxonomy/causal/argument/...). For display, not classification.
-
-### 7.6 From Lakatos (reinterpreted)
-
-- Lakatos's "Hard Core" beliefs → Notes with `qualifier: certain` and `scope: big_picture`
-- Lakatos's "Protective Belt" → Notes with `qualifier: likely/presumably`
-- Lakatos's "Open Questions" → Notes with `role: question`
-- Lakatos's "Programme" → Index entry (post-hoc entry point into a cluster)
-
-The Lakatos structure is EMERGENT, not pre-defined. It's discovered in the link graph.
+### 7.6 Lakatos (reinterpreted)
+- Hard Core = Notes with `qualifier: certain` + `scope: big_picture`
+- Protective Belt = Notes with `qualifier: likely/presumably`
+- Open Questions = Notes with `question_status: open`
+- Programme = structure note (a Note, not a separate concept)
+- All emergent from the link graph, not pre-defined
 
 ---
 
-## 8. Migration from v0.1
+## 8. Programme Is Gone
 
-### 8.1 Data
+The word "Programme" does not exist in v0.2. What it did is now done by:
 
-```
-v0.1 Claim  → v0.2 Note (role: claim, keeps evidence/qualifier/scope)
-v0.1 Frame  → v0.2 Note (role: frame, keeps sees/ignores/assumptions)
-v0.1 Question → v0.2 Note (role: question, keeps question_status)
-v0.1 Programme → v0.2 Index (entries point to key Notes)
-v0.1 Source → v0.2 Source (unchanged)
-v0.1 Thread → archived (not part of core type system)
-```
+| Programme function | v0.2 equivalent |
+|---|---|
+| Container for Claims | **Gone.** Notes link to each other, no container. |
+| Research theme | **Structure note** (a Note with `role: structure_note` + `entries[]`). |
+| Auto-created per article | **Never auto-created.** Suggested by `lens suggest-index` after clusters form. |
+| `programmes` field on Claims | **Gone.** No membership field. |
+| `lens programme list` | `lens list notes --role structure_note` |
+| `lens programme show` | `lens show <note_id>` (for a structure note) |
 
-### 8.2 Fields
+---
 
-```
-Remove: programmes[] on all objects
-Keep: supports, contradicts, refines, related, source, evidence, qualifier, scope, voice, sees, ignores, assumptions, question_status
-Add: role (soft hint), bridges (for connection notes), text (required, replaces statement/name/text variations)
-```
-
-### 8.3 Storage
+## 9. Migration from v0.1
 
 ```
-v0.1: claims/, frames/, questions/, programmes/, threads/ (5 directories)
-v0.2: notes/, sources/, indexes/ (3 directories)
+v0.1 Claim     → v0.2 Note (role: claim, keeps evidence/qualifier/scope)
+v0.1 Frame     → v0.2 Note (role: frame, keeps sees/ignores/assumptions)
+v0.1 Question  → v0.2 Note (role: question, keeps question_status)
+v0.1 Source    → v0.2 Source (unchanged)
+v0.1 Programme → v0.2 Note (role: structure_note, entries = former members)
+v0.1 Thread    → v0.2 Thread (unchanged)
+
+Field changes:
+  statement / name → text (unified)
+  programmes[]     → removed (no container membership)
+  clm_ / frm_ / q_ → note_ (unified prefix)
+  claims/ frames/ questions/ programmes/ → notes/ (single directory)
 ```
 
 ---
 
-## 9. Open Questions
+## 10. Open Questions
 
-1. **Thread/conversation**: How does the user discuss a Note with AI? Options: (a) append to Note body, (b) separate chat system outside core types, (c) create a new Note referencing the discussed Note.
+1. **Thread UX**: How does the conversation work in CLI? `lens thread start <note_id>`? Or just `lens note "my thought about note_01" --re note_01`?
 
-2. **Observation → Claim promotion**: How does a lightweight observation get promoted to a full claim? User runs `lens promote note_01 --evidence "..." --qualifier likely`?
+2. **Observation → Claim promotion**: `lens promote <note_id>` adds evidence and qualifier interactively?
 
-3. **When to suggest Index**: After how many interconnected Notes should `lens suggest-index` propose an entry point? 10? 20? Based on link density?
+3. **Structure note creation**: `lens suggest-index` analyzes link density and proposes entries. Threshold: how many interconnected Notes before suggesting?
 
-4. **Single `note_` prefix or keep type prefixes?** `note_01` for everything, or `clm_01`/`frm_01`/`q_01`/`obs_01`/`con_01`? Keeping type prefixes is more informative when reading file names. But it implies classification.
+4. **Multi-source Notes**: A Note synthesized from 3 articles has `source` pointing to... which one? Use `evidence[].source` for per-evidence provenance.
 
-5. **Link directionality**: Should `supports` be stored on the supporter or the supported? Current: on the supporter (`note A supports note B` → stored on A). This is correct (each Note stores its own outgoing links).
+5. **Digest without grouping**: Is the flat "by relationship type" digest good enough? Or should it show structure note titles as optional group headers?
 
 ---
 
-## 10. Summary
+## 11. Summary
 
 ```
-v0.1                              v0.2
-
-6 types + 5 directories          3 types + 3 directories
-Programme containers              Links only, no containers
-Agent classifies                  Agent discovers connections
-12 claims/article                 3-7 notes/article
-4 frames/article                  0-2 frames/article
-Structure pre-defined             Structure emergent
-Digest by Programme               Digest by relationship type
-Typed fields rigid                Optional fields flexible
-Cards belong to Programme         Cards are independent
+Types:     Source + Note + Thread (3 types, 3 directories, 3 ID prefixes)
+Structure: Links only. No categories, no Programme, no containers.
+Index:     Structure notes (Notes with role: structure_note). Sparse, post-hoc.
+Agent:     Discovers relationships to existing knowledge. Creates Notes + links.
+           Does NOT classify, does NOT create structure notes.
+Quantity:  Determined by novelty, not by target number.
+Theory:    Luhmann (cards + links) + Reif (scope hierarchy) + Toulmin (evidence)
+           + Karpathy (compile at ingest) + Li Jigang (cognitive operations, v0.3)
 ```
-
-**One sentence: Notes + Links + optional structure. That's lens v0.2.**
