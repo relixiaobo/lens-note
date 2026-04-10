@@ -2,9 +2,9 @@
  * lens ingest <url|file> — Ingest a source and compile understanding.
  *
  * Pipeline:
- * 1. Extract: fetch URL (Defuddle) or read file → markdown
+ * 1. Extract: fetch URL (Defuddle) or read file -> markdown
  * 2. Save: create Source object (markdown file + raw backup)
- * 3. Compile: spawn Compilation Agent to extract Claims/Frames/Questions
+ * 3. Compile: spawn Compilation Agent to extract Notes
  * 4. Process: create lens objects from Agent output
  */
 
@@ -124,25 +124,17 @@ async function compile(
       source_id: sourceId,
       title,
       compiled: {
-        claims_new: processed.claims_new.length,
-        claims_reinforced: processed.claims_reinforced.length,
-        claims_skipped: processed.claims_skipped,
-        claims_contradicted: processed.claims_contradicted.length / 2,
-        frames: processed.frames.length,
-        questions: processed.questions.length,
-        programme: processed.programme,
+        notes_new: processed.notes_new.length,
+        notes_reinforced: processed.notes_reinforced.length,
+        notes_skipped: processed.notes_skipped,
+        notes_contradicted: processed.notes_contradicted.length / 2,
       },
     }, null, 2));
   } else {
     log(`\nCompilation complete:`);
-    log(`  ${processed.claims_new.length} new Claims`);
-    if (processed.claims_reinforced.length) log(`  📎 ${processed.claims_reinforced.length} existing Claims reinforced (evidence added)`);
-    if (processed.claims_skipped) log(`  ⊘ ${processed.claims_skipped} duplicates merged`);
-    if (processed.claims_contradicted.length) log(`  🔥 ${processed.claims_contradicted.length / 2} contradiction(s) detected`);
-    log(`  ${processed.frames.length} Frames`);
-    log(`  ${processed.questions.length} Questions`);
-    if (processed.programme) {
-      log(`  Programme: ${processed.programme}`);
-    }
+    log(`  ${processed.notes_new.length} new Notes`);
+    if (processed.notes_reinforced.length) log(`  ${processed.notes_reinforced.length} existing Notes reinforced (evidence added)`);
+    if (processed.notes_skipped) log(`  ${processed.notes_skipped} duplicates merged`);
+    if (processed.notes_contradicted.length) log(`  ${processed.notes_contradicted.length / 2} contradiction(s) detected`);
   }
 }

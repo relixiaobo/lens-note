@@ -21,16 +21,16 @@ export async function searchObjects(query: string, opts: CommandOptions) {
       const base = { id: r.id, type: r.type };
 
       switch (r.type) {
-        case "claim":
-          return { ...base, statement: obj.statement, qualifier: obj.qualifier, scope: obj.scope || "detail", structure_type: obj.structure_type, programmes: obj.programmes };
-        case "frame":
-          return { ...base, name: obj.name, sees: obj.sees, ignores: obj.ignores };
-        case "question":
-          return { ...base, text: obj.text, status: obj.question_status };
+        case "note":
+          return {
+            ...base,
+            text: obj.text,
+            role: obj.role,
+            qualifier: obj.qualifier,
+            scope: obj.scope,
+          };
         case "source":
           return { ...base, title: obj.title, source_type: obj.source_type, word_count: obj.word_count };
-        case "programme":
-          return { ...base, title: obj.title };
         case "thread":
           return { ...base, title: obj.title };
         default:

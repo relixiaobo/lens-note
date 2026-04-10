@@ -2,7 +2,7 @@
  * lens links <id> — Show all relationships for an object.
  *
  * Returns forward (outgoing) and backward (incoming) links with labels.
- * Labels are the statement/title/name of the linked object so the LLM
+ * Labels are the text/title of the linked object so the LLM
  * doesn't need follow-up show calls.
  */
 
@@ -21,7 +21,7 @@ function getLabel(id: string): { type?: string; label: string } {
   if (!obj) return { label: id };
   const data = obj.data;
   const type = data.type;
-  const label = data.statement || data.title || data.name || data.text || id;
+  const label = data.text || data.title || id;
   return { type, label: typeof label === "string" ? label : id };
 }
 
@@ -50,7 +50,7 @@ export async function showLinks(id: string, opts: CommandOptions) {
   if (opts.json) {
     console.log(JSON.stringify({ id, outgoing, incoming }, null, 2));
   } else {
-    const selfLabel = obj.data.statement || obj.data.title || obj.data.name || obj.data.text || id;
+    const selfLabel = obj.data.text || obj.data.title || id;
     console.log(`Links for: "${typeof selfLabel === "string" ? selfLabel.substring(0, 60) : id}"\n`);
 
     if (outgoing.length) {

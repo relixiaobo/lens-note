@@ -114,12 +114,6 @@ async function contextCommand(args: string[], opts: CommandOptions) {
   await assembleContext(query, { ...opts, json: true });
 }
 
-async function programmeCommand(args: string[], opts: CommandOptions) {
-  const sub = args[0];
-  const { handleProgramme } = await import("./programme");
-  await handleProgramme(sub, args.slice(1), opts);
-}
-
 async function digestCommand(args: string[], opts: CommandOptions) {
   const { showDigest } = await import("./digest");
   await showDigest(args, opts);
@@ -144,11 +138,9 @@ export const commands: Record<string, CommandHandler> = {
   search: searchCommand,
   ingest: ingestCommand,
   context: contextCommand,
-  programme: programmeCommand,
   list: listCommand,
   links: linksCommand,
   digest: digestCommand,
   feed: feedCommand,
   "rebuild-index": rebuildIndexCommand,
 };
-

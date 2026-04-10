@@ -1,47 +1,30 @@
 /**
- * Process Compilation Agent output into lens objects.
+ * Process Compilation Agent output into lens Note objects.
  *
  * Handles 4 relationship types from the Agent:
- * - "new": Create a new Claim
- * - "duplicate": Add evidence to an existing Claim (don't create new)
- * - "supports": Create new Claim + set supports field linking to existing
- * - "contradicts": Create new Claim + set contradicts field on both
+ * - "new": Create a new Note
+ * - "duplicate": Add evidence to an existing Note (don't create new)
+ * - "supports": Create new Note with supports link to existing
+ * - "contradicts": Create new Note with contradicts link on both sides
  */
 
 import { readFileSync, writeFileSync } from "fs";
 import matter from "gray-matter";
-import { generateId, type Claim, type Frame, type Question, type Programme } from "../core/types";
-import { saveObject, listObjects, readObject } from "../core/storage";
+import { generateId, type Note, type NoteRole } from "../core/types";
+import { saveObject, readObject } from "../core/storage";
 import { objectPath } from "../core/paths";
-import type { CompilationResult, ExtractedClaim } from "./compilation-agent";
+import type { CompilationResult, ExtractedNote } from "./compilation-agent";
 
 export interface ProcessedObjects {
-  claims_new: string[];
-  claims_reinforced: string[]; // existing claims that got new evidence
-  claims_contradicted: string[]; // pairs [new, existing]
-  claims_skipped: number; // duplicates where evidence was merged
-  frames: string[];
-  questions: string[];
-  programme?: string;
+  notes_new: string[];
+  notes_reinforced: string[];     // existing notes that got new evidence
+  notes_contradicted: string[];   // pairs [new, existing]
+  notes_skipped: number;          // duplicates where evidence was merged
 }
 
-function findExistingProgramme(suggestedTitle: string): string | undefined {
-  const ids = listObjects("programme");
-  const normalized = suggestedTitle.toLowerCase().trim();
-  for (const id of ids) {
-    const obj = readObject(id);
-    if (!obj) continue;
-    const title = (obj.data.title || "").toLowerCase().trim();
-    if (title === normalized || title.includes(normalized) || normalized.includes(title)) {
-      return id;
-    }
-  }
-  return undefined;
-}
-
-/** Append evidence to an existing Claim's markdown file */
-function appendEvidenceToClaim(claimId: string, newEvidence: { text: string; source: string; locator?: string }) {
-  const filePath = objectPath(claimId);
+/** Append evidence to an existing Note's markdown file */
+function appendEvidenceToNote(noteId: string, newEvidence: { text: string; source: string; locator?: string }) {
+  const filePath = objectPath(noteId);
   const raw = readFileSync(filePath, "utf-8");
   const parsed = matter(raw);
 
@@ -55,9 +38,9 @@ function appendEvidenceToClaim(claimId: string, newEvidence: { text: string; sou
   writeFileSync(filePath, content, "utf-8");
 }
 
-/** Add a contradicts reference to an existing Claim */
-function addContradictsToClaim(claimId: string, contradictingId: string) {
-  const filePath = objectPath(claimId);
+/** Add a contradicts reference to an existing Note */
+function addContradictsToNote(noteId: string, contradictingId: string) {
+  const filePath = objectPath(noteId);
   const raw = readFileSync(filePath, "utf-8");
   const parsed = matter(raw);
 
@@ -70,6 +53,15 @@ function addContradictsToClaim(claimId: string, contradictingId: string) {
   }
 }
 
+/** Infer NoteRole from which optional fields are present */
+function inferRole(en: ExtractedNote): NoteRole {
+  if (en.evidence_text) return "claim";
+  if (en.sees || en.ignores) return "frame";
+  if (en.question_status) return "question";
+  if (en.bridges && en.bridges.length > 0) return "connection";
+  return "observation";
+}
+
 export function processAgentOutput(
   result: CompilationResult,
   sourceId: string,
@@ -78,61 +70,42 @@ export function processAgentOutput(
   const log = onProgress || (() => {});
   const now = new Date().toISOString();
   const processed: ProcessedObjects = {
-    claims_new: [], claims_reinforced: [], claims_contradicted: [],
-    claims_skipped: 0, frames: [], questions: [],
+    notes_new: [],
+    notes_reinforced: [],
+    notes_contradicted: [],
+    notes_skipped: 0,
   };
 
-  // Find or create Programme
-  let programmeId: string | undefined;
-  if (result.suggested_programme) {
-    programmeId = findExistingProgramme(result.suggested_programme);
-    if (programmeId) {
-      log(`Using existing Programme: ${programmeId}`);
-    } else {
-      programmeId = generateId("programme");
-      const programme: Programme = {
-        id: programmeId, type: "programme",
-        title: result.suggested_programme,
-        description: `Created from source ${sourceId}`,
-        status: "active", created_at: now, updated_at: now,
-      };
-      saveObject(programme, "");
-      processed.programme = programmeId;
-      log(`Created Programme: ${programmeId} — "${programme.title}"`);
-    }
-  }
-
-  // Process Claims
-  for (const ec of result.claims) {
-    const relation = ec.relation_to_existing || "new";
-    const existingId = ec.existing_claim_id;
+  // Process all notes
+  for (const en of result.notes) {
+    const relation = en.relation_to_existing || "new";
+    const existingId = en.existing_claim_id;
 
     switch (relation) {
       case "duplicate": {
-        // Merge evidence into existing claim, don't create new
-        if (existingId) {
+        // Merge evidence into existing note, don't create new
+        if (existingId && en.evidence_text) {
           try {
-            appendEvidenceToClaim(existingId, {
-              text: ec.evidence_text,
+            appendEvidenceToNote(existingId, {
+              text: en.evidence_text,
               source: sourceId,
-              locator: ec.evidence_locator,
+              locator: en.evidence_locator,
             });
-            processed.claims_reinforced.push(existingId);
-            log(`  📎 Reinforced: ${existingId} — added evidence`);
+            processed.notes_reinforced.push(existingId);
+            log(`  Reinforced: ${existingId} -- added evidence`);
           } catch (e) {
-            // If existing claim not found, create as new
-            createNewClaim(ec, sourceId, programmeId, now, processed, log);
+            // If existing note not found, create as new
+            createNewNote(en, sourceId, now, processed, log);
           }
         }
-        processed.claims_skipped++;
+        processed.notes_skipped++;
         break;
       }
 
       case "supports": {
-        // Create new claim with supports field
-        const id = createNewClaim(ec, sourceId, programmeId, now, processed, log);
+        // Create new note with supports field
+        const id = createNewNote(en, sourceId, now, processed, log);
         if (existingId && id) {
-          // Update the new claim's supports field
           try {
             const filePath = objectPath(id);
             const raw = readFileSync(filePath, "utf-8");
@@ -140,99 +113,86 @@ export function processAgentOutput(
             parsed.data.supports = [existingId];
             writeFileSync(filePath, matter.stringify(parsed.content, parsed.data), "utf-8");
           } catch {}
-          log(`  ↗ Supports: ${existingId}`);
+          log(`  Supports: ${existingId}`);
         }
         break;
       }
 
       case "contradicts": {
-        // Create new claim + set contradicts on both
-        const id = createNewClaim(ec, sourceId, programmeId, now, processed, log);
+        // Create new note + set contradicts on both sides
+        const id = createNewNote(en, sourceId, now, processed, log);
         if (existingId && id) {
           try {
-            // Mark new claim as contradicting existing
+            // Mark new note as contradicting existing
             const filePath = objectPath(id);
             const raw = readFileSync(filePath, "utf-8");
             const parsed = matter(raw);
             parsed.data.contradicts = [existingId];
             writeFileSync(filePath, matter.stringify(parsed.content, parsed.data), "utf-8");
 
-            // Mark existing claim as contradicted by new
-            addContradictsToClaim(existingId, id);
+            // Mark existing note as contradicted by new
+            addContradictsToNote(existingId, id);
           } catch {}
-          processed.claims_contradicted.push(id, existingId);
-          log(`  🔥 Contradicts: ${existingId}`);
+          processed.notes_contradicted.push(id, existingId);
+          log(`  Contradicts: ${existingId}`);
         }
         break;
       }
 
       case "new":
       default: {
-        createNewClaim(ec, sourceId, programmeId, now, processed, log);
+        createNewNote(en, sourceId, now, processed, log);
         break;
       }
     }
   }
 
-  log(`Claims: ${processed.claims_new.length} new, ${processed.claims_reinforced.length} reinforced, ${processed.claims_skipped} duplicates merged, ${processed.claims_contradicted.length / 2} contradictions`);
-
-  // Create Frames
-  for (const ef of result.frames) {
-    const id = generateId("frame");
-    const frame: Frame = {
-      id, type: "frame",
-      name: ef.name, sees: ef.sees, ignores: ef.ignores, assumptions: ef.assumptions,
-      programmes: programmeId ? [programmeId] : undefined,
-      source: sourceId, status: "active", created_at: now,
-    };
-    saveObject(frame, "");
-    processed.frames.push(id);
-  }
-  log(`Created ${processed.frames.length} Frames`);
-
-  // Create Questions
-  for (const eq of result.questions) {
-    const id = generateId("question");
-    const question: Question = {
-      id, type: "question",
-      text: eq.text, question_status: eq.question_status,
-      programmes: programmeId ? [programmeId] : undefined,
-      source: sourceId, status: "active", created_at: now,
-    };
-    saveObject(question, "");
-    processed.questions.push(id);
-  }
-  log(`Created ${processed.questions.length} Questions`);
+  log(`Notes: ${processed.notes_new.length} new, ${processed.notes_reinforced.length} reinforced, ${processed.notes_skipped} duplicates merged, ${processed.notes_contradicted.length / 2} contradictions`);
 
   return processed;
 }
 
-function createNewClaim(
-  ec: ExtractedClaim,
+function createNewNote(
+  en: ExtractedNote,
   sourceId: string,
-  programmeId: string | undefined,
   now: string,
   processed: ProcessedObjects,
   log: (msg: string) => void,
 ): string {
-  const id = generateId("claim");
-  const claim: Claim = {
-    id, type: "claim",
-    statement: ec.statement,
-    qualifier: ec.qualifier,
-    voice: ec.voice,
-    scope: ec.scope,
-    evidence: [{ text: ec.evidence_text, source: sourceId, locator: ec.evidence_locator }],
-    structure_type: ec.structure_type as any,
-    programmes: programmeId ? [programmeId] : undefined,
-    source: sourceId, status: "active", created_at: now,
+  const id = generateId("note");
+  const role = en.role || inferRole(en);
+
+  const note: Note = {
+    id,
+    type: "note",
+    text: en.text,
+    role,
+    source: sourceId,
+    status: "active",
+    created_at: now,
   };
 
-  const body = ec.warrant_description
-    ? `${ec.statement}\n\nPerspective: ${ec.warrant_description}`
-    : ec.statement;
+  // Claim fields
+  if (en.evidence_text) {
+    note.evidence = [{ text: en.evidence_text, source: sourceId, locator: en.evidence_locator }];
+  }
+  if (en.qualifier) note.qualifier = en.qualifier;
+  if (en.voice) note.voice = en.voice;
+  if (en.scope) note.scope = en.scope;
+  if (en.structure_type) note.structure_type = en.structure_type as any;
 
-  saveObject(claim, body);
-  processed.claims_new.push(id);
+  // Frame fields
+  if (en.sees) note.sees = en.sees;
+  if (en.ignores) note.ignores = en.ignores;
+  if (en.assumptions && en.assumptions.length > 0) note.assumptions = en.assumptions;
+
+  // Question field
+  if (en.question_status) note.question_status = en.question_status;
+
+  // Bridge field
+  if (en.bridges && en.bridges.length > 0) note.bridges = en.bridges;
+
+  saveObject(note, en.text);
+  processed.notes_new.push(id);
   return id;
 }

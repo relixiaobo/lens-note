@@ -17,7 +17,8 @@ Usage:
   lens <command> [options]
 
 Explore:
-  list <type> [--filters]  Browse objects (claims, frames, questions, sources, programmes)
+  list <type> [--filters]  Browse objects (notes, sources, threads)
+  list notes --role <r>    Filter notes by role (claim, frame, question, observation, connection, structure_note)
   show <id>                Show full details of any object
   search "<query>"         Full-text search across all objects
   links <id>               Show all relationships (outgoing + incoming)
@@ -35,7 +36,7 @@ RSS:
   feed remove <id>         Unsubscribe
 
 View:
-  digest [week|month|year] New insights, tensions, perspectives
+  digest [week|month|year] New insights, connections, tensions, questions
 
 System:
   init                     First-time setup
@@ -51,7 +52,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v0.1.0-dev");
+  console.log("lens v0.2.0-dev");
   process.exit(0);
 }
 

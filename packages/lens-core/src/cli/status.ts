@@ -24,11 +24,9 @@ export async function showStatus(opts: CommandOptions) {
   }
 
   const counts = {
+    notes: listObjects("note").length,
     sources: listObjects("source").length,
-    claims: listObjects("claim").length,
-    frames: listObjects("frame").length,
-    questions: listObjects("question").length,
-    programmes: listObjects("programme").length,
+    threads: listObjects("thread").length,
   };
 
   // Include WAL file in cache size
@@ -47,12 +45,10 @@ export async function showStatus(opts: CommandOptions) {
   } else {
     console.log(`lens status`);
     console.log(`  Path: ${paths.root}`);
-    console.log(`  Sources:    ${counts.sources}`);
-    console.log(`  Claims:     ${counts.claims}`);
-    console.log(`  Frames:     ${counts.frames}`);
-    console.log(`  Questions:  ${counts.questions}`);
-    console.log(`  Programmes: ${counts.programmes}`);
-    console.log(`  Total:      ${status.total} objects`);
-    console.log(`  Cache:      ${(cacheSize / 1024).toFixed(1)} KB`);
+    console.log(`  Notes:    ${counts.notes}`);
+    console.log(`  Sources:  ${counts.sources}`);
+    console.log(`  Threads:  ${counts.threads}`);
+    console.log(`  Total:    ${status.total} objects`);
+    console.log(`  Cache:    ${(cacheSize / 1024).toFixed(1)} KB`);
   }
 }

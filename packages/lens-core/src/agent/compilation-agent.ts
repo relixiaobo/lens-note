@@ -2,7 +2,7 @@
  * Compilation Agent.
  *
  * A short-lived agent that reads a source document, uses lens CLI tools
- * to explore existing knowledge, and extracts new Claims/Frames/Questions.
+ * to explore existing knowledge, and extracts new Notes.
  *
  * The Agent has access to:
  * - submit_extraction tool (to submit results)
@@ -22,36 +22,26 @@ import { execSync } from "child_process";
 // Types for extraction output
 // ============================================================
 
-export interface ExtractedClaim {
-  statement: string;
-  qualifier: "certain" | "likely" | "presumably" | "tentative";
-  voice: "extracted" | "restated" | "synthesized";
-  scope: "big_picture" | "detail";
-  evidence_text: string;
+export interface ExtractedNote {
+  text: string;
+  role?: "claim" | "frame" | "question" | "observation" | "connection";
+  qualifier?: "certain" | "likely" | "presumably" | "tentative";
+  voice?: "extracted" | "restated" | "synthesized";
+  scope?: "big_picture" | "detail";
+  evidence_text?: string;
   evidence_locator?: string;
   structure_type?: string;
-  warrant_description?: string;
+  sees?: string;
+  ignores?: string;
+  assumptions?: string[];
+  question_status?: "open" | "tentative_answer";
+  bridges?: string[];
   relation_to_existing?: "new" | "supports" | "contradicts" | "duplicate";
   existing_claim_id?: string;
 }
 
-export interface ExtractedFrame {
-  name: string;
-  sees: string;
-  ignores: string;
-  assumptions: string[];
-}
-
-export interface ExtractedQuestion {
-  text: string;
-  question_status: "open" | "tentative_answer";
-}
-
 export interface CompilationResult {
-  claims: ExtractedClaim[];
-  frames: ExtractedFrame[];
-  questions: ExtractedQuestion[];
-  suggested_programme?: string;
+  notes: ExtractedNote[];
 }
 
 // ============================================================
@@ -59,41 +49,39 @@ export interface CompilationResult {
 // ============================================================
 
 const ExtractionSchema = Type.Object({
-  claims: Type.Array(Type.Object({
-    statement: Type.String(),
-    qualifier: Type.Union([
+  notes: Type.Array(Type.Object({
+    text: Type.String(),
+    role: Type.Optional(Type.Union([
+      Type.Literal("claim"), Type.Literal("frame"),
+      Type.Literal("question"), Type.Literal("observation"),
+      Type.Literal("connection"),
+    ])),
+    qualifier: Type.Optional(Type.Union([
       Type.Literal("certain"), Type.Literal("likely"),
       Type.Literal("presumably"), Type.Literal("tentative"),
-    ]),
-    voice: Type.Union([
+    ])),
+    voice: Type.Optional(Type.Union([
       Type.Literal("extracted"), Type.Literal("restated"), Type.Literal("synthesized"),
-    ]),
-    scope: Type.Union([Type.Literal("big_picture"), Type.Literal("detail")]),
-    evidence_text: Type.String(),
+    ])),
+    scope: Type.Optional(Type.Union([Type.Literal("big_picture"), Type.Literal("detail")])),
+    evidence_text: Type.Optional(Type.String()),
     evidence_locator: Type.Optional(Type.String()),
     structure_type: Type.Optional(Type.String()),
-    warrant_description: Type.Optional(Type.String()),
+    sees: Type.Optional(Type.String()),
+    ignores: Type.Optional(Type.String()),
+    assumptions: Type.Optional(Type.Array(Type.String())),
+    question_status: Type.Optional(Type.Union([Type.Literal("open"), Type.Literal("tentative_answer")])),
+    bridges: Type.Optional(Type.Array(Type.String())),
     relation_to_existing: Type.Optional(Type.Union([
       Type.Literal("new"), Type.Literal("supports"),
       Type.Literal("contradicts"), Type.Literal("duplicate"),
     ])),
     existing_claim_id: Type.Optional(Type.String()),
   })),
-  frames: Type.Array(Type.Object({
-    name: Type.String(),
-    sees: Type.String(),
-    ignores: Type.String(),
-    assumptions: Type.Array(Type.String()),
-  })),
-  questions: Type.Array(Type.Object({
-    text: Type.String(),
-    question_status: Type.Union([Type.Literal("open"), Type.Literal("tentative_answer")]),
-  })),
-  suggested_programme: Type.Optional(Type.String()),
 });
 
 const LensQuerySchema = Type.Object({
-  command: Type.String({ description: "A lens CLI command to run, e.g.: lens list claims --scope big_picture --json" }),
+  command: Type.String({ description: "A lens CLI command to run, e.g.: lens list notes --scope big_picture --json" }),
 });
 
 // ============================================================
@@ -155,7 +143,7 @@ A breakthrough article might produce 6 genuinely new thoughts.
 The number follows from thinking, not from a target.
 
 ## Note Fields
-- statement: your thought (a complete, self-contained idea)
+- text: your thought (a complete, self-contained idea)
 - evidence_text: verbatim quote from the article that triggered this thought (50-300 chars)
 - qualifier: how confident you are (certain/likely/presumably/tentative)
 - voice: synthesized (your own thinking) / extracted (directly from article) / restated (rephrased)
@@ -165,15 +153,13 @@ The number follows from thinking, not from a target.
 - existing_claim_id: if supports/contradicts/duplicate, which existing note
 
 ## Frame Fields (only if the article introduces a genuinely novel perspective)
-- name / sees / ignores / assumptions
+- sees / ignores / assumptions
 
 ## Question Fields (only if the article raises a genuinely open question)
-- text / question_status
+- question_status
 
-## Programme
-- If the article clearly belongs to an existing programme, use its exact title
-- If it's a genuinely new theme with no existing match, suggest a BROAD title
-- If unsure, don't suggest one — the notes will find their place through links`;
+## Bridge Fields (only if you discover a connection between two existing notes)
+- bridges: list of note IDs that this note connects`;
 
 // ============================================================
 // Run the Compilation Agent
@@ -194,32 +180,27 @@ export async function runCompilationAgent(
 
   log("Starting Compilation Agent...");
 
-  const result: CompilationResult = { claims: [], frames: [], questions: [] };
+  const result: CompilationResult = { notes: [] };
   let toolCalled = false;
 
   // Tool 1: submit_extraction
   const submitTool: AgentTool<typeof ExtractionSchema> = {
     name: "submit_extraction",
-    description: "Submit extracted Claims, Frames, and Questions. Mark duplicates and contradictions with existing claims.",
+    description: "Submit extracted Notes. Each note is a single thought with optional role-specific fields. Mark duplicates and contradictions with existing notes.",
     label: "Submit Extraction",
     parameters: ExtractionSchema,
     execute: async (toolCallId, params) => {
       const p = params as CompilationResult;
       toolCalled = true;
 
-      result.claims.push(...p.claims);
-      result.frames.push(...p.frames);
-      result.questions.push(...p.questions);
-      if (p.suggested_programme && !result.suggested_programme) {
-        result.suggested_programme = p.suggested_programme;
-      }
+      result.notes.push(...p.notes);
 
-      const newCount = p.claims.filter(c => !c.relation_to_existing || c.relation_to_existing === "new").length;
-      const dupCount = p.claims.filter(c => c.relation_to_existing === "duplicate").length;
-      const supCount = p.claims.filter(c => c.relation_to_existing === "supports").length;
-      const conCount = p.claims.filter(c => c.relation_to_existing === "contradicts").length;
+      const newCount = p.notes.filter(n => !n.relation_to_existing || n.relation_to_existing === "new").length;
+      const dupCount = p.notes.filter(n => n.relation_to_existing === "duplicate").length;
+      const supCount = p.notes.filter(n => n.relation_to_existing === "supports").length;
+      const conCount = p.notes.filter(n => n.relation_to_existing === "contradicts").length;
 
-      log(`Received: ${p.claims.length} claims (${newCount} new, ${dupCount} dup, ${supCount} supports, ${conCount} contradicts), ${p.frames.length} frames, ${p.questions.length} questions`);
+      log(`Received: ${p.notes.length} notes (${newCount} new, ${dupCount} dup, ${supCount} supports, ${conCount} contradicts)`);
 
       return {
         content: [{ type: "text" as const, text: `Extraction received. ${newCount} new, ${dupCount} duplicates, ${supCount} supporting, ${conCount} contradicting.` }],
@@ -231,7 +212,7 @@ export async function runCompilationAgent(
   // Tool 2: lens_query — run any lens CLI command
   const lensQueryTool: AgentTool<typeof LensQuerySchema> = {
     name: "lens_query",
-    description: "Run a lens CLI command to explore existing knowledge. The command must start with 'lens' and include '--json'. Examples: 'lens list claims --scope big_picture --json', 'lens search \"quality\" --json', 'lens show clm_01 --json', 'lens links clm_01 --json'",
+    description: "Run a lens CLI command to explore existing knowledge. The command must start with 'lens' and include '--json'. Examples: 'lens list notes --scope big_picture --json', 'lens search \"quality\" --json', 'lens show note_01 --json', 'lens links note_01 --json'",
     label: "Query Lens Knowledge Base",
     parameters: LensQuerySchema,
     execute: async (toolCallId, params) => {
@@ -251,7 +232,7 @@ export async function runCompilationAgent(
       // Don't allow write commands
       if (cmd.includes("ingest") || cmd.includes("note") || cmd.includes("init") || cmd.includes("feed")) {
         return {
-          content: [{ type: "text" as const, text: "Error: only read commands are allowed (list, show, search, links, context, programme, status)" }],
+          content: [{ type: "text" as const, text: "Error: only read commands are allowed (list, show, search, links, context, status)" }],
           details: {},
         };
       }
@@ -298,8 +279,8 @@ export async function runCompilationAgent(
     },
   });
 
-  // User message: just the source document. No manually injected existing claims.
-  const userMessage = `## Source Document to Compile\n\n**Title**: ${sourceTitle}\n**Source ID**: ${sourceId}\n\n<source_document>\n${sourceContent}\n</source_document>\n\nFirst, use lens_query to explore what's already in the knowledge base about the topics in this article. Then extract Claims, Frames, and Questions, marking relationships to existing claims. Call submit_extraction with your results.`;
+  // User message: just the source document. No manually injected existing notes.
+  const userMessage = `## Source Document to Compile\n\n**Title**: ${sourceTitle}\n**Source ID**: ${sourceId}\n\n<source_document>\n${sourceContent}\n</source_document>\n\nFirst, use lens_query to explore what's already in the knowledge base about the topics in this article. Then think deeply and submit your notes. Call submit_extraction with your results.`;
 
   await agent.prompt(userMessage);
   await agent.waitForIdle();
@@ -309,9 +290,9 @@ export async function runCompilationAgent(
   }
 
   // Validate structure_type
-  for (const claim of result.claims) {
-    if (claim.structure_type && !VALID_STRUCTURE_TYPES.has(claim.structure_type)) {
-      claim.structure_type = undefined;
+  for (const note of result.notes) {
+    if (note.structure_type && !VALID_STRUCTURE_TYPES.has(note.structure_type)) {
+      note.structure_type = undefined;
     }
   }
 

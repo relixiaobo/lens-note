@@ -49,11 +49,9 @@ providers:
   } else {
     console.log(`Initialized lens at ${paths.root}`);
     console.log(`\nCreated:`);
+    console.log(`  ${paths.notes}/`);
     console.log(`  ${paths.sources}/`);
-    console.log(`  ${paths.claims}/`);
-    console.log(`  ${paths.frames}/`);
-    console.log(`  ${paths.questions}/`);
-    console.log(`  ${paths.programmes}/`);
+    console.log(`  ${paths.threads}/`);
     console.log(`  ${paths.raw}/`);
     console.log(`  ${paths.db}`);
     console.log(`  ${paths.config}`);

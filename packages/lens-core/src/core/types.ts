@@ -1,13 +1,9 @@
 /**
- * Lens core types.
+ * Lens v0.2 core types — Zettelkasten-native.
  *
- * Design decisions:
- * - Typed fields for relationships (not universal edges) — validated by research
- * - Evidence inline in Claim (no separate Excerpt type) — v0.1 simplicity
- * - Programme doesn't store member lists — reverse-query from members
- * - Thread is a peer object, not owned by any other object
- * - All objects have status + superseded_by for merge/split lifecycle
- * - "related" field as escape hatch for untyped associations
+ * 3 types: Source, Note, Thread.
+ * Note is the universal knowledge card with optional fields.
+ * Structure emerges from links, not from categories.
  */
 
 import { ulid } from "ulid";
@@ -16,7 +12,7 @@ import { ulid } from "ulid";
 // Shared Types
 // ============================================================
 
-export type ISODate = string; // ISO 8601 UTC
+export type ISODate = string;
 
 export type Qualifier = "certain" | "likely" | "presumably" | "tentative";
 
@@ -33,32 +29,35 @@ export type StructureType =
   | "process"
   | "relationships";
 
-export type ClaimScope = "big_picture" | "detail";
+export type NoteScope = "big_picture" | "detail";
 
-export type ObjectType = "source" | "claim" | "frame" | "question" | "programme" | "thread";
+export type NoteRole =
+  | "claim"
+  | "frame"
+  | "question"
+  | "observation"
+  | "connection"
+  | "structure_note";
+
+export type ObjectType = "source" | "note" | "thread";
 
 export type SourceType = "web_article" | "markdown" | "plain_text" | "manual_note";
 
 export type ObjectStatus = "active" | "superseded";
 
-// Weak/untyped association
 export interface RelatedRef {
   id: string;
-  note?: string; // optional context for why this is related
+  note?: string;
 }
-
-// ============================================================
-// Evidence (inline in Claim)
-// ============================================================
 
 export interface Evidence {
-  text: string; // verbatim quote from source (50-300 chars)
-  source: string; // Source ID
-  locator?: string; // where in the source (section, paragraph, etc.)
+  text: string;
+  source: string;
+  locator?: string;
 }
 
 // ============================================================
-// Source
+// Source — provenance record
 // ============================================================
 
 export interface Source {
@@ -69,135 +68,90 @@ export interface Source {
   author?: string;
   url?: string;
   word_count: number;
-  raw_file?: string; // e.g. "raw/src_01.html"
+  raw_file?: string;
   ingested_at: ISODate;
   created_at: ISODate;
   status: ObjectStatus;
 }
 
 // ============================================================
-// Claim
+// Note — universal knowledge card
+//
+// One idea per card. Optional fields express different roles:
+//   evidence + qualifier → claim
+//   sees + ignores → frame
+//   question_status → question
+//   bridges → connection
+//   entries → structure note
+//   (nothing extra) → observation
+//
+// Role is a soft hint for display, not a constraint.
 // ============================================================
 
-export interface Claim {
+export interface Note {
   id: string;
-  type: "claim";
-  statement: string;
-  qualifier: Qualifier;
-  voice: Voice;
-  evidence: Evidence[];
+  type: "note";
+  text: string; // the thought itself (always present)
+
+  // Optional: Role hint (for display)
+  role?: NoteRole;
+
+  // Optional: Claim fields (Toulmin structure)
+  evidence?: Evidence[];
+  qualifier?: Qualifier;
+  voice?: Voice;
+
+  // Optional: Hierarchy (Reif/Miller)
+  scope?: NoteScope;
+
+  // Optional: Structure type (Miller)
   structure_type?: StructureType;
-  scope?: ClaimScope; // big_picture = overarching insight, detail = specific evidence/support
 
-  // Typed relationship fields
-  warrant_frame?: string; // Frame ID: which perspective makes this claim valid
-  supports?: string[]; // Claim IDs this claim supports
-  contradicts?: string[]; // Claim IDs this claim contradicts
-  refines?: string[]; // Claim IDs this claim refines
-  programmes?: string[]; // Programme IDs this is relevant to
-  source: string; // Source ID: provenance
+  // Optional: Frame fields
+  sees?: string;
+  ignores?: string;
+  assumptions?: string[];
 
-  // Lifecycle
-  status: ObjectStatus;
-  superseded_by?: string[]; // Claim IDs that replaced this (merge/split)
+  // Optional: Question field
+  question_status?: "open" | "tentative_answer" | "resolved" | "superseded";
 
-  // Escape hatch for untyped associations
+  // Optional: Bridge (connection note)
+  bridges?: string[];
+
+  // Optional: Structure note (index entry)
+  entries?: string[];
+
+  // Typed links
+  supports?: string[];
+  contradicts?: string[];
+  refines?: string[];
   related?: RelatedRef[];
 
+  // Provenance
+  source?: string;
+  status: ObjectStatus;
   created_at: ISODate;
 }
 
 // ============================================================
-// Frame
-// ============================================================
-
-export interface Frame {
-  id: string;
-  type: "frame";
-  name: string;
-  sees: string;
-  ignores: string;
-  assumptions: string[];
-  useful_when?: string[];
-  failure_modes?: string[];
-
-  // Typed relationship fields
-  programmes?: string[];
-  contradicts_frames?: string[]; // Frame IDs
-  refines?: string[]; // Frame IDs
-  source: string;
-
-  status: ObjectStatus;
-  superseded_by?: string[];
-  related?: RelatedRef[];
-  created_at: ISODate;
-}
-
-// ============================================================
-// Question
-// ============================================================
-
-export interface Question {
-  id: string;
-  type: "question";
-  text: string;
-  question_status: "open" | "tentative_answer" | "resolved" | "superseded";
-  current_position?: string;
-
-  // Typed relationship fields
-  parent_question?: string; // Question ID
-  candidate_answers?: string[]; // Claim IDs that might answer this
-  programmes?: string[];
-  source: string;
-
-  status: ObjectStatus;
-  superseded_by?: string[];
-  related?: RelatedRef[];
-  created_at: ISODate;
-}
-
-// ============================================================
-// Programme (doesn't store member lists — reverse-query)
-// ============================================================
-
-export interface Programme {
-  id: string;
-  type: "programme";
-  title: string;
-  description: string;
-
-  // Typed relationship fields
-  root_question?: string; // Question ID: the Programme's driving question
-
-  status: ObjectStatus;
-  related?: RelatedRef[];
-  created_at: ISODate;
-  updated_at: ISODate;
-}
-
-// ============================================================
-// Thread (peer object, not owned by anyone)
+// Thread — conversation about Notes
 // ============================================================
 
 export interface Thread {
   id: string;
   type: "thread";
   title: string;
-
-  // Typed relationship fields
-  references: string[]; // IDs of any objects discussed in this thread
-  started_from?: string; // ID of the object that triggered this thread
-
+  references: string[];
+  started_from?: string;
   status: ObjectStatus;
   created_at: ISODate;
-  // Body (markdown) contains the conversation messages
 }
 
 // ============================================================
 // Union type
 // ============================================================
 
-export type LensObject = Source | Claim | Frame | Question | Programme | Thread;
+export type LensObject = Source | Note | Thread;
 
 // ============================================================
 // ID generation
@@ -205,10 +159,7 @@ export type LensObject = Source | Claim | Frame | Question | Programme | Thread;
 
 const prefixes: Record<ObjectType, string> = {
   source: "src",
-  claim: "clm",
-  frame: "frm",
-  question: "q",
-  programme: "pgm",
+  note: "note",
   thread: "thr",
 };
 

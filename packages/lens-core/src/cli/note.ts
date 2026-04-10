@@ -1,34 +1,32 @@
 /**
- * lens note "<text>" — Record a quick note as a manual_note source.
+ * lens note "<text>" — Record a quick note as an observation.
  */
 
-import { generateId, type Source } from "../core/types";
+import { generateId, type Note } from "../core/types";
 import { saveObject, ensureInitialized } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
 export async function createNote(text: string, opts: CommandOptions) {
   ensureInitialized();
 
-  const id = generateId("source");
+  const id = generateId("note");
   const now = new Date().toISOString();
 
-  const source: Source = {
+  const note: Note = {
     id,
-    type: "source",
-    source_type: "manual_note",
-    title: text.length > 80 ? text.substring(0, 77) + "..." : text,
-    word_count: text.trim() ? text.trim().split(/\s+/).length : 0,
-    ingested_at: now,
-    created_at: now,
+    type: "note",
+    text,
+    role: "observation",
     status: "active",
+    created_at: now,
   };
 
-  const filePath = saveObject(source, text);
+  const filePath = saveObject(note, text);
 
   if (opts.json) {
-    console.log(JSON.stringify({ id: source.id, path: filePath }));
+    console.log(JSON.stringify({ id: note.id, path: filePath }));
   } else {
-    console.log(`Created note: ${source.id}`);
-    console.log(`  "${source.title}"`);
+    console.log(`Created note: ${note.id}`);
+    console.log(`  "${text.length > 80 ? text.substring(0, 77) + "..." : text}"`);
   }
 }

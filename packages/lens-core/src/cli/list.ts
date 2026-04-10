@@ -1,31 +1,23 @@
 /**
  * lens list <type> [--filters] — Browse objects by type with optional filters.
  *
- * lens list claims --json
- * lens list claims --scope big_picture --json
- * lens list claims --programme pgm_01 --json
- * lens list claims --since 7d --json
- * lens list frames --json
- * lens list questions --json
+ * lens list notes --json
+ * lens list notes --role claim --json
+ * lens list notes --scope big_picture --json
+ * lens list notes --since 7d --json
  * lens list sources --json
- * lens list programmes --json
+ * lens list threads --json
  */
 
-import { listObjects, readObject, getBacklinks, ensureInitialized } from "../core/storage";
+import { listObjects, readObject, ensureInitialized } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
 import type { ObjectType } from "../core/types";
 
 const TYPE_MAP: Record<string, ObjectType> = {
-  claims: "claim",
-  claim: "claim",
-  frames: "frame",
-  frame: "frame",
-  questions: "question",
-  question: "question",
+  notes: "note",
+  note: "note",
   sources: "source",
   source: "source",
-  programmes: "programme",
-  programme: "programme",
   threads: "thread",
   thread: "thread",
 };
@@ -38,7 +30,7 @@ export async function listCommand(args: string[], opts: CommandOptions) {
 
   if (!typeName || !TYPE_MAP[typeName]) {
     throw new Error(
-      `Usage: lens list <type> [--filters]\nTypes: claims, frames, questions, sources, programmes, threads`
+      `Usage: lens list <type> [--filters]\nTypes: notes, sources, threads\n\nFilters for notes:\n  --role <role>     Filter by role (claim, frame, question, observation, connection, structure_note)\n  --scope <scope>   Filter by scope (big_picture, detail)\n  --since <period>  Filter by age (e.g. 7d, 2w, 1m)`
     );
   }
 
@@ -54,14 +46,14 @@ export async function listCommand(args: string[], opts: CommandOptions) {
   }
 
   // Apply filters
+  const roleFilter = flags.role as string | undefined;
+  if (roleFilter) {
+    items = items.filter((item) => item.role === roleFilter);
+  }
+
   const scopeFilter = flags.scope as string | undefined;
   if (scopeFilter) {
     items = items.filter((item) => item.scope === scopeFilter);
-  }
-
-  const programmeFilter = flags.programme as string | undefined;
-  if (programmeFilter) {
-    items = items.filter((item) => item.programmes?.includes(programmeFilter));
   }
 
   const sinceFilter = flags.since as string | undefined;
@@ -78,7 +70,7 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     console.log(JSON.stringify({
       type: typeName,
       count: summaries.length,
-      filters: { scope: scopeFilter, programme: programmeFilter, since: sinceFilter },
+      filters: { role: roleFilter, scope: scopeFilter, since: sinceFilter },
       items: summaries,
     }, null, 2));
   } else {
@@ -95,30 +87,40 @@ export async function listCommand(args: string[], opts: CommandOptions) {
 
     for (const s of summaries) {
       switch (objType) {
-        case "claim": {
-          const bar = qualifierBar[s.qualifier] || "   ";
-          const tag = s.structure_type ? ` [${s.structure_type}]` : "";
-          const scope = s.scope === "big_picture" ? " ★" : "";
-          console.log(`  ${bar} ${s.statement}${tag}${scope}`);
+        case "note": {
+          const role = s.role || "observation";
+          switch (role) {
+            case "claim": {
+              const bar = qualifierBar[s.qualifier] || "   ";
+              const scope = s.scope === "big_picture" ? " *" : "";
+              console.log(`  ${bar} ${s.text}${scope}`);
+              break;
+            }
+            case "frame":
+              console.log(`  [frame] ${s.text}`);
+              if (s.sees) console.log(`    sees: ${s.sees}`);
+              if (s.ignores) console.log(`    ignores: ${s.ignores}`);
+              break;
+            case "question":
+              console.log(`  ? ${s.text} [${s.question_status || "open"}]`);
+              break;
+            case "connection":
+              console.log(`  <-> ${s.text}`);
+              break;
+            case "structure_note":
+              console.log(`  # ${s.text}`);
+              break;
+            default:
+              console.log(`  - ${s.text}`);
+              break;
+          }
           break;
         }
-        case "frame":
-          console.log(`  ◆ ${s.name}`);
-          console.log(`    sees: ${s.sees}`);
-          break;
-        case "question":
-          console.log(`  ? ${s.text}`);
-          break;
         case "source":
-          console.log(`  📄 ${s.title} (${s.word_count} words, ${s.source_type})`);
+          console.log(`  ${s.title} (${s.word_count} words, ${s.source_type})`);
           break;
-        case "programme": {
-          const members = getBacklinks(s.id).filter((l) => l.rel === "programme");
-          console.log(`  ${s.title} — ${members.length} members`);
-          break;
-        }
         case "thread":
-          console.log(`  💬 ${s.title}`);
+          console.log(`  ${s.title}`);
           break;
       }
     }
@@ -129,29 +131,22 @@ export async function listCommand(args: string[], opts: CommandOptions) {
 function summarize(item: Record<string, any>, type: ObjectType): Record<string, any> {
   const base = { id: item.id };
   switch (type) {
-    case "claim":
+    case "note":
       return {
-        ...base, statement: item.statement, qualifier: item.qualifier,
-        scope: item.scope || "detail", structure_type: item.structure_type,
-        programmes: item.programmes,
-      };
-    case "frame":
-      return {
-        ...base, name: item.name, sees: item.sees, ignores: item.ignores,
-        programmes: item.programmes,
-      };
-    case "question":
-      return {
-        ...base, text: item.text, status: item.question_status,
-        programmes: item.programmes,
+        ...base,
+        text: item.text,
+        role: item.role,
+        qualifier: item.qualifier,
+        scope: item.scope,
+        sees: item.sees,
+        ignores: item.ignores,
+        question_status: item.question_status,
       };
     case "source":
       return {
         ...base, title: item.title, source_type: item.source_type,
         word_count: item.word_count, url: item.url,
       };
-    case "programme":
-      return { ...base, title: item.title, description: item.description };
     case "thread":
       return { ...base, title: item.title, references: item.references };
     default:
