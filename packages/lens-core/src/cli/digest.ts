@@ -26,8 +26,11 @@ interface DigestItem {
 export async function showDigest(args: string[], opts: CommandOptions) {
   ensureInitialized();
 
-  const { flags } = parseCliArgs(args);
-  const days = Number(flags.days) || 1;
+  const { positional, flags } = parseCliArgs(args);
+  const period = positional[0]; // "week", "month", "year" or undefined
+
+  const periodDays: Record<string, number> = { week: 7, month: 30, year: 365 };
+  const days = period ? (periodDays[period] || Number(period) || 1) : (Number(flags.days) || 1);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   const db = getDb();
@@ -134,7 +137,14 @@ export async function showDigest(args: string[], opts: CommandOptions) {
   const qualifierBar: Record<string, string> = {
     certain: "■■■", likely: "■■ ", presumably: "■  ", tentative: "·  ",
   };
-  const periodLabel = days === 1 ? "Today" : `Last ${days} days`;
+  const periodLabels: Record<string, string> = {
+    "1": "Today", "7": "This Week", "30": "This Month", "365": "This Year",
+  };
+  const periodLabel = periodLabels[String(days)] || `Last ${days} days`;
+
+  // For longer periods, show more compact view (limit items per programme)
+  const isCompact = days > 7;
+  const maxBigPicture = isCompact ? 5 : 999; // month/year: top 5 only
 
   console.log(`${periodLabel}'s Digest`);
   console.log(`${"━".repeat(40)}\n`);
@@ -151,14 +161,24 @@ export async function showDigest(args: string[], opts: CommandOptions) {
       console.log(`Unassigned`);
     }
 
-    // Show big_picture claims first (these are the "new insights")
+    // Stats line for compact view
+    if (isCompact) {
+      console.log(`  ${item.claims.length} claims · ${item.frames.length} frames · ${item.questions.length} questions`);
+    }
+
+    // Show big_picture claims (these are the "new insights")
     const bigPicture = item.claims.filter((c) => c.scope === "big_picture");
     const detailCount = item.claims.length - bigPicture.length;
+    const shownBigPicture = bigPicture.slice(0, maxBigPicture);
 
-    if (bigPicture.length) {
-      for (const c of bigPicture) {
+    if (shownBigPicture.length) {
+      if (isCompact) console.log(`  Key insights:`);
+      for (const c of shownBigPicture) {
         const bar = qualifierBar[c.qualifier] || "   ";
         console.log(`  ${bar} ${c.statement}`);
+      }
+      if (bigPicture.length > maxBigPicture) {
+        console.log(`  +${bigPicture.length - maxBigPicture} more key insights`);
       }
     }
 
@@ -171,14 +191,22 @@ export async function showDigest(args: string[], opts: CommandOptions) {
       console.log(`  🔥 "${t.a}" ↔ "${t.b}"`);
     }
 
-    // New frames
-    for (const f of item.frames) {
-      console.log(`  ◆ ${f.name} — sees: ${f.sees}`);
+    // Frames
+    if (isCompact && item.frames.length) {
+      console.log(`  ${item.frames.length} perspective(s): ${item.frames.map(f => f.name).join(", ")}`);
+    } else {
+      for (const f of item.frames) {
+        console.log(`  ◆ ${f.name} — sees: ${f.sees}`);
+      }
     }
 
-    // New questions
-    for (const q of item.questions) {
-      console.log(`  ? ${q.text}`);
+    // Questions (compact: count only; daily: show all)
+    if (isCompact && item.questions.length) {
+      console.log(`  ${item.questions.length} open question(s)`);
+    } else {
+      for (const q of item.questions) {
+        console.log(`  ? ${q.text}`);
+      }
     }
 
     console.log();

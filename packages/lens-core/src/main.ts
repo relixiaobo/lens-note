@@ -24,7 +24,9 @@ Commands:
   search "<query>"      Search across all objects
   context "<query>"     Assemble agent-ready context pack (JSON)
   digest                Today's new insights, tensions, perspectives
-  digest --days 7       Last N days
+  digest week           This week's digest
+  digest month          This month's digest
+  digest year           This year in review
   programme list|show   Programme management
   feed add|list|check   RSS feed subscription and auto-ingest
   feed remove <id>      Unsubscribe from a feed
