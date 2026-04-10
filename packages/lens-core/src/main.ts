@@ -16,26 +16,31 @@ lens — Structured cognition compiler for humans and agents.
 Usage:
   lens <command> [options]
 
-Commands:
-  init                  First-time setup (~/.lens/ directory + config)
-  ingest <url|file>     Ingest and compile a web article or markdown file
-  note "<text>"         Record a quick note
-  show <id>             Show any object (claim, frame, question, source, programme)
-  search "<query>"      Search across all objects
-  context "<query>"     Assemble agent-ready context pack (JSON)
-  digest                Today's new insights, tensions, perspectives
-  digest week           This week's digest
-  digest month          This month's digest
-  digest year           This year in review
-  programme list|show   Programme management
-  feed add <url>        Subscribe to an RSS feed (auto-discovers from website URLs)
-  feed import <opml>    Import feeds from OPML file
-  feed list             List subscriptions
-  feed check            Check feeds and compile new articles
-  feed check --dry-run  Check without compiling
-  feed remove <id>      Unsubscribe
-  status                System status
-  rebuild-index         Rebuild SQLite cache from markdown files
+Explore:
+  list <type> [--filters]  Browse objects (claims, frames, questions, sources, programmes)
+  show <id>                Show full details of any object
+  search "<query>"         Full-text search across all objects
+  links <id>               Show all relationships (outgoing + incoming)
+  context "<query>"        Assemble agent-ready context pack (JSON)
+
+Write:
+  ingest <url|file>        Ingest and compile a web article or markdown file
+  note "<text>"            Record a quick note
+
+RSS:
+  feed add <url>           Subscribe (auto-discovers from website URLs)
+  feed import <opml>       Import from OPML file
+  feed list                List subscriptions
+  feed check [--dry-run]   Check feeds and compile new articles
+  feed remove <id>         Unsubscribe
+
+View:
+  digest [week|month|year] New insights, tensions, perspectives
+
+System:
+  init                     First-time setup
+  status                   System status
+  rebuild-index            Rebuild SQLite cache from markdown files
 
 Options:
   --json                Output as structured JSON (for agent consumption)

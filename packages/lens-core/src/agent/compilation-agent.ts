@@ -1,19 +1,22 @@
 /**
  * Compilation Agent.
  *
- * A short-lived agent that reads a source document, compares with existing
- * knowledge, and extracts NEW Claims, Frames, and Questions. It deduplicates
- * against existing Claims and identifies contradictions.
+ * A short-lived agent that reads a source document, uses lens CLI tools
+ * to explore existing knowledge, and extracts new Claims/Frames/Questions.
+ *
+ * The Agent has access to:
+ * - submit_extraction tool (to submit results)
+ * - bash tool (to run lens CLI commands for exploring existing knowledge)
+ *
+ * The Agent decides what to search, what to compare, how deep to explore.
+ * As LLMs improve, the Agent's exploration gets better — zero code changes.
  */
 
 import { Agent } from "@mariozechner/pi-agent-core";
 import { getModel } from "@mariozechner/pi-ai";
 import { Type } from "@sinclair/typebox";
 import type { AgentTool } from "@mariozechner/pi-agent-core";
-import { readdirSync, readFileSync, existsSync } from "fs";
-import { join } from "path";
-import { paths } from "../core/paths";
-import matter from "gray-matter";
+import { execSync } from "child_process";
 
 // ============================================================
 // Types for extraction output
@@ -28,9 +31,8 @@ export interface ExtractedClaim {
   evidence_locator?: string;
   structure_type?: string;
   warrant_description?: string;
-  // Dedup/relation fields
   relation_to_existing?: "new" | "supports" | "contradicts" | "duplicate";
-  existing_claim_id?: string; // if supports/contradicts/duplicate, which existing claim
+  existing_claim_id?: string;
 }
 
 export interface ExtractedFrame {
@@ -53,7 +55,7 @@ export interface CompilationResult {
 }
 
 // ============================================================
-// Tool schema
+// Tool schemas
 // ============================================================
 
 const ExtractionSchema = Type.Object({
@@ -90,73 +92,9 @@ const ExtractionSchema = Type.Object({
   suggested_programme: Type.Optional(Type.String()),
 });
 
-// ============================================================
-// Build existing knowledge context (FULL, not just 5 claims)
-// ============================================================
-
-interface ExistingClaim {
-  id: string;
-  statement: string;
-  qualifier: string;
-  scope: string;
-}
-
-function getExistingKnowledge(): { programmes: string[]; claims: ExistingClaim[] } {
-  const programmes: string[] = [];
-  const claims: ExistingClaim[] = [];
-
-  // Read all programmes
-  if (existsSync(paths.programmes)) {
-    for (const f of readdirSync(paths.programmes).filter(f => f.endsWith(".md"))) {
-      try {
-        const content = readFileSync(join(paths.programmes, f), "utf-8");
-        const parsed = matter(content);
-        programmes.push(`${f.replace(".md", "")}: ${parsed.data.title || "(untitled)"}`);
-      } catch {}
-    }
-  }
-
-  // Read ALL claims (statement + qualifier + scope + id)
-  if (existsSync(paths.claims)) {
-    for (const f of readdirSync(paths.claims).filter(f => f.endsWith(".md"))) {
-      try {
-        const content = readFileSync(join(paths.claims, f), "utf-8");
-        const parsed = matter(content);
-        if (parsed.data.statement) {
-          claims.push({
-            id: f.replace(".md", ""),
-            statement: parsed.data.statement,
-            qualifier: parsed.data.qualifier || "tentative",
-            scope: parsed.data.scope || "detail",
-          });
-        }
-      } catch {}
-    }
-  }
-
-  return { programmes, claims };
-}
-
-function formatExistingKnowledge(knowledge: { programmes: string[]; claims: ExistingClaim[] }): string {
-  const parts: string[] = [];
-
-  if (knowledge.programmes.length) {
-    parts.push("EXISTING PROGRAMMES:");
-    for (const p of knowledge.programmes) parts.push(`  - ${p}`);
-  }
-
-  if (knowledge.claims.length) {
-    parts.push(`\nEXISTING CLAIMS (${knowledge.claims.length} total):`);
-    parts.push("Check each new claim against these. Mark duplicates and contradictions.");
-    for (const c of knowledge.claims) {
-      parts.push(`  [${c.id}] [${c.qualifier}] [${c.scope}] "${c.statement}"`);
-    }
-  } else {
-    parts.push("No existing claims. This is the first source being compiled.");
-  }
-
-  return parts.join("\n");
-}
+const LensQuerySchema = Type.Object({
+  command: Type.String({ description: "A lens CLI command to run, e.g.: lens list claims --scope big_picture --json" }),
+});
 
 // ============================================================
 // System prompt
@@ -164,51 +102,60 @@ function formatExistingKnowledge(knowledge: { programmes: string[]; claims: Exis
 
 const SYSTEM_PROMPT = `You are a Compilation Agent for lens, a structured cognition compiler.
 
-Your task: read a source document, compare with existing knowledge, and extract ONLY genuinely new or conflicting insights.
+Your task: read a source document, explore existing knowledge, and extract ONLY genuinely new or conflicting insights.
 
-## What to Extract
+## Your Tools
 
-1. **Claims** — Falsifiable assertions with evidence
-2. **Frames** — Perspectives the article uses
-3. **Questions** — Genuine open questions raised
+1. **lens_query**: Run any lens CLI command to explore existing knowledge. Examples:
+   - lens list programmes --json          (see all research themes)
+   - lens list claims --scope big_picture --json  (see core beliefs)
+   - lens list claims --programme pgm_01 --json   (see claims in a programme)
+   - lens search "keyword" --json         (find claims by keyword)
+   - lens show clm_01 --json              (see full details of a claim)
+   - lens links clm_01 --json             (see what's connected to a claim)
+   - lens context "topic" --json          (get assembled context on a topic)
 
-## CRITICAL: Deduplication
+2. **submit_extraction**: Submit your extracted Claims, Frames, and Questions.
 
-Before creating each claim, check the EXISTING CLAIMS list provided. For each potential claim:
+## Your Process
 
-- If an existing claim says essentially the SAME thing (even with different wording): set relation_to_existing="duplicate" and existing_claim_id to that claim's ID. Still include the evidence_text — it will be added to the existing claim as additional evidence.
-- If an existing claim says something RELATED that this new evidence SUPPORTS: set relation_to_existing="supports" and existing_claim_id.
-- If an existing claim says something this article CONTRADICTS: set relation_to_existing="contradicts" and existing_claim_id.
-- If no existing claim is similar: set relation_to_existing="new" (or omit the field).
+1. Read the source document provided
+2. Identify key topics in the document
+3. Use lens_query to explore what's already known about those topics
+4. Compare the document's claims against existing knowledge
+5. Extract ONLY what's genuinely new, supporting, or contradicting
+6. Submit via submit_extraction
 
-This is the most important part of your job. Do NOT create duplicate claims.
+## Deduplication Rules
 
-## Claim Rules
+For each claim you consider extracting:
+- Search for related existing claims using lens_query
+- If an existing claim says essentially the SAME thing: mark relation_to_existing="duplicate" and set existing_claim_id. Still include evidence_text (it will be added as new evidence).
+- If an existing claim is SUPPORTED by new evidence: mark "supports" with existing_claim_id
+- If an existing claim is CONTRADICTED: mark "contradicts" with existing_claim_id
+- If genuinely new: mark "new" (or omit the field)
+
+## Claim Fields
 - statement: clear, falsifiable assertion
 - evidence_text: verbatim quote from source (50-300 chars)
 - qualifier: certain / likely / presumably / tentative
 - voice: extracted / restated / synthesized
-- scope: big_picture (overarching insight, key takeaway) / detail (specific evidence, supporting argument). Aim for 3-5 big_picture claims.
+- scope: big_picture (key takeaway, 3-5 per article) / detail (supporting evidence)
 - structure_type: taxonomy / causal / description / timeline / argument / content / story / process / relationships
-- warrant_description (optional): what perspective makes this valid
 
-## Frame Rules
+## Frame Fields
 - name: 2-5 words
-- sees: what this perspective reveals
-- ignores: what it overlooks
-- assumptions: what it takes for granted
+- sees / ignores / assumptions
 
-## Question Rules
-- Genuine OPEN questions the article raises but doesn't fully answer
+## Question Fields
+- text: genuine open question the article raises
+- question_status: open / tentative_answer
 
 ## Standards
 - 5-15 claims, 1-4 frames, 2-6 questions
 - Quality over quantity — skip trivial claims
-- SKIP claims that duplicate existing ones (mark as "duplicate" instead)
-
-Call submit_extraction with your results.
-If the document has a coherent theme, set suggested_programme to a descriptive title.
-If an existing programme matches, use its exact title.`;
+- SKIP claims that duplicate existing ones (mark as "duplicate")
+- If the document matches an existing programme, use its exact title for suggested_programme`;
 
 // ============================================================
 // Run the Compilation Agent
@@ -227,19 +174,15 @@ export async function runCompilationAgent(
 ): Promise<CompilationResult> {
   const log = onProgress || (() => {});
 
-  log("Building knowledge context...");
-  const knowledge = getExistingKnowledge();
-  const knowledgeText = formatExistingKnowledge(knowledge);
-  log(`Found ${knowledge.claims.length} existing claims, ${knowledge.programmes.length} programmes`);
-
   log("Starting Compilation Agent...");
 
   const result: CompilationResult = { claims: [], frames: [], questions: [] };
   let toolCalled = false;
 
+  // Tool 1: submit_extraction
   const submitTool: AgentTool<typeof ExtractionSchema> = {
     name: "submit_extraction",
-    description: "Submit extracted Claims, Frames, and Questions from the source document. Mark duplicates and contradictions with existing claims.",
+    description: "Submit extracted Claims, Frames, and Questions. Mark duplicates and contradictions with existing claims.",
     label: "Submit Extraction",
     parameters: ExtractionSchema,
     execute: async (toolCallId, params) => {
@@ -253,21 +196,72 @@ export async function runCompilationAgent(
         result.suggested_programme = p.suggested_programme;
       }
 
-      // Count relations
       const newCount = p.claims.filter(c => !c.relation_to_existing || c.relation_to_existing === "new").length;
       const dupCount = p.claims.filter(c => c.relation_to_existing === "duplicate").length;
       const supCount = p.claims.filter(c => c.relation_to_existing === "supports").length;
       const conCount = p.claims.filter(c => c.relation_to_existing === "contradicts").length;
 
-      log(`Received: ${p.claims.length} claims (${newCount} new, ${dupCount} duplicate, ${supCount} supports, ${conCount} contradicts), ${p.frames.length} frames, ${p.questions.length} questions`);
+      log(`Received: ${p.claims.length} claims (${newCount} new, ${dupCount} dup, ${supCount} supports, ${conCount} contradicts), ${p.frames.length} frames, ${p.questions.length} questions`);
 
       return {
-        content: [{
-          type: "text" as const,
-          text: `Extraction received. ${newCount} new claims, ${dupCount} duplicates, ${supCount} supporting, ${conCount} contradicting.`,
-        }],
+        content: [{ type: "text" as const, text: `Extraction received. ${newCount} new, ${dupCount} duplicates, ${supCount} supporting, ${conCount} contradicting.` }],
         details: {},
       };
+    },
+  };
+
+  // Tool 2: lens_query — run any lens CLI command
+  const lensQueryTool: AgentTool<typeof LensQuerySchema> = {
+    name: "lens_query",
+    description: "Run a lens CLI command to explore existing knowledge. The command must start with 'lens' and include '--json'. Examples: 'lens list claims --scope big_picture --json', 'lens search \"quality\" --json', 'lens show clm_01 --json', 'lens links clm_01 --json'",
+    label: "Query Lens Knowledge Base",
+    parameters: LensQuerySchema,
+    execute: async (toolCallId, params) => {
+      let cmd = params.command.trim();
+
+      // Ensure --json flag
+      if (!cmd.includes("--json")) cmd += " --json";
+
+      // Security: only allow lens commands
+      if (!cmd.startsWith("lens ")) {
+        return {
+          content: [{ type: "text" as const, text: "Error: command must start with 'lens'" }],
+          details: {},
+        };
+      }
+
+      // Don't allow write commands
+      if (cmd.includes("ingest") || cmd.includes("note") || cmd.includes("init") || cmd.includes("feed")) {
+        return {
+          content: [{ type: "text" as const, text: "Error: only read commands are allowed (list, show, search, links, context, programme, status)" }],
+          details: {},
+        };
+      }
+
+      try {
+        // Run via the current process's bun
+        const bunPath = process.execPath || "bun";
+        const mainPath = new URL("../main.ts", import.meta.url).pathname;
+        const lensCmd = cmd.replace(/^lens\s+/, "");
+        const output = execSync(`"${bunPath}" run "${mainPath}" ${lensCmd}`, {
+          encoding: "utf-8",
+          timeout: 10000,
+          env: { ...process.env },
+        });
+
+        log(`  lens_query: ${cmd.substring(0, 60)}...`);
+
+        return {
+          content: [{ type: "text" as const, text: output.substring(0, 8000) }], // cap output
+          details: {},
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Error running command: ${msg.substring(0, 500)}` }],
+          details: {},
+        };
+      }
     },
   };
 
@@ -277,7 +271,7 @@ export async function runCompilationAgent(
     initialState: {
       systemPrompt: SYSTEM_PROMPT,
       model,
-      tools: [submitTool],
+      tools: [submitTool, lensQueryTool],
       messages: [],
     },
     getApiKey: async (provider: string) => {
@@ -286,7 +280,8 @@ export async function runCompilationAgent(
     },
   });
 
-  const userMessage = `## Existing Knowledge\n\n${knowledgeText}\n\n---\n\n## Source Document\n\n**Title**: ${sourceTitle}\n\n<source_document>\n${sourceContent}\n</source_document>\n\nExtract Claims, Frames, and Questions. For each claim, check against the existing claims list above and mark the relationship (new/duplicate/supports/contradicts).`;
+  // User message: just the source document. No manually injected existing claims.
+  const userMessage = `## Source Document to Compile\n\n**Title**: ${sourceTitle}\n**Source ID**: ${sourceId}\n\n<source_document>\n${sourceContent}\n</source_document>\n\nFirst, use lens_query to explore what's already in the knowledge base about the topics in this article. Then extract Claims, Frames, and Questions, marking relationships to existing claims. Call submit_extraction with your results.`;
 
   await agent.prompt(userMessage);
   await agent.waitForIdle();
@@ -295,7 +290,7 @@ export async function runCompilationAgent(
     throw new Error("Compilation Agent did not produce any extraction.");
   }
 
-  // Validate structure_type values
+  // Validate structure_type
   for (const claim of result.claims) {
     if (claim.structure_type && !VALID_STRUCTURE_TYPES.has(claim.structure_type)) {
       claim.structure_type = undefined;

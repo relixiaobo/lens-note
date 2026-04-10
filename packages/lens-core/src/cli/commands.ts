@@ -61,6 +61,19 @@ async function noteCommand(args: string[], opts: CommandOptions) {
   await createNote(text, opts);
 }
 
+async function listCommand(args: string[], opts: CommandOptions) {
+  const { listCommand: listCmd } = await import("./list");
+  await listCmd(args, opts);
+}
+
+async function linksCommand(args: string[], opts: CommandOptions) {
+  const { positional } = parseCliArgs(args);
+  const id = positional[0];
+  if (!id) throw new Error("Usage: lens links <id>");
+  const { showLinks } = await import("./links");
+  await showLinks(id, opts);
+}
+
 async function showCommand(args: string[], opts: CommandOptions) {
   const { positional } = parseCliArgs(args);
   const id = positional[0];
@@ -132,6 +145,8 @@ export const commands: Record<string, CommandHandler> = {
   ingest: ingestCommand,
   context: contextCommand,
   programme: programmeCommand,
+  list: listCommand,
+  links: linksCommand,
   digest: digestCommand,
   feed: feedCommand,
   "rebuild-index": rebuildIndexCommand,
