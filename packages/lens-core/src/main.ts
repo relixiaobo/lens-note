@@ -24,6 +24,8 @@ Commands:
   search "<query>"      Search across all objects
   context "<query>"     Assemble agent-ready context pack (JSON)
   programme list|show   Programme management
+  feed add|list|check   RSS feed subscription and auto-ingest
+  feed remove <id>      Unsubscribe from a feed
   status                System status
   rebuild-index         Rebuild SQLite cache from markdown files
 

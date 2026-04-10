@@ -14,6 +14,7 @@ interface ContextClaim {
   statement: string;
   qualifier: string;
   voice: string;
+  scope: string;
   structure_type?: string;
   evidence: { text: string; source: string; locator?: string }[];
   warrant_frame?: { id: string; name: string; sees: string } | null;
@@ -50,6 +51,7 @@ function hydrateClaim(claim: Claim): ContextClaim {
     statement: claim.statement,
     qualifier: claim.qualifier,
     voice: claim.voice,
+    scope: claim.scope || "detail",
     structure_type: claim.structure_type,
     evidence: claim.evidence || [],
     warrant_frame: warrantFrame,
@@ -129,14 +131,22 @@ export async function assembleContext(query: string, opts: CommandOptions) {
     }
   }
 
+  // Apply --scope filter if provided
+  const scopeFilter = opts.scope as string | undefined;
+  let filteredClaims = Array.from(claimMap.values());
+  if (scopeFilter === "big_picture") {
+    filteredClaims = filteredClaims.filter((c) => (c as any).scope === "big_picture");
+  }
+
   const pack = {
     query,
+    scope: scopeFilter || "all",
     timestamp: new Date().toISOString(),
-    claims: Array.from(claimMap.values()),
+    claims: filteredClaims,
     frames: Array.from(frameMap.values()),
     questions: Array.from(questionMap.values()),
     programmes: Array.from(programmeSet.entries()).map(([id, title]) => ({ id, title })),
-    total_results: claimMap.size + frameMap.size + questionMap.size,
+    total_results: filteredClaims.length + frameMap.size + questionMap.size,
   };
 
   console.log(JSON.stringify(pack, null, 2));

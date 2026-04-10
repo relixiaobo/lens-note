@@ -79,18 +79,30 @@ async function showProgramme(id: string, opts: CommandOptions) {
   // Read each member's key data
   const claims = claimIds.map((cid) => {
     const c = readObject(cid);
-    return c ? { id: cid, statement: c.data.statement, qualifier: c.data.qualifier } : null;
-  }).filter(Boolean);
+    return c ? { id: cid, statement: c.data.statement, qualifier: c.data.qualifier, scope: c.data.scope || "detail", structure_type: c.data.structure_type } : null;
+  }).filter(Boolean) as { id: string; statement: string; qualifier: string; scope: string; structure_type?: string }[];
 
   const frames = frameIds.map((fid) => {
     const f = readObject(fid);
-    return f ? { id: fid, name: f.data.name, sees: f.data.sees } : null;
-  }).filter(Boolean);
+    return f ? { id: fid, name: f.data.name, sees: f.data.sees, ignores: f.data.ignores } : null;
+  }).filter(Boolean) as { id: string; name: string; sees: string; ignores: string }[];
 
   const questions = questionIds.map((qid) => {
     const q = readObject(qid);
     return q ? { id: qid, text: q.data.text, status: q.data.question_status } : null;
-  }).filter(Boolean);
+  }).filter(Boolean) as { id: string; text: string; status: string }[];
+
+  // Sort claims: big_picture first, then by qualifier
+  const qualifierOrder: Record<string, number> = { certain: 0, likely: 1, presumably: 2, tentative: 3 };
+  claims.sort((a, b) => {
+    const scopeA = a.scope === "big_picture" ? 0 : 1;
+    const scopeB = b.scope === "big_picture" ? 0 : 1;
+    if (scopeA !== scopeB) return scopeA - scopeB;
+    return (qualifierOrder[a.qualifier] ?? 9) - (qualifierOrder[b.qualifier] ?? 9);
+  });
+
+  const bigPicture = claims.filter((c) => c.scope === "big_picture");
+  const details = claims.filter((c) => c.scope !== "big_picture");
 
   if (opts.json) {
     console.log(JSON.stringify({
@@ -98,29 +110,54 @@ async function showProgramme(id: string, opts: CommandOptions) {
       members: { claims, frames, questions },
     }, null, 2));
   } else {
-    console.log(`--- Programme: ${id} ---`);
-    console.log(`Title: ${obj.data.title}`);
-    console.log(`Description: ${obj.data.description || "(none)"}\n`);
+    const qualifierBar: Record<string, string> = { certain: "■■■", likely: "■■ ", presumably: "■  ", tentative: "·  " };
 
-    if (claims.length) {
-      console.log(`Claims (${claims.length}):`);
-      for (const c of claims) {
-        console.log(`  [${c!.qualifier}] ${c!.statement}`);
+    console.log(`${obj.data.title}`);
+    console.log(`${"━".repeat(Math.min(obj.data.title.length, 60))}\n`);
+
+    if (bigPicture.length) {
+      console.log(`Overview`);
+      for (const c of bigPicture) {
+        const bar = qualifierBar[c.qualifier] || "   ";
+        const tag = c.structure_type ? ` [${c.structure_type}]` : "";
+        console.log(`  ${bar} ${c.statement}${tag}`);
+      }
+      console.log();
+    }
+
+    if (details.length) {
+      const showDetails = opts["full"] === true;
+      if (showDetails) {
+        console.log(`Details`);
+        for (const c of details) {
+          const bar = qualifierBar[c.qualifier] || "   ";
+          const tag = c.structure_type ? ` [${c.structure_type}]` : "";
+          console.log(`  ${bar} ${c.statement}${tag}`);
+        }
+        console.log();
+      } else {
+        console.log(`Details: ${details.length} claims (use --full to show)\n`);
       }
     }
 
     if (frames.length) {
-      console.log(`\nFrames (${frames.length}):`);
+      console.log(`Perspectives`);
       for (const f of frames) {
-        console.log(`  ${f!.name} — sees: ${f!.sees}`);
+        console.log(`  ◆ ${f.name}`);
+        console.log(`    sees: ${f.sees}`);
+        if (f.ignores) console.log(`    ignores: ${f.ignores}`);
       }
+      console.log();
     }
 
     if (questions.length) {
-      console.log(`\nQuestions (${questions.length}):`);
+      console.log(`Open Questions`);
       for (const q of questions) {
-        console.log(`  [${q!.status}] ${q!.text}`);
+        console.log(`  ? ${q.text}`);
       }
+      console.log();
     }
+
+    console.log(`${claimIds.length} claims · ${frameIds.length} frames · ${questionIds.length} questions`);
   }
 }

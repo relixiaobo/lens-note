@@ -82,6 +82,7 @@ export function processAgentOutput(
         locator: ec.evidence_locator,
       }],
       structure_type: ec.structure_type as any,
+      scope: ec.scope,
       programmes: programmeId ? [programmeId] : undefined,
       source: sourceId,
       status: "active",

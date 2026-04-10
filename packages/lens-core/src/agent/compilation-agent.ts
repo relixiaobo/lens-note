@@ -23,6 +23,7 @@ export interface ExtractedClaim {
   statement: string;
   qualifier: "certain" | "likely" | "presumably" | "tentative";
   voice: "extracted" | "restated" | "synthesized";
+  scope: "big_picture" | "detail";
   evidence_text: string;
   evidence_locator?: string;
   structure_type?: string;
@@ -61,6 +62,9 @@ const ExtractionSchema = Type.Object({
     ]),
     voice: Type.Union([
       Type.Literal("extracted"), Type.Literal("restated"), Type.Literal("synthesized"),
+    ]),
+    scope: Type.Union([
+      Type.Literal("big_picture"), Type.Literal("detail"),
     ]),
     evidence_text: Type.String(),
     evidence_locator: Type.Optional(Type.String()),
@@ -142,6 +146,7 @@ Your task: read a source document and extract structured knowledge objects.
 - evidence_text: verbatim quote from source (50-300 chars)
 - qualifier: certain / likely / presumably / tentative
 - voice: extracted / restated / synthesized
+- scope: big_picture (overarching insight, the key takeaway) / detail (specific evidence, data point, supporting argument). Aim for 3-5 big_picture claims and the rest as detail.
 - structure_type: taxonomy / causal / description / timeline / argument / content / story / process / relationships
 - warrant_description (optional): what perspective makes this valid
 

@@ -33,6 +33,8 @@ export type StructureType =
   | "process"
   | "relationships";
 
+export type ClaimScope = "big_picture" | "detail";
+
 export type ObjectType = "source" | "claim" | "frame" | "question" | "programme" | "thread";
 
 export type SourceType = "web_article" | "markdown" | "plain_text" | "manual_note";
@@ -85,6 +87,7 @@ export interface Claim {
   voice: Voice;
   evidence: Evidence[];
   structure_type?: StructureType;
+  scope?: ClaimScope; // big_picture = overarching insight, detail = specific evidence/support
 
   // Typed relationship fields
   warrant_frame?: string; // Frame ID: which perspective makes this claim valid
