@@ -107,6 +107,11 @@ async function programmeCommand(args: string[], opts: CommandOptions) {
   await handleProgramme(sub, args.slice(1), opts);
 }
 
+async function digestCommand(args: string[], opts: CommandOptions) {
+  const { showDigest } = await import("./digest");
+  await showDigest(args, opts);
+}
+
 async function feedCommand(args: string[], opts: CommandOptions) {
   const sub = args[0];
   const { handleFeed } = await import("./feed");
@@ -127,6 +132,7 @@ export const commands: Record<string, CommandHandler> = {
   ingest: ingestCommand,
   context: contextCommand,
   programme: programmeCommand,
+  digest: digestCommand,
   feed: feedCommand,
   "rebuild-index": rebuildIndexCommand,
 };

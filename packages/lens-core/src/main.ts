@@ -23,6 +23,8 @@ Commands:
   show <id>             Show any object (claim, frame, question, source, programme)
   search "<query>"      Search across all objects
   context "<query>"     Assemble agent-ready context pack (JSON)
+  digest                Today's new insights, tensions, perspectives
+  digest --days 7       Last N days
   programme list|show   Programme management
   feed add|list|check   RSS feed subscription and auto-ingest
   feed remove <id>      Unsubscribe from a feed
