@@ -2,133 +2,182 @@
 
 ## Project Overview
 
-**lens** is a structured cognition compiler — it compiles articles, notes, and conversations into structured Claims (Toulmin-structured assertions), Frames (perspectives), and Questions (open inquiries), organized into Programmes (Lakatos research programmes). Two equal users: humans (GUI) and agents (CLI).
+**lens** is a structured cognition compiler — it compiles articles into structured Claims (assertions with evidence), Frames (perspectives), and Questions (open inquiries), organized into Programmes (research themes). Two equal users: humans (GUI) and agents (CLI).
 
-**Status**: Design docs complete. Ready for v0.1 implementation. Run extraction spike first.
+**Status**: v0.1 CLI implementation complete. 6 commits, TypeScript zero errors, tested with real articles and RSS feeds.
 
 ## Architecture Summary
 
 ```
-lens.app (Tauri 2)
-├── lens-tauri (Rust)         — Thin IPC shell, sidecar lifecycle
-├── lens-ui (React 19)        — GUI views (Reader, Programme Dashboard, Claim Detail, Settings)
-└── lens-core (Bun-compiled)  — All business logic, CLI, Compilation Agent, LLM calls
+lens-core (Bun-compiled single binary, 63MB)
+├── CLI entry point (src/main.ts)
+├── Compilation Agent (pi-agent-core + pi-ai)
+│   Reads source → explores existing knowledge → extracts Claims/Frames/Questions
+├── Storage (File-as-Truth + SQLite derived cache)
+│   Markdown files = truth, bun:sqlite FTS5 = search cache
+├── RSS feeds (feedsmith, OPML import, autodiscovery)
+└── Web extraction (Defuddle + Turndown → markdown)
 ```
 
-Storage: **Markdown files = source of truth**, SQLite = derived cache (rebuildable via `lens rebuild-index`).
+GUI (Tauri + React) planned for v0.2. Currently CLI-only.
 
-## Tech Stack — What Each Piece Does
+## Working CLI Commands
 
-| Technology | Package | Purpose |
+```bash
+# Core
+lens init                    # First-time setup (~/.lens/)
+lens ingest <url|file>       # Fetch + Compilation Agent → Claims/Frames/Questions
+lens note "<text>"           # Quick note
+lens show <id>               # Show any object (source: contributions, claim: evidence)
+lens search "<query>"        # FTS5 full-text search
+lens context "<query>"       # Agent-ready JSON context pack
+lens context "<q>" --scope big_picture  # Overview only (3-5 core Claims)
+
+# Programmes
+lens programme list          # List all Programmes with member counts
+lens programme show <id>     # 2-level display: Overview + Details (use --full)
+
+# Digest (temporal views)
+lens digest                  # Today's new insights, tensions, perspectives
+lens digest week             # This week
+lens digest month            # This month (compact)
+lens digest year             # This year (compact)
+
+# RSS Feeds
+lens feed add <url>          # Subscribe (auto-discovers RSS from website URLs)
+lens feed import <file.opml> # Import from Reeder/Feedly/Inoreader
+lens feed list               # List subscriptions
+lens feed check              # Check all feeds, compile new articles
+lens feed check --dry-run    # Check without compiling
+lens feed remove <id|url>    # Unsubscribe
+
+# Maintenance
+lens status                  # System status (object counts, cache size)
+lens rebuild-index           # Rebuild SQLite cache from markdown files
+
+# All commands support --json for agent consumption
+```
+
+## Tech Stack
+
+| Technology | Purpose |
+|---|---|
+| **Bun** | Runtime + compile to single binary (`bun build --compile`) |
+| **bun:sqlite** | Built-in SQLite binding. FTS5 search + links table. Derived cache. |
+| **pi-ai** | Unified LLM API (20+ providers). v0.1 uses Anthropic Claude Sonnet 4.6. |
+| **pi-agent-core** | Agent runtime. Each ingest spawns a Compilation Agent. |
+| **Defuddle + linkedom** | Web article extraction → clean HTML |
+| **Turndown** | HTML → Markdown conversion |
+| **feedsmith** | RSS/Atom/RDF/JSON Feed parsing + OPML import |
+| **gray-matter** | YAML frontmatter parsing for markdown files |
+| **ulid** | Time-sortable unique ID generation |
+| **zod** | Runtime schema validation |
+| **pnpm** | Monorepo workspace manager |
+
+## Data Model
+
+6 object types, all stored as `type/id.md`:
+
+| Type | Prefix | Key Fields |
 |---|---|---|
-| **Tauri 2** | `lens-tauri` | Desktop app shell. Rust handles IPC, sidecar management, OS integration. We write minimal Rust. |
-| **React 19** | `lens-ui` | GUI frontend. Renders inside Tauri's WebView. |
-| **Vite** | `lens-ui` | Frontend dev server and build tool. Tauri's recommended bundler. |
-| **TypeScript 5.5** | all packages | Type safety across the entire codebase. Strict mode. |
-| **Tailwind CSS 4** | `lens-ui` | Utility-first styling. "Clean Paper" design system. |
-| **Zustand** | `lens-ui` | Lightweight state management (4KB). Replaces Redux. |
-| **shadcn/ui** | `lens-ui` | Accessible UI components built on Radix UI primitives. |
-| **TipTap + ProseMirror** | `lens-ui` | Rich text editor for Claim/Frame editing and Source reading. |
-| **Bun** | `lens-core` | Compiles TypeScript to single native binary (`bun build --compile`). Fast startup (~50ms). |
-| **pi-ai** (`@mariozechner/pi-ai`) | `lens-core` | Unified LLM API. Wraps 20+ providers (Anthropic, OpenAI, etc). Tool calling, streaming, cost tracking. v0.1 uses Anthropic only. |
-| **pi-agent-core** (`@mariozechner/pi-agent-core`) | `lens-core` | Agent runtime for document compilation. Each ingest spawns a short-lived agent with read/grep/ls/bash tools. |
-| **bun:sqlite** | `lens-core` | Bun's built-in SQLite binding (replaces better-sqlite3). Powers the derived cache (FTS5 full-text search, relation index). No N-API needed. |
-| **sqlite-vec** | `lens-core` | SQLite extension for vector similarity search. v0.2 only. |
-| **Defuddle + linkedom** | `lens-core` | Web article extraction. Strips ads/nav, produces clean markdown. Better than Mozilla Readability. |
-| **gray-matter** | `lens-core` | Parses YAML frontmatter from markdown files (our source of truth format). |
-| **ulid** | `lens-core` | Generates time-sortable unique IDs (e.g. `clm_01HXY2K8WJ...`). |
-| **zod** | `lens-core` | Runtime schema validation for objects read from files or LLM output. |
-| **pnpm** | root | Monorepo workspace manager. 3 packages: lens-core, lens-ui, lens-tauri. |
+| **Source** | `src_` | title, url, word_count, source_type |
+| **Claim** | `clm_` | statement, qualifier, voice, scope, evidence[], structure_type |
+| **Frame** | `frm_` | name, sees, ignores, assumptions[] |
+| **Question** | `q_` | text, question_status |
+| **Programme** | `pgm_` | title, description (members reverse-queried) |
+| **Thread** | `thr_` | title, references[], started_from |
 
-## Monorepo Structure
+Key design choices:
+- **Typed fields** for relationships (not universal edges). Validated by research.
+- **Evidence inline** in Claims (no separate Excerpt type). Source file has full text.
+- **Programme doesn't store member lists** — reverse-queried via links table.
+- **scope** field on Claims: `big_picture` (3-5 core insights) vs `detail` (supporting evidence). Drives 2-level display.
+- **Related** field as escape hatch for untyped associations.
+
+## Storage Layout
 
 ```
-lens/
-├── CLAUDE.md              # This file
-├── docs/                   # Design documents
-│   ├── positioning.md      # What lens is (source of truth for product decisions)
-│   ├── architecture.md     # How lens is built (tech stack, components)
-│   ├── methodology.md      # How lens thinks (5 traditions, compile lifecycle)
-│   ├── schema.md           # Data types (source of truth for code)
-│   ├── source-pipeline.md  # How lens ingests data
-│   ├── roadmap.md          # Build order (v0.1 → v1.0)
-│   ├── references.md       # ~120 academic/product references
-│   ├── getting-started.md  # Onboarding for new agents/developers
-│   └── launch-post-draft.md
-├── spike/                  # Pre-product validation
-│   ├── extraction-spike.ts # LLM extraction quality test (run BEFORE product code)
-│   └── README.md
-├── skills/                 # Agent integration
-│   └── lens.claude-skill.md  # Claude Code Skill definition
-├── packages/
-│   ├── lens-core/          # Bun-compiled TS: CLI + Compilation Agent + LLM + storage
-│   ├── lens-ui/            # React 19 + Tauri frontend
-│   └── lens-tauri/         # Rust shell (thin IPC layer)
-├── tests/
-└── scripts/
+~/.lens/
+├── sources/src_01.md        # Every object = type/id.md
+├── claims/clm_01.md         # Frontmatter (≤20 lines) + body
+├── frames/frm_01.md
+├── questions/q_01.md
+├── programmes/pgm_01.md     # Minimal: title + description
+├── threads/thr_01.md
+├── raw/                      # Original files (HTML, etc.)
+│   └── src_01.html
+├── feeds.json                # RSS feed subscriptions
+├── index.sqlite              # Derived cache (FTS5 + links), rebuildable
+└── config.yaml
 ```
 
 ## Key Design Decisions
 
-1. **File-as-Truth**: Markdown files with lean YAML frontmatter (≤20 lines) are the source of truth. SQLite is a derived cache that can be rebuilt. Reason: iCloud sync compatibility + data liberation.
-2. **CLI is the agent interface**: All commands support `--json`. No MCP server in v0.1. Agents use bash to call `lens context/search/show/note`.
-3. **pi-ai over direct Anthropic SDK**: Unified provider interface. v0.1 uses Anthropic, v0.2 adds OpenAI/Gemini with zero code change.
-4. **Compilation Agent over fixed pipeline**: Each document ingest spawns a short-lived Compilation Agent (via pi-agent-core) that autonomously reads the source, explores existing knowledge, and extracts Claims/Frames/Questions. The agent uses pi's built-in tools (read, grep, ls, bash) — no custom tools. Agent outputs structured JSON; lens-core processes it (ULID generation, schema validation, file writing, cache update).
-5. **No redundancy in files**: Claim body contains LLM-generated explanation, NOT copies of evidence text. Evidence inlining happens at query time via `lens context --json`.
+1. **File-as-Truth**: Markdown files = source of truth. SQLite = derived cache (rebuildable). Reason: iCloud sync + data liberation.
+2. **Compilation Agent**: Each `lens ingest` spawns a pi-agent-core agent that reads the source, explores existing knowledge, and extracts structured objects. Not a fixed pipeline.
+3. **CLI + Skill as agent interface**: All commands support `--json`. Agents use bash. No MCP in v0.1.
+4. **scope-based hierarchy**: Claims have `big_picture` or `detail` scope. Programme view shows Overview (3-5 core Claims) + Details (folded). Based on Reif/Miller and Minto Pyramid research.
+5. **No LLM synthesis for display**: Structured data is rendered directly. No extra LLM call to generate narratives.
+6. **RSS as input pipeline**: Feeds are checked, articles compiled. Results appear in digest/programme views. Feed management is in Settings, not a primary view.
 
-## Document Priority (on conflict)
+## Project Structure
 
 ```
-schema.md     wins over  methodology.md    (schema = executable constraint)
-architecture.md  wins over  roadmap.md     (architecture = tech decisions)
-positioning.md   wins over  everything     (positioning = product truth)
+lens/
+├── CLAUDE.md                 # This file
+├── packages/lens-core/       # ALL code lives here
+│   └── src/
+│       ├── main.ts           # CLI entry point
+│       ├── cli/              # Command handlers
+│       │   ├── commands.ts   # Command registry + arg parsing
+│       │   ├── digest.ts     # lens digest (temporal views)
+│       │   ├── feed.ts       # lens feed (RSS management)
+│       │   ├── ingest.ts     # lens ingest (fetch + compile)
+│       │   ├── context.ts    # lens context (agent JSON)
+│       │   ├── programme.ts  # lens programme (scope display)
+│       │   ├── show.ts       # lens show (source contributions, claim evidence)
+│       │   ├── search.ts     # lens search (FTS5)
+│       │   ├── note.ts       # lens note
+│       │   ├── init.ts       # lens init
+│       │   ├── status.ts     # lens status
+│       │   └── rebuild-index.ts
+│       ├── core/             # Storage + types
+│       │   ├── types.ts      # All TypeScript types
+│       │   ├── storage.ts    # File I/O + SQLite cache + links
+│       │   └── paths.ts      # File path resolution
+│       ├── agent/            # Compilation Agent
+│       │   ├── compilation-agent.ts  # pi-agent-core integration
+│       │   └── process-output.ts     # Agent output → lens objects
+│       ├── sources/          # Content extraction
+│       │   ├── web.ts        # Defuddle + Turndown
+│       │   └── file.ts       # Local file reading
+│       └── feeds/            # RSS
+│           ├── feed-store.ts # Feed subscription storage
+│           └── feed-checker.ts # Feed polling + parsing
+├── spike/                    # Validation scripts
+├── skills/                   # Agent skill definitions
+├── docs/                     # Design documents
+└── dist/lens                 # Compiled binary (63MB)
 ```
 
-## Current v0.1 Scope
-
-**Core validation goal**: Can an LLM extract structured Claims/Frames/Questions that users trust?
-
-- 3 immutable source types: `web_article` (Defuddle), `markdown/plain_text`, `manual_note`
-- Compilation Agent reads source, explores existing knowledge, extracts Claims/Frames/Questions
-- GUI: Welcome + Programme Dashboard + Reader + Claim Detail + Settings
-- CLI: `lens init/ingest/note/context/show/search/programme/status` (all support `--json`)
-- Search: SQLite FTS5 only (no embedding/vector until v0.2)
-- Distribution: `npm install -g lens-cli`
-
-**Not in v0.1**: PDF, chat ingest, growing sources, auto-check, Bayesian updates, anomaly detection, embedding, Knowledge Maps, ConceptAnatomy, MCP server, multi-provider.
-
-## Development Commands
+## Development
 
 ```bash
-pnpm install              # Install all dependencies
-pnpm dev                  # Start full Tauri dev environment
-pnpm typecheck            # TypeCheck all packages
-pnpm test                 # Run all tests
-pnpm lint                 # ESLint + Biome
-pnpm build:sidecar        # Compile lens-core to binary
-pnpm build:ui             # Compile React frontend
-pnpm build:app            # Compile Tauri app (macOS DMG)
+pnpm install                                    # Install dependencies
+bun run packages/lens-core/src/main.ts <cmd>    # Run CLI in dev mode
+bun build --compile packages/lens-core/src/main.ts --outfile dist/lens  # Compile binary
+npx tsc --noEmit --project packages/lens-core/tsconfig.json  # Type check
 ```
-
-## Before Modifying Code
-
-1. Check which package you're modifying: `lens-core` / `lens-ui` / `lens-tauri`
-2. Check which roadmap phase the change belongs to (see `docs/roadmap.md`)
-3. If changing schema: update `docs/schema.md` first (it's the source of truth)
-4. If changing Compilation Agent: read `docs/methodology.md` § Compilation Lifecycle
-5. If changing source ingest: read `docs/source-pipeline.md`
-6. Frontmatter for any object must stay ≤ 20 lines YAML. If it exceeds this, the schema needs simplification.
 
 ## Language Rules
 
-- **Reply to the user in Chinese (中文)**. The user's working language is Chinese. All conversational responses, explanations, questions, and status updates must be in Chinese.
-- **All project artifacts in English**: code, code comments, commit messages, documentation (docs/*.md), CLI output, error messages, variable/function/type names, YAML frontmatter fields, log messages.
-- In short: talk to the human in Chinese, write to the codebase in English.
+- **Reply to the user in Chinese (中文)**. All conversational responses in Chinese.
+- **All project artifacts in English**: code, comments, commits, docs, CLI output, error messages.
 
 ## Style and Conventions
 
-- Field names: `snake_case` (`confidence_history`, `structure_type`)
-- Enum values: `snake_case` (`"big_picture"`, `"not_started"`)
-- Type names: `PascalCase` (`Claim`, `FrameId`)
+- Field names: `snake_case`
+- Enum values: `snake_case`
+- Type names: `PascalCase`
 - ID format: `<prefix>_<ULID>` (e.g. `clm_01HXY2K8WJ3F6N9Q0V5T7M2R8Z`)
-- ID prefixes: `pgm` (Programme), `src` (Source), `exc` (Excerpt), `clm` (Claim), `frm` (Frame), `q` (Question)
+- ID prefixes: `src` (Source), `clm` (Claim), `frm` (Frame), `q` (Question), `pgm` (Programme), `thr` (Thread)
