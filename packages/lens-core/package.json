@@ -24,7 +24,6 @@
     "@types/turndown": "^5.0.6",
     "defuddle": "^0.15.0",
     "feedsmith": "^2.9.1",
-    "gray-matter": "^4.0.3",
     "linkedom": "^0.18.12",
     "tsup": "^8.5.1",
     "tsx": "^4.0.0",

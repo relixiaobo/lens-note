@@ -4,14 +4,14 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — it stores, queries, and links. Any agent can use it. No API keys, no LLM dependencies.
 
-**Status**: v0.3.0. Pure infrastructure. Zero LLM dependency. 5 core commands for agents.
+**Status**: v0.4.0. Pure infrastructure. Zero LLM dependency. 5 core commands for agents.
 
-**Key docs**: `docs/product-vision.md`, `docs/product-evolution.md`, `docs/refactor-plan.md`.
+**Key docs**: `docs/product-vision.md`, `docs/product-evolution.md`.
 
 ## Architecture
 
 ```
-lens CLI (npm package, runs on Node.js via tsx)
+lens CLI (npm package, compiled JS via tsup)
 ├── Storage (File-as-Truth + SQLite derived cache)
 │   Markdown files = truth, better-sqlite3 FTS5 = search cache
 ├── Write API (lens write: note/source/link/update/delete/batch)
@@ -83,7 +83,7 @@ lens/
 │   │   ├── search.ts        # lens search (FTS5 + CJK)
 │   │   ├── show.ts, list.ts, links.ts, context.ts
 │   │   ├── status.ts        # Stats + graph health
-│   │   ├── digest.ts, status.ts, note.ts, ingest.ts
+│   │   ├── digest.ts, note.ts, ingest.ts
 │   │   ├── feed.ts, init.ts, rebuild-index.ts
 │   ├── core/
 │   │   ├── types.ts         # Source, Note, Thread
@@ -107,7 +107,7 @@ lens/
 pnpm install
 npx tsx packages/lens-core/src/main.ts <cmd>    # Dev mode
 npx tsc --noEmit --project packages/lens-core/tsconfig.json  # Type check
-npx lens-cli <cmd>                               # After npm publish
+npx lens-note <cmd>                               # After npm publish
 ```
 
 ## Language Rules

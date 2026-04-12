@@ -272,7 +272,7 @@ Agent reads skill file → learns 5 commands → uses lens as storage
 
 5 agent-facing commands: `search`, `show`, `write`, `fetch`, `status`.
 
-The skill file (`skills/lens.claude-skill.md`) teaches agents the workflows:
+The skill file (`skills/SKILL.md`) teaches agents the workflows:
 - Compile: fetch → search → think → write
 - Curate: status → show orphans → search related → write links
 - Answer: search → show → synthesize
@@ -286,7 +286,7 @@ Intelligence moved from code (compilation-agent.ts) to documentation (skill file
 - **Infrastructure outlasts applications.** Git survived every IDE. lens should survive every agent.
 - **Fewer dependencies = more reliable.** 164 packages removed. Zero streaming bugs. Zero API key issues.
 
-### Current State (v0.3.0)
+### Current State (v0.4.0)
 
 - 756 Notes, 174 Sources
 - 0 LLM dependencies

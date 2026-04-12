@@ -38,7 +38,7 @@ That's it. Claude Code now knows how to use lens. Try:
 
 ## Use with Any Agent
 
-Any agent that can run bash commands can use lens. The [skill file](https://github.com/relixiaobo/lens-note-plugin/blob/main/skills/lens/SKILL.md) teaches the agent the API — copy it into your agent's skills directory.
+Any agent that can run bash commands can use lens. The [skill file](https://github.com/relixiaobo/lens-note-plugin/blob/main/plugin/skills/lens/SKILL.md) teaches the agent the API — copy it into your agent's skills directory.
 
 | Agent | Skill location |
 |-------|---------------|

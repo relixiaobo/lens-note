@@ -65,8 +65,7 @@ lens search "<query>" --json     # Find notes (CJK-aware)
 lens show <id> --json            # Read one object with links
 lens write --json < input        # Write anything (stdin JSON)
 lens fetch <url> [--save] --json # Extract web content
-lens status --json               # Stats
-lens health --json               # Graph health metrics
+lens status --json               # Stats + graph health
 ```
 
 `lens write` accepts JSON with a `type` field that routes the operation:
@@ -86,7 +85,7 @@ lens health --json               # Graph health metrics
 
 ### Skill File = Application Logic
 
-The skill file (`skills/lens.claude-skill.md`) teaches any agent how to use lens. It contains:
+The skill file (`skills/SKILL.md`) teaches any agent how to use lens. It contains:
 - The 5 commands and their JSON schemas
 - Workflows: how to compile, curate, answer questions
 - Note field definitions and validation rules
@@ -107,7 +106,7 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 3. Agent synthesizes answer, citing note IDs
 
 **Curate orphan notes:**
-1. `lens health --json` → orphan count
+1. `lens status --json` → orphan count
 2. `lens show <orphan_id> --json` → read orphan
 3. `lens search "related" --json` → find connections
 4. `echo '{"type":"link",...}' | lens write --json` → add link
@@ -167,16 +166,17 @@ Markdown files = source of truth. SQLite = derived cache (rebuildable via `lens 
 ## Distribution
 
 lens ships as:
-1. **A compiled binary** (`bun build --compile` → single file, ~40MB)
-2. **A skill file** (markdown, teaches agents the API)
+1. **An npm package** (`npm install -g lens-note`, compiled JS bundle)
+2. **A plugin** for Claude Code, Codex CLI, Gemini CLI ([lens-note-plugin](https://github.com/relixiaobo/lens-note-plugin))
 
 Installation:
 ```bash
-# Install binary
-brew install lens  # or npm install -g lens-cli
+npm install -g lens-note
+lens init
 
-# Enable for Claude Code
-cp lens.claude-skill.md .claude/skills/
+# Claude Code plugin:
+# /plugin marketplace add relixiaobo/lens-note-plugin
+# /plugin install lens
 ```
 
 No server, no daemon, no account, no API key.
