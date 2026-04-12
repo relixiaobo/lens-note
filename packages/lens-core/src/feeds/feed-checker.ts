@@ -77,7 +77,7 @@ export interface NewArticle {
 /** Check a single feed for new articles */
 async function checkFeed(feed: Feed): Promise<NewArticle[]> {
   const headers: Record<string, string> = {
-    "User-Agent": "lens/0.1 (structured cognition compiler)",
+    "User-Agent": "lens/0.3 (knowledge graph)",
   };
 
   // Conditional fetch: use etag/last_modified if available

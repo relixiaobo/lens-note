@@ -1,41 +1,33 @@
-# dependencies (bun install)
-node_modules
+# Dependencies
+node_modules/
 
-# output
-out
-dist
-*.tgz
+# Build output
+dist/
 
-# code coverage
-coverage
-*.lcov
-
-# logs
-logs
-_.log
-report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
-
-# dotenv environment variable files
+# Environment & secrets
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
 
-# caches
-.eslintcache
-.cache
-*.tsbuildinfo
+# SQLite & cache
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
-# IntelliJ based IDEs
-.idea
-
-# Finder (MacOS) folder config
+# OS files
 .DS_Store
+Thumbs.db
 
-# Spike results (generated data)
-spike/results/
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# pnpm
+.npmrc
+
+# Spike cache & results
 spike/cache/
+spike/results/
 
-# Cursor
-.cursor/
+# Stale nested packages
+packages/lens-core/packages/

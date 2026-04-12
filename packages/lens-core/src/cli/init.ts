@@ -26,16 +26,8 @@ export async function initLens(opts: CommandOptions) {
 
   // Create default config
   const defaultConfig = `# lens configuration
-# See docs/schema.md for details
-
-providers:
-  llm:
-    default: anthropic
-    # API key is read from ANTHROPIC_API_KEY environment variable
-
-  embedding:
-    default: voyage
-    # API key is read from VOYAGE_API_KEY environment variable (v0.2)
+# lens is a pure storage+query tool. No API keys required.
+# Agents (Claude Code, Cursor, etc.) provide the intelligence.
 `;
 
   writeFileSync(paths.config, defaultConfig, "utf-8");

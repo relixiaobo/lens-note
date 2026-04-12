@@ -1,5 +1,5 @@
 /**
- * Lens v0.2 core types — Zettelkasten-native.
+ * Lens core types.
  *
  * 3 types: Source, Note, Thread.
  * Note is the universal knowledge card with optional fields.
@@ -41,7 +41,7 @@ export type NoteRole =
 
 export type ObjectType = "source" | "note" | "thread";
 
-export type SourceType = "web_article" | "markdown" | "plain_text" | "manual_note";
+export type SourceType = "web_article" | "markdown" | "plain_text" | "manual_note" | "note_batch";
 
 export type ObjectStatus = "active" | "superseded";
 

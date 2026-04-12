@@ -125,6 +125,24 @@ async function feedCommand(args: string[], opts: CommandOptions) {
   await handleFeed(sub, args.slice(1), opts);
 }
 
+async function healthCommand(args: string[], opts: CommandOptions) {
+  const { showHealth } = await import("./health");
+  await showHealth(opts);
+}
+
+async function writeCommand(args: string[], opts: CommandOptions) {
+  const { handleWrite } = await import("./write");
+  await handleWrite(args, opts);
+}
+
+async function fetchCommand(args: string[], opts: CommandOptions) {
+  const { positional, flags } = parseCliArgs(args);
+  const url = positional[0];
+  if (!url) throw new Error("Usage: lens fetch <url> [--save] [--json]");
+  const { fetchUrl } = await import("./fetch");
+  await fetchUrl(url, { ...opts, ...flags });
+}
+
 async function rebuildIndexCommand(args: string[], opts: CommandOptions) {
   const { rebuildIndex } = await import("./rebuild-index");
   await rebuildIndex(opts);
@@ -142,5 +160,8 @@ export const commands: Record<string, CommandHandler> = {
   links: linksCommand,
   digest: digestCommand,
   feed: feedCommand,
+  write: writeCommand,
+  fetch: fetchCommand,
+  health: healthCommand,
   "rebuild-index": rebuildIndexCommand,
 };

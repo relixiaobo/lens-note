@@ -8,7 +8,7 @@
  * lens feed remove <id|url>  — Unsubscribe
  */
 
-import { addFeed, listFeeds, removeFeed, markIngested } from "../feeds/feed-store";
+import { addFeed, listFeeds, removeFeed } from "../feeds/feed-store";
 import { checkAllFeeds } from "../feeds/feed-checker";
 import { ensureInitialized } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
@@ -96,7 +96,7 @@ async function feedImport(filePath: string, opts: CommandOptions) {
 
   const { importOpml } = await import("../feeds/feed-store");
   const xml = readFileSync(filePath, "utf-8");
-  const { added, skipped } = importOpml(xml);
+  const { added, skipped } = await importOpml(xml);
 
   if (opts.json) {
     console.log(JSON.stringify({
@@ -146,10 +146,6 @@ async function feedCheck(opts: CommandOptions) {
   const dryRun = opts["dry-run"] === true;
   const log = opts.json ? () => {} : (msg: string) => console.log(msg);
 
-  if (!dryRun && !process.env.ANTHROPIC_API_KEY) {
-    throw new Error("ANTHROPIC_API_KEY not set. Required for ingesting articles.");
-  }
-
   const results = await checkAllFeeds(log);
 
   const allNew = results.flatMap((r) => r.articles);
@@ -182,43 +178,19 @@ async function feedCheck(opts: CommandOptions) {
     return;
   }
 
-  // Apply --limit
-  const limit = Number(opts.limit) || allNew.length;
-  const toIngest = allNew.slice(0, limit);
-
-  log(`\nIngesting ${toIngest.length} article(s)${limit < allNew.length ? ` (limited from ${allNew.length})` : ""}...\n`);
-  const { ingestSource } = await import("./ingest");
-
-  let success = 0;
-  let failed = 0;
-  const ingestResults: { url: string; title: string; status: string; error?: string }[] = [];
-
-  for (const article of toIngest) {
-    log(`--- ${article.title} ---`);
-    try {
-      await ingestSource(article.url, { ...opts, json: false });
-      markIngested(article.feedId, article.url);
-      success++;
-      ingestResults.push({ url: article.url, title: article.title, status: "ok" });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log(`  FAILED: ${msg}\n`);
-      failed++;
-      ingestResults.push({ url: article.url, title: article.title, status: "error", error: msg });
-      // Do NOT mark as ingested — allow retry on next feed check
-    }
-  }
-
+  // No auto-ingest — just report new articles.
+  // Agents should call `lens fetch <url> --save` for each article they want to compile.
   if (opts.json) {
     console.log(
-      JSON.stringify(
-        { new_articles: allNew.length, success, failed, results: ingestResults },
-        null,
-        2
-      )
+      JSON.stringify({ new_articles: allNew.length, articles: allNew }, null, 2)
     );
   } else {
-    log(`\nDone: ${success} ingested, ${failed} failed out of ${allNew.length} new articles.`);
+    log(`\n${allNew.length} new article(s) found:\n`);
+    for (const a of allNew) {
+      log(`  "${a.title}"`);
+      log(`    ${a.url}\n`);
+    }
+    log(`Use \`lens fetch <url> --save\` to save each article as a source.`);
   }
 }
 

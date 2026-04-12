@@ -1,5 +1,5 @@
 /**
- * Storage layer — v0.2 Zettelkasten-native.
+ * Storage layer.
  *
  * Two concerns:
  * 1. Markdown files (source of truth) — read/write objects as .md with YAML frontmatter
@@ -8,11 +8,11 @@
  * 3 types: Source, Note, Thread
  */
 
-import { Database } from "bun:sqlite";
+import Database from "better-sqlite3";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync } from "fs";
 import { dirname } from "path";
 import matter from "gray-matter";
-import { paths, objectDirs, objectPath } from "./paths";
+import { paths, objectPath } from "./paths";
 import type { LensObject, ObjectType, Note } from "./types";
 
 // ============================================================
@@ -150,10 +150,23 @@ export function indexObject(obj: LensObject, body: string = "") {
   })();
 }
 
+/** Detect if a string contains CJK characters */
+function hasCJK(text: string): boolean {
+  return /[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text);
+}
+
 export function searchIndex(query: string): { id: string; type: string; title: string; snippet: string }[] {
   const db = getDb();
+  const trimmed = query.trim();
+  if (!trimmed) return [];
 
-  const escaped = query
+  // CJK queries: use LIKE on the objects table (FTS5 unicode61 can't tokenize CJK)
+  if (hasCJK(trimmed)) {
+    return searchCJK(db, trimmed);
+  }
+
+  // Latin queries: use FTS5 with porter stemming
+  const escaped = trimmed
     .replace(/['"]/g, "")
     .split(/\s+/)
     .filter(Boolean)
@@ -174,6 +187,47 @@ export function searchIndex(query: string): { id: string; type: string; title: s
     if (msg.includes("fts5") || msg.includes("syntax") || msg.includes("MATCH")) return [];
     throw err;
   }
+}
+
+/** CJK search via LIKE on the objects table */
+function searchCJK(db: any, query: string): { id: string; type: string; title: string; snippet: string }[] {
+  // Split CJK query into individual search terms (by spaces or punctuation)
+  const terms = query.split(/[\s，。？！、；：""'']+/).filter(t => t.length >= 2);
+  if (terms.length === 0) return [];
+
+  // Search body and data for each term, score by number of terms matched
+  const results = new Map<string, { id: string; type: string; title: string; snippet: string; score: number }>();
+
+  for (const term of terms) {
+    const escaped = term.replace(/[%_]/g, "\\$&");
+    const pattern = `%${escaped}%`;
+    const rows = db
+      .prepare(`SELECT id, type, data, body FROM objects WHERE body LIKE ? ESCAPE '\\' OR data LIKE ? ESCAPE '\\' LIMIT 50`)
+      .all(pattern, pattern) as any[];
+
+    for (const row of rows) {
+      if (results.has(row.id)) {
+        results.get(row.id)!.score++;
+      } else {
+        const data = JSON.parse(row.data);
+        const title = data.text || data.title || "";
+        const bodyStr = row.body || "";
+        // Extract snippet around the match
+        const idx = bodyStr.indexOf(term);
+        const start = Math.max(0, idx - 30);
+        const end = Math.min(bodyStr.length, idx + term.length + 50);
+        const snippet = idx >= 0 ? `...${bodyStr.substring(start, end)}...` : title.substring(0, 80);
+
+        results.set(row.id, { id: row.id, type: row.type, title: title.substring(0, 100), snippet, score: 1 });
+      }
+    }
+  }
+
+  // Sort by score (more terms matched = higher rank), limit 20
+  return [...results.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20)
+    .map(({ score, ...rest }) => rest);
 }
 
 export function getObjectFromCache(id: string): { obj: LensObject; body: string } | null {

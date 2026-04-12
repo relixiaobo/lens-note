@@ -1,5 +1,7 @@
 /**
- * lens note "<text>" — Record a quick note as an observation.
+ * lens note "<text>" — Quick note shortcut.
+ *
+ * Alias for: echo '{"type":"note","text":"..."}' | lens write
  */
 
 import { generateId, type Note } from "../core/types";
@@ -21,12 +23,12 @@ export async function createNote(text: string, opts: CommandOptions) {
     created_at: now,
   };
 
-  const filePath = saveObject(note, text);
+  saveObject(note, text);
 
   if (opts.json) {
-    console.log(JSON.stringify({ id: note.id, path: filePath }));
+    console.log(JSON.stringify({ id, type: "note", action: "created" }));
   } else {
-    console.log(`Created note: ${note.id}`);
+    console.log(`Created note: ${id}`);
     console.log(`  "${text.length > 80 ? text.substring(0, 77) + "..." : text}"`);
   }
 }

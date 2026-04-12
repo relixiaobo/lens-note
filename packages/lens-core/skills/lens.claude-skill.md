@@ -100,7 +100,7 @@ echo '[
 ]' | lens write --json
 ```
 
-Use `$0`, `$1`, `$2` to reference earlier items in the batch by index.
+Use `$0`, `$1`, `$2` to reference earlier items in the batch by index. Batch is atomic.
 
 ## Fetching Web Content
 

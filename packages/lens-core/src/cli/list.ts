@@ -46,7 +46,11 @@ export async function listCommand(args: string[], opts: CommandOptions) {
   }
 
   // Apply filters (derive effective role from fields if role hint is missing)
+  const VALID_ROLES = new Set(["claim", "frame", "question", "observation", "connection", "structure_note"]);
   const roleFilter = flags.role as string | undefined;
+  if (roleFilter && !VALID_ROLES.has(roleFilter)) {
+    throw new Error(`Unknown role: "${roleFilter}". Valid roles: ${[...VALID_ROLES].join(", ")}`);
+  }
   if (roleFilter) {
     items = items.filter((item) => {
       const effectiveRole = item.role || inferRoleFromFields(item);

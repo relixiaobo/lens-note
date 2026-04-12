@@ -1,33 +1,40 @@
 {
-  "name": "lens-core",
-  "version": "0.1.0",
+  "name": "lens-note",
+  "version": "0.3.0",
+  "description": "Knowledge graph CLI for humans and agents. Like Git for knowledge.",
   "type": "module",
-  "main": "src/main.ts",
   "bin": {
     "lens": "src/main.ts"
   },
+  "files": [
+    "src/**/*.ts",
+    "skills/**/*.md"
+  ],
   "scripts": {
-    "dev": "bun run --watch src/main.ts",
-    "build": "bun build --compile src/main.ts --outfile ../../dist/lens",
-    "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "lint": "echo 'TODO: add biome'"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mariozechner/pi-agent-core": "^0.66.1",
-    "@mariozechner/pi-ai": "^0.66.1",
-    "@sinclair/typebox": "^0.34.49",
-    "@types/turndown": "^5.0.6",
+    "better-sqlite3": "^11.0.0",
     "defuddle": "^0.15.0",
     "feedsmith": "^2.9.1",
     "gray-matter": "^4.0.3",
     "linkedom": "^0.18.12",
+    "tsx": "^4.0.0",
     "turndown": "^7.2.4",
-    "ulid": "^3.0.2",
-    "zod": "^4.3.6"
+    "ulid": "^3.0.2"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/turndown": "^5.0.6",
     "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": ["knowledge", "zettelkasten", "cli", "agent", "notes", "graph", "ai"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/user/lens"
   }
 }

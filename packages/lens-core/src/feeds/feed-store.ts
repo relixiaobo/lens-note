@@ -94,8 +94,8 @@ export function isIngested(feedId: string, url: string): boolean {
 }
 
 /** Import feeds from an OPML file */
-export function importOpml(xml: string): { added: Feed[]; skipped: string[] } {
-  const { parseOpml } = require("feedsmith");
+export async function importOpml(xml: string): Promise<{ added: Feed[]; skipped: string[] }> {
+  const { parseOpml } = await import("feedsmith");
   const result = parseOpml(xml);
   const outlines = result?.body?.outlines || [];
 
