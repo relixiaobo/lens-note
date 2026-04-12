@@ -6,7 +6,7 @@
  * For other types: shows the object with its fields.
  */
 
-import { readObject, getBacklinks, ensureInitialized } from "../core/storage";
+import { readObject, getBacklinks, getForwardLinks, ensureInitialized } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
 export async function showObject(id: string, opts: CommandOptions) {
@@ -29,7 +29,14 @@ export async function showObject(id: string, opts: CommandOptions) {
 
   // Generic display for other types or --json
   if (opts.json) {
-    console.log(JSON.stringify({ ...data, body: content.trim() }, null, 2));
+    // Include forward + backward links in JSON output
+    const forward = getForwardLinks(id);
+    const backward = getBacklinks(id);
+    const links = {
+      forward: forward.map(l => ({ to: l.to_id, rel: l.rel })),
+      backward: backward.map(l => ({ from: l.from_id, rel: l.rel })),
+    };
+    console.log(JSON.stringify({ ...data, body: content.trim(), links }, null, 2));
   } else {
     console.log(`--- ${data.type}: ${id} ---`);
     for (const [key, value] of Object.entries(data)) {

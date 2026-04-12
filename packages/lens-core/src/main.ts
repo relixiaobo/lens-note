@@ -42,7 +42,6 @@ RSS:
 
 System:
   init                       First-time setup
-  health                     Knowledge graph health report
   rebuild-index              Rebuild SQLite cache
 
 Options:

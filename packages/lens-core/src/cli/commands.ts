@@ -125,10 +125,7 @@ async function feedCommand(args: string[], opts: CommandOptions) {
   await handleFeed(sub, args.slice(1), opts);
 }
 
-async function healthCommand(args: string[], opts: CommandOptions) {
-  const { showHealth } = await import("./health");
-  await showHealth(opts);
-}
+
 
 async function writeCommand(args: string[], opts: CommandOptions) {
   const { handleWrite } = await import("./write");
@@ -162,6 +159,5 @@ export const commands: Record<string, CommandHandler> = {
   feed: feedCommand,
   write: writeCommand,
   fetch: fetchCommand,
-  health: healthCommand,
   "rebuild-index": rebuildIndexCommand,
 };

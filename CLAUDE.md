@@ -27,9 +27,9 @@ No agent framework. No LLM calls. No API keys. Agents provide the intelligence; 
 ```bash
 lens search "<query>" --json     # Find notes (CJK-aware)
 lens show <id> --json            # Read one object with full detail + links
-lens write --json < input        # Write anything (stdin JSON)
+lens write --json < input.json   # Write anything (stdin JSON)
 lens fetch <url> [--save] --json # Extract web content
-lens status --json               # Stats + health metrics
+lens status --json               # Stats + graph health
 ```
 
 ### `lens write` accepts JSON by type:
@@ -82,7 +82,7 @@ lens/
 │   │   ├── fetch.ts         # lens fetch (web extraction)
 │   │   ├── search.ts        # lens search (FTS5 + CJK)
 │   │   ├── show.ts, list.ts, links.ts, context.ts
-│   │   ├── health.ts        # Graph health metrics
+│   │   ├── status.ts        # Stats + graph health
 │   │   ├── digest.ts, status.ts, note.ts, ingest.ts
 │   │   ├── feed.ts, init.ts, rebuild-index.ts
 │   ├── core/

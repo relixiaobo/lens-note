@@ -1,10 +1,12 @@
 /**
- * lens status — Show system status.
+ * lens status — System status + graph health metrics.
+ *
+ * One command for everything an agent needs to know about the knowledge graph.
  */
 
 import { existsSync, statSync } from "fs";
 import { paths } from "../core/paths";
-import { listObjects } from "../core/storage";
+import { listObjects, readObject, getForwardLinks, getBacklinks } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
 function fileSize(path: string): number {
@@ -23,32 +25,73 @@ export async function showStatus(opts: CommandOptions) {
     return;
   }
 
-  const counts = {
-    notes: listObjects("note").length,
-    sources: listObjects("source").length,
-    threads: listObjects("thread").length,
-  };
-
-  // Include WAL file in cache size
+  const noteIds = listObjects("note");
+  const sourceIds = listObjects("source");
+  const threadIds = listObjects("thread");
+  const total = noteIds.length + sourceIds.length + threadIds.length;
   const cacheSize = fileSize(paths.db) + fileSize(paths.db + "-wal") + fileSize(paths.db + "-shm");
 
+  // Graph health metrics
+  let orphanCount = 0;
+  const orphanIds: string[] = [];
+  let totalLinks = 0;
+  const linkTypes: Record<string, number> = {};
+  let crossSourceLinks = 0;
+
+  const noteSourceMap = new Map<string, string>();
+  for (const id of noteIds) {
+    const obj = readObject(id);
+    if (obj) noteSourceMap.set(id, obj.data.source || "");
+  }
+
+  for (const id of noteIds) {
+    const fwd = getForwardLinks(id).filter(l => l.to_id.startsWith("note_"));
+    const bck = getBacklinks(id).filter(l => l.from_id.startsWith("note_"));
+
+    if (fwd.length === 0 && bck.length === 0) {
+      orphanCount++;
+      if (orphanIds.length < 20) orphanIds.push(id);
+    }
+
+    const mySource = noteSourceMap.get(id) || "";
+    for (const l of fwd) {
+      totalLinks++;
+      linkTypes[l.rel] = (linkTypes[l.rel] || 0) + 1;
+      const targetSource = noteSourceMap.get(l.to_id) || "";
+      if (mySource && targetSource && mySource !== targetSource) crossSourceLinks++;
+    }
+  }
+
   const status = {
-    initialized: true,
     path: paths.root,
-    objects: counts,
-    total: Object.values(counts).reduce((a, b) => a + b, 0),
-    cache_size_bytes: cacheSize,
+    notes: noteIds.length,
+    sources: sourceIds.length,
+    threads: threadIds.length,
+    total,
+    connectivity: {
+      orphan_count: orphanCount,
+      orphan_rate: noteIds.length > 0 ? parseFloat((orphanCount / noteIds.length * 100).toFixed(1)) : 0,
+      total_links: totalLinks,
+      cross_source_pct: totalLinks > 0 ? parseFloat((crossSourceLinks / totalLinks * 100).toFixed(1)) : 0,
+    },
+    link_types: linkTypes,
+    orphan_ids: orphanIds,
   };
 
   if (opts.json) {
     console.log(JSON.stringify(status, null, 2));
   } else {
+    const check = (ok: boolean) => ok ? "OK" : "!!";
     console.log(`lens status`);
-    console.log(`  Path: ${paths.root}`);
-    console.log(`  Notes:    ${counts.notes}`);
-    console.log(`  Sources:  ${counts.sources}`);
-    console.log(`  Threads:  ${counts.threads}`);
-    console.log(`  Total:    ${status.total} objects`);
+    console.log(`  Path:     ${paths.root}`);
+    console.log(`  Notes:    ${noteIds.length}`);
+    console.log(`  Sources:  ${sourceIds.length}`);
+    console.log(`  Threads:  ${threadIds.length}`);
+    console.log(`  Total:    ${total} objects`);
     console.log(`  Cache:    ${(cacheSize / 1024).toFixed(1)} KB`);
+    console.log();
+    console.log(`  ${check(orphanCount / Math.max(noteIds.length, 1) < 0.1)} Orphans:   ${orphanCount} (${status.connectivity.orphan_rate}%)`);
+    console.log(`  ${check(totalLinks > 0)} Links:     ${totalLinks} (${Object.entries(linkTypes).map(([k,v]) => `${k}:${v}`).join(", ")})`);
+    console.log(`  ${check(status.connectivity.cross_source_pct > 40)} Cross-src: ${status.connectivity.cross_source_pct}%`);
   }
 }

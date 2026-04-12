@@ -23,8 +23,9 @@ npm install -g lens-note
 # 2. Initialize
 lens init
 
-# 3. Add the skill file to your project
-cp $(npm root -g)/lens-note/skills/lens.claude-skill.md .claude/skills/
+# 3. Install the plugin (in Claude Code)
+#    /plugin marketplace add relixiaobo/lens-note-plugin
+#    /plugin install lens
 ```
 
 That's it. Claude Code now knows how to use lens. Try:
@@ -37,7 +38,7 @@ That's it. Claude Code now knows how to use lens. Try:
 
 ## Use with Any Agent
 
-Any agent that can run bash commands can use lens. The [skill file](skills/lens.claude-skill.md) teaches the agent the API — copy it into your agent's instruction/rules config.
+Any agent that can run bash commands can use lens. The [skill file](https://github.com/relixiaobo/lens-note-plugin/blob/main/skills/lens/SKILL.md) teaches the agent the API — copy it into your agent's skills directory.
 
 | Agent | Skill location |
 |-------|---------------|
@@ -52,7 +53,7 @@ lens search "<query>" --json       # Find notes (multilingual, CJK-aware)
 lens show <id> --json              # Read one object with full detail + links
 echo '<json>' | lens write --json  # Write anything: note, source, link, batch
 lens fetch <url> [--save] --json   # Extract web content as clean markdown
-lens health --json                 # Knowledge graph health metrics
+lens status --json                 # Stats + graph health metrics
 ```
 
 ## What Agents Do With lens
@@ -89,7 +90,7 @@ lens show note_01ABC --json              # Read full detail
 ### Maintain the knowledge graph
 
 ```bash
-lens health --json                       # Check orphan rate, connectivity
+lens status --json                       # Check orphan rate, connectivity
 # Agent finds orphans, searches for related notes, adds links
 echo '{"type":"link","from":"note_01A","rel":"supports","to":"note_01B"}' | lens write --json
 ```
