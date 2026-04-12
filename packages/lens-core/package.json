@@ -1,13 +1,14 @@
 {
   "name": "lens-note",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "description": "Knowledge graph CLI for humans and agents. Like Git for knowledge.",
   "type": "module",
   "bin": {
-    "lens": "src/main.ts"
+    "lens": "bin/lens.mjs"
   },
   "files": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "bin/**/*.mjs"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -30,7 +31,15 @@
   "engines": {
     "node": ">=20"
   },
-  "keywords": ["knowledge", "zettelkasten", "cli", "agent", "notes", "graph", "ai"],
+  "keywords": [
+    "knowledge",
+    "zettelkasten",
+    "cli",
+    "agent",
+    "notes",
+    "graph",
+    "ai"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
