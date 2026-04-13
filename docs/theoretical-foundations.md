@@ -85,16 +85,37 @@ What lens takes from Nonaka:
 
 ## How These Theories Guide Decisions
 
-**"Should I read this article?"** (feed check → compile decision)
-- Luhmann: Does it have collision potential with existing notes?
-- Karpathy: Can it be compiled into something, or is it just storage?
-- Li Jigang: Could it change how I see something?
-- Popper: Does it challenge or confirm existing understanding?
+**"Should I compile this article?"** — The SCENT Framework
+
+The graph itself is the filter. Selection is never about the article in isolation — it's about the article's relationship to what you already know.
+
+Score each article on four dimensions:
+
+| Dimension | Question | Theory | Weight |
+|-----------|----------|--------|--------|
+| **S**urprise | Does it contradict, complicate, or challenge existing notes? | Popper + Weick (sense-making) | High |
+| **C**onnection | Can it link to 2+ existing notes? Does it bridge separate clusters? | Luhmann + Siemens (connectivism) | High |
+| **E**fficiency | Is it dense enough that compilation compresses meaningfully? | Karpathy | Medium |
+| **N**ovelty / **T**errain | Does it introduce concepts absent from the graph? | Pirolli (information foraging) + Dervin | Medium |
+
+Decision:
+- S + C high → **compile** (even if E/N are moderate)
+- Only E high (dense but redundant) → skip
+- Only N high (novel but no anchor points) → queue for later
+- Merely confirms existing notes → skip (confirmation doesn't produce knowledge)
+
+Additional theories behind each dimension:
+
+- **Surprise** — Popper: the most informative content is that which could refute what you hold. Weick: sense-making is triggered when expectations are violated. An article that creates cognitive dissonance with the graph demands a new note to resolve the tension.
+- **Connection** — Luhmann only extracted ideas that could produce a new connection within his slip-box. Siemens (connectivism): the value of information is proportional to the number and diversity of new connections it enables. Articles that bridge two unrelated clusters are the highest value.
+- **Efficiency** — Karpathy's compile-don't-store implies a compression test: compile when a dense article yields concise linked notes. Skip when compression ratio is low (article already says what your notes say).
+- **Novelty** — Pirolli & Card's information foraging: agents follow "information scent" — novel terminology not yet in the graph signals unexplored territory. Dervin: a "gap" between what you know and what the article presents triggers focused reading.
 
 **"How do I write this note?"**
 - Luhmann: One idea, reformulated in your own words, linked to what it collided with.
 - Toulmin: State confidence, ground with evidence, acknowledge rebuttals.
 - Reif/Miller: Choose the right level — headline title, elaboration in body.
+- Li Jigang: The output should be a way of seeing, not a summary.
 
 **"When do I link two notes?"**
 - Luhmann: Only when you can articulate WHY they're connected (hence `reason`).
