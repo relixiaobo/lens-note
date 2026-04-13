@@ -57,7 +57,7 @@ lens status --json                 # Stats + graph health metrics
 
 ### Agent Mode (--stdin)
 
-For agents that need to pass complex content (Chinese, quotes, newlines), `--stdin` accepts any command as a JSON request — content never touches the shell:
+For agents that need to pass complex content (Unicode, quotes, newlines), `--stdin` accepts any command as a JSON request — content never touches the shell:
 
 ```bash
 printf '%s' '{"command":"write","input":{"type":"note","title":"My insight","body":"Details..."}}' | lens --stdin
@@ -79,9 +79,8 @@ lens fetch https://example.com/article --save --json
 # 2. Search existing knowledge
 lens search "related topic" --json
 
-# 3. Agent writes JSON to file, then imports
-#    (file approach avoids shell escaping issues with quotes/CJK)
-lens write --file notes.json --json
+# 3. Agent writes notes via --stdin (shell-safe)
+printf '%s' '{"command":"write","input":{"type":"note","title":"...","body":"...","source":"src_01..."}}' | lens --stdin
 ```
 
 ### Answer from knowledge
@@ -94,7 +93,13 @@ lens show note_01ABC --json              # Read full detail with link reasons
 
 ## Data Model
 
-Each note is a markdown file with minimal frontmatter:
+3 types, each stored as a markdown file with YAML frontmatter:
+
+| Type | Prefix | Purpose |
+|------|--------|---------|
+| **Source** | `src_` | Provenance record (articles, conversations) |
+| **Note** | `note_` | Knowledge card (one idea per note) |
+| **Task** | `task_` | Collaboration protocol (status: open/done) |
 
 ```yaml
 ---
@@ -114,7 +119,9 @@ Evidence, reasoning, and elaboration in markdown body.
 > "the trade-off does not apply to internal quality" — Fowler
 ```
 
-**7 frontmatter fields.** Everything else goes in the body as natural prose.
+**Note**: 7 frontmatter fields. Everything else goes in the body as natural prose.
+
+**Task**: Same as Note + `status: open | done`. For tracking work between human and agent.
 
 **Link types**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related`. Each link can carry a `reason`.
 
