@@ -16,7 +16,7 @@ export type ISODate = string;
 
 export type Qualifier = "certain" | "likely" | "presumably" | "tentative";
 
-export type Voice = "extracted" | "restated" | "synthesized";
+export type Voice = "extracted" | "restated" | "synthesized" | "experiential";
 
 export type StructureType =
   | "taxonomy"

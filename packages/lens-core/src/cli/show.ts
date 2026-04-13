@@ -32,9 +32,16 @@ export async function showObject(id: string, opts: CommandOptions) {
     // Include forward + backward links in JSON output
     const forward = getForwardLinks(id);
     const backward = getBacklinks(id);
+
+    // Include 1-hop linked note text so agent can see context without extra show calls
+    const enrichLink = (linkId: string) => {
+      const linked = readObject(linkId);
+      return linked ? (linked.data.text || linked.data.title || "").substring(0, 120) : "";
+    };
+
     const links = {
-      forward: forward.map(l => ({ to: l.to_id, rel: l.rel })),
-      backward: backward.map(l => ({ from: l.from_id, rel: l.rel })),
+      forward: forward.map(l => ({ to: l.to_id, rel: l.rel, text: enrichLink(l.to_id) })),
+      backward: backward.map(l => ({ from: l.from_id, rel: l.rel, text: enrichLink(l.from_id) })),
     };
     console.log(JSON.stringify({ ...data, body: content.trim(), links }, null, 2));
   } else {

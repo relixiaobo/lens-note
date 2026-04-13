@@ -53,7 +53,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v0.4.0");
+  console.log("lens v0.5.0");
   process.exit(0);
 }
 

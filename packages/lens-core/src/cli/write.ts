@@ -24,7 +24,7 @@ import type { CommandOptions } from "./commands";
 
 const VALID_ROLES = new Set<NoteRole>(["claim", "frame", "question", "observation", "connection", "structure_note"]);
 const VALID_QUALIFIERS = new Set<Qualifier>(["certain", "likely", "presumably", "tentative"]);
-const VALID_VOICES = new Set<Voice>(["extracted", "restated", "synthesized"]);
+const VALID_VOICES = new Set<Voice>(["extracted", "restated", "synthesized", "experiential"]);
 const VALID_SCOPES = new Set<NoteScope>(["big_picture", "detail"]);
 const VALID_SOURCE_TYPES = new Set<SourceType>(["web_article", "markdown", "plain_text", "manual_note", "note_batch"]);
 const VALID_RELS = new Set(["supports", "contradicts", "refines", "related"]);
@@ -58,6 +58,7 @@ interface WriteResult {
   id?: string;
   type: string;
   action: string;
+  object?: Record<string, any>; // full created/updated object for --json
 }
 
 function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
@@ -132,7 +133,7 @@ function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
   }
 
   saveObject(note, text.trim());
-  return { id, type: "note", action: "created" };
+  return { id, type: "note", action: "created", object: note };
 }
 
 function writeSource(input: any, batchIds?: Map<string, string>): WriteResult {
@@ -167,7 +168,7 @@ function writeSource(input: any, batchIds?: Map<string, string>): WriteResult {
   }
 
   saveObject(source, body);
-  return { id, type: "source", action: "created" };
+  return { id, type: "source", action: "created", object: source };
 }
 
 function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
@@ -339,16 +340,24 @@ function removeLinkFromExisting(id: string, rel: string, targetId: string): void
 export async function handleWrite(args: string[], opts: CommandOptions) {
   ensureInitialized();
 
-  // Read JSON from stdin
+  // Accept JSON as argument or from stdin
+  const { positional } = await import("./commands").then(m => m.parseCliArgs(args));
   let rawInput: string;
-  try {
-    rawInput = readFileSync("/dev/stdin", "utf-8").trim();
-  } catch {
-    throw new Error("lens write expects JSON input from stdin. Example: echo '{\"type\":\"note\",\"text\":\"...\"}' | lens write --json");
+
+  if (positional.length > 0) {
+    // JSON passed as argument: lens write '{"type":"note",...}' --json
+    rawInput = positional.join(" ").trim();
+  } else {
+    // JSON from stdin: echo '...' | lens write --json
+    try {
+      rawInput = readFileSync("/dev/stdin", "utf-8").trim();
+    } catch {
+      throw new Error('Usage: lens write \'{"type":"note","text":"..."}\' --json\n   or: echo \'{"type":"note","text":"..."}\' | lens write --json');
+    }
   }
 
   if (!rawInput) {
-    throw new Error("Empty input. Pipe JSON to stdin: echo '{...}' | lens write --json");
+    throw new Error('Empty input. Pass JSON as argument or pipe to stdin.');
   }
 
   let parsed: any;
@@ -407,9 +416,12 @@ export async function handleWrite(args: string[], opts: CommandOptions) {
     results.push(result);
   }
 
-  // Output
+  // Output — include full object so agents don't need a follow-up show call
   if (opts.json) {
-    console.log(JSON.stringify(isBatch ? { created: results } : results[0], null, 2));
+    const output = isBatch
+      ? { created: results.map(r => ({ id: r.id, type: r.type, action: r.action, ...(r.object || {}) })) }
+      : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}) };
+    console.log(JSON.stringify(output, null, 2));
   } else {
     for (const r of results) {
       const id = r.id ? ` ${r.id}` : "";

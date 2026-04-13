@@ -28,6 +28,8 @@ export async function searchObjects(query: string, opts: CommandOptions) {
             role: obj.role,
             qualifier: obj.qualifier,
             scope: obj.scope,
+            supports: obj.supports || [],
+            contradicts: obj.contradicts || [],
           };
         case "source":
           return { ...base, title: obj.title, source_type: obj.source_type, word_count: obj.word_count };
