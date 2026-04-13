@@ -9,7 +9,7 @@ import type { ObjectType } from "../core/types";
 const TYPE_MAP: Record<string, ObjectType> = {
   notes: "note", note: "note",
   sources: "source", source: "source",
-  threads: "thread", thread: "thread",
+  tasks: "task", task: "task",
 };
 
 export async function listCommand(args: string[], opts: CommandOptions) {
@@ -19,7 +19,7 @@ export async function listCommand(args: string[], opts: CommandOptions) {
   const typeName = positional[0];
 
   if (!typeName || !TYPE_MAP[typeName]) {
-    throw new Error("Usage: lens list <notes|sources|threads> [--since 7d]");
+    throw new Error("Usage: lens list <notes|sources|tasks> [--since 7d]");
   }
 
   const objType = TYPE_MAP[typeName];

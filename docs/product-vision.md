@@ -51,7 +51,7 @@ Just as Git stores code without writing it, lens stores knowledge without genera
 │                                      │
 │  notes/   — markdown files (truth)   │
 │  sources/ — provenance records       │
-│  threads/ — conversation records     │
+│  tasks/   — collaboration protocol   │
 │  index.sqlite — derived cache (FTS5) │
 └──────────────────────────────────────┘
 ```
@@ -119,9 +119,9 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 
 | Type | Prefix | Purpose |
 |------|--------|---------|
-| **Source** | `src_` | Provenance record (where content came from) |
+| **Source** | `src_` | Provenance record (articles, conversations) |
 | **Note** | `note_` | Universal knowledge card (one idea per card) |
-| **Thread** | `thr_` | Conversation record |
+| **Task** | `task_` | Collaboration protocol (status: open/done) |
 
 ### Note: the Universal Card
 

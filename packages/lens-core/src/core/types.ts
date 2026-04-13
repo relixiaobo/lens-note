@@ -1,8 +1,9 @@
 /**
  * Lens core types.
  *
- * 3 types: Source, Note, Thread.
+ * 3 types: Source, Note, Task.
  * Note is the universal knowledge card — minimal frontmatter, rich body.
+ * Task is a Note with status — the collaboration protocol between human and agent.
  * Structure emerges from links, not from categories.
  */
 
@@ -14,9 +15,9 @@ import { ulid } from "ulid";
 
 export type ISODate = string;
 
-export type ObjectType = "source" | "note" | "thread";
+export type ObjectType = "source" | "note" | "task";
 
-export type SourceType = "web_article" | "markdown" | "plain_text" | "manual_note" | "note_batch";
+export type SourceType = "web_article" | "markdown" | "plain_text" | "manual_note" | "note_batch" | "conversation";
 
 export type LinkRel = "supports" | "contradicts" | "refines" | "related";
 
@@ -64,23 +65,29 @@ export interface Note {
 }
 
 // ============================================================
-// Thread — conversation about Notes
+// Task — collaboration protocol between human and agent
+//
+// A Note with status. Doing things produces knowledge.
 // ============================================================
 
-export interface Thread {
+export type TaskStatus = "open" | "done";
+
+export interface Task {
   id: string;
-  type: "thread";
-  title: string;
-  references: string[];
-  started_from?: string;
+  type: "task";
+  title: string;       // what needs doing (imperative)
+  status: TaskStatus;
+  source?: string;     // optional source/note that prompted this task
+  links?: NoteLink[];
   created_at: ISODate;
+  updated_at: ISODate;
 }
 
 // ============================================================
 // Union type
 // ============================================================
 
-export type LensObject = Source | Note | Thread;
+export type LensObject = Source | Note | Task;
 
 // ============================================================
 // ID generation
@@ -89,7 +96,7 @@ export type LensObject = Source | Note | Thread;
 const prefixes: Record<ObjectType, string> = {
   source: "src",
   note: "note",
-  thread: "thr",
+  task: "task",
 };
 
 export function generateId(type: ObjectType): string {

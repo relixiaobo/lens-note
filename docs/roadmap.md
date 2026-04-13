@@ -11,7 +11,7 @@ Validated LLM extraction quality. 6 types (Source, Claim, Frame, Question, Progr
 
 ## v0.2 — Zettelkasten Redesign ✅ COMPLETE
 
-Simplified to 3 types (Source, Note, Thread). Links as only structure. Agent redesigned as "thinker" that explores existing knowledge before creating notes.
+Simplified to 3 types (Source, Note, Task). Links as only structure. Agent redesigned as "thinker" that explores existing knowledge before creating notes.
 
 ## v0.3 — Infrastructure Pivot ✅ COMPLETE
 

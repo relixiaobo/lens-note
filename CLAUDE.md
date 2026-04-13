@@ -107,7 +107,7 @@ Unified `links[]` array with `{to, rel, reason}`:
 ~/.lens/ (git-tracked)
 ├── notes/note_01.md      # Frontmatter (YAML) + body (markdown)
 ├── sources/src_01.md
-├── threads/thr_01.md
+├── tasks/task_01.md
 ├── raw/                  # Original files
 ├── .git/                 # Version history
 ├── .gitignore            # Excludes SQLite cache
@@ -178,4 +178,4 @@ When publishing changes, bump versions and push in order:
 - Field names: `snake_case`
 - Type names: `PascalCase`
 - ID format: `<prefix>_<ULID>`
-- ID prefixes: `src`, `note`, `thr`
+- ID prefixes: `src`, `note`, `task`

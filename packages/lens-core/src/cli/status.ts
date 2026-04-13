@@ -27,8 +27,17 @@ export async function showStatus(opts: CommandOptions) {
 
   const noteIds = listObjects("note");
   const sourceIds = listObjects("source");
-  const threadIds = listObjects("thread");
-  const total = noteIds.length + sourceIds.length + threadIds.length;
+  const taskIds = listObjects("task");
+  const total = noteIds.length + sourceIds.length + taskIds.length;
+
+  // Task status counts
+  let tasksOpen = 0;
+  let tasksDone = 0;
+  for (const id of taskIds) {
+    const obj = readObject(id);
+    if (obj?.data.status === "done") tasksDone++;
+    else tasksOpen++;
+  }
   const cacheSize = fileSize(paths.db) + fileSize(paths.db + "-wal") + fileSize(paths.db + "-shm");
 
   // Graph health metrics
@@ -66,7 +75,7 @@ export async function showStatus(opts: CommandOptions) {
     path: paths.root,
     notes: noteIds.length,
     sources: sourceIds.length,
-    threads: threadIds.length,
+    tasks: { open: tasksOpen, done: tasksDone, total: taskIds.length },
     total,
     connectivity: {
       orphan_count: orphanCount,
@@ -86,7 +95,7 @@ export async function showStatus(opts: CommandOptions) {
     console.log(`  Path:     ${paths.root}`);
     console.log(`  Notes:    ${noteIds.length}`);
     console.log(`  Sources:  ${sourceIds.length}`);
-    console.log(`  Threads:  ${threadIds.length}`);
+    console.log(`  Tasks:    ${taskIds.length} (${tasksOpen} open, ${tasksDone} done)`);
     console.log(`  Total:    ${total} objects`);
     console.log(`  Cache:    ${(cacheSize / 1024).toFixed(1)} KB`);
     console.log();

@@ -14,7 +14,7 @@
  */
 
 import { readFileSync, unlinkSync } from "fs";
-import { generateId, type Note, type Source, type NoteLink, type LinkRel, type SourceType } from "../core/types";
+import { generateId, type Note, type Source, type Task, type TaskStatus, type NoteLink, type LinkRel, type SourceType } from "../core/types";
 import { saveObject, readObject, ensureInitialized, getDb } from "../core/storage";
 import { objectPath } from "../core/paths";
 import { parseCliArgs, type CommandOptions } from "./commands";
@@ -24,7 +24,8 @@ import { parseCliArgs, type CommandOptions } from "./commands";
 // ============================================================
 
 const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "related"]);
-const VALID_SOURCE_TYPES = new Set<SourceType>(["web_article", "markdown", "plain_text", "manual_note", "note_batch"]);
+const VALID_SOURCE_TYPES = new Set<SourceType>(["web_article", "markdown", "plain_text", "manual_note", "note_batch", "conversation"]);
+const VALID_STATUSES = new Set<TaskStatus>(["open", "done"]);
 
 function validateId(id: string, label: string): void {
   if (!id || typeof id !== "string") throw new Error(`${label}: ID is required`);
@@ -126,6 +127,59 @@ function writeSource(input: any): WriteResult {
   return { id, type: "source", action: "created", object: source };
 }
 
+function writeTask(input: any, batchIds?: Map<string, string>): WriteResult {
+  const title = input.title;
+  if (!title || typeof title !== "string" || title.trim().length === 0) {
+    throw new Error("task: title is required");
+  }
+
+  const status = input.status || "open";
+  if (!VALID_STATUSES.has(status)) {
+    throw new Error(`task: status "${status}" is invalid. Valid: ${[...VALID_STATUSES].join(", ")}`);
+  }
+
+  const resolveRef = (ref: string) => resolveReference(ref, batchIds);
+
+  const id = generateId("task");
+  const now = new Date().toISOString();
+
+  // Build links array (same logic as notes)
+  const links: NoteLink[] = [];
+  if (input.links) {
+    for (const link of input.links) {
+      if (!link.to || !link.rel) throw new Error("task.links: each link needs 'to' and 'rel'");
+      if (!VALID_RELS.has(link.rel)) throw new Error(`task.links: rel "${link.rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
+      links.push({
+        to: resolveRef(link.to),
+        rel: link.rel,
+        ...(link.reason ? { reason: link.reason } : {}),
+      });
+    }
+  }
+
+  const task: Task = {
+    id,
+    type: "task",
+    title: title.trim(),
+    status,
+    created_at: now,
+    updated_at: now,
+    ...(input.source ? { source: resolveRef(input.source) } : {}),
+    ...(links.length > 0 ? { links } : {}),
+  };
+
+  // Bidirectional contradicts
+  for (const link of links) {
+    if (link.rel === "contradicts") {
+      addLinkToExisting(link.to, "contradicts", id, link.reason);
+    }
+  }
+
+  const body = input.body || "";
+  saveObject(task, body);
+  return { id, type: "task", action: "created", object: { ...task, body } };
+}
+
 function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   const from = resolveReference(input.from, batchIds);
   const to = resolveReference(input.to, batchIds);
@@ -176,6 +230,10 @@ function writeUpdate(input: any): WriteResult {
   if (input.set) {
     for (const [key, value] of Object.entries(input.set)) {
       if (key === "id" || key === "type" || key === "created_at") continue;
+      if (key === "status") {
+        if (data.type !== "task") throw new Error(`update: status can only be set on tasks, not ${data.type}`);
+        if (!VALID_STATUSES.has(value as TaskStatus)) throw new Error(`update: status "${value}" is invalid. Valid: ${[...VALID_STATUSES].join(", ")}`);
+      }
       data[key] = value;
     }
   }
@@ -297,17 +355,18 @@ function executeWrite(parsed: any, opts: CommandOptions) {
     const item = items[i];
     const type = item.type;
 
-    if (!type) throw new Error(`Item ${i}: "type" field is required. Valid: note, source, link, unlink, update, delete`);
+    if (!type) throw new Error(`Item ${i}: "type" field is required. Valid: note, source, task, link, unlink, update, delete`);
 
     let result: WriteResult;
     switch (type) {
       case "note": result = writeNote(item, batchIds); break;
       case "source": result = writeSource(item); break;
+      case "task": result = writeTask(item, batchIds); break;
       case "link": result = writeLink(item, batchIds); break;
       case "unlink": result = writeUnlink(item); break;
       case "update": result = writeUpdate(item); break;
       case "delete": result = writeDelete(item); break;
-      default: throw new Error(`Item ${i}: unknown type "${type}". Valid: note, source, link, unlink, update, delete`);
+      default: throw new Error(`Item ${i}: unknown type "${type}". Valid: note, source, task, link, unlink, update, delete`);
     }
 
     if (result.id) batchIds.set(`$${i}`, result.id);

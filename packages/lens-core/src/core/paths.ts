@@ -1,6 +1,6 @@
 /**
  * File system paths for lens data.
- * v0.2: 3 object directories (notes/ sources/ threads/)
+ * Object directories: notes/ sources/ tasks/
  */
 
 import { join, resolve } from "path";
@@ -12,19 +12,19 @@ export const paths = {
   root: LENS_HOME,
   notes: join(LENS_HOME, "notes"),
   sources: join(LENS_HOME, "sources"),
-  threads: join(LENS_HOME, "threads"),
+  tasks: join(LENS_HOME, "tasks"),
   raw: join(LENS_HOME, "raw"),
   db: join(LENS_HOME, "index.sqlite"),
   config: join(LENS_HOME, "config.yaml"),
 } as const;
 
 /** Strict ID format: prefix_ULID */
-const VALID_ID_PATTERN = /^(src|note|thr)_[A-Z0-9]{26}$/;
+const VALID_ID_PATTERN = /^(src|note|task)_[A-Z0-9]{26}$/;
 
 const dirMap: Record<string, string> = {
   src: paths.sources,
   note: paths.notes,
-  thr: paths.threads,
+  task: paths.tasks,
 };
 
 /** Get the file path for a lens object by its ID. Validates against path traversal. */
@@ -50,6 +50,6 @@ export function objectPath(id: string): string {
 export const objectDirs = [
   paths.notes,
   paths.sources,
-  paths.threads,
+  paths.tasks,
   paths.raw,
 ] as const;

@@ -29,8 +29,8 @@ export async function searchObjects(query: string, opts: CommandOptions) {
           };
         case "source":
           return { ...base, title: obj.title, source_type: obj.source_type, word_count: obj.word_count };
-        case "thread":
-          return { ...base, title: obj.title };
+        case "task":
+          return { ...base, title: obj.title, status: obj.status };
         default:
           return base;
       }

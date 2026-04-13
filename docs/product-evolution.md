@@ -38,7 +38,7 @@ This question triggered a fundamental rethink. We studied Luhmann's actual metho
 
 ### Decisions
 
-- **3 types replace 6**: Source, Note, Thread. Note is the universal knowledge card.
+- **3 types replace 6**: Source, Note, Thread (Thread later removed; now 3 types: Source, Note, Task).
 - **Programme is gone**: Structure is emergent from links between notes.
 - **Links are the only structure**: `supports`, `contradicts`, `refines`, `related` — each with a `reason`.
 - **Agent redesigned as "thinker"**: Reads → explores existing knowledge → thinks about connections → creates linked Notes. Not a mechanical extractor.
@@ -117,6 +117,8 @@ The Tana import experiment raised a deeper question: if users dump mixed content
 This triggered a cascade of product rethinks.
 
 ### Insight 1: Thread Is the Primary Interface
+
+> **Historical note (2026-04-13):** Thread was later removed as a separate type. Conversations are now stored as Sources with `source_type: "conversation"`. The insight below is preserved for historical context.
 
 Original view: Thread is a lightweight conversation record, an appendage to Notes.
 

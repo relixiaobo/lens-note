@@ -58,7 +58,7 @@ export async function initLens(opts: CommandOptions) {
     console.log(`\nCreated:`);
     console.log(`  ${paths.notes}/`);
     console.log(`  ${paths.sources}/`);
-    console.log(`  ${paths.threads}/`);
+    console.log(`  ${paths.tasks}/`);
     console.log(`  ${paths.raw}/`);
     console.log(`  ${paths.db}`);
     console.log(`  ${paths.config}`);

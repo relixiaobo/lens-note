@@ -127,6 +127,7 @@ Evidence, reasoning, and elaboration in markdown body.
 ```json
 {"type": "note", "title": "...", "links": [{"to": "note_ID", "rel": "supports", "reason": "..."}], "body": "..."}
 {"type": "source", "title": "...", "url": "...", "source_type": "web_article"}
+{"type": "task", "title": "...", "status": "open"}
 {"type": "link", "from": "note_A", "rel": "supports", "to": "note_B", "reason": "..."}
 {"type": "update", "id": "note_A", "set": {"title": "..."}, "add": {"links": [...]}}
 {"type": "delete", "id": "note_A"}
@@ -147,6 +148,7 @@ Batch: pass a JSON array. Use `$0`, `$1` to reference earlier items by index.
 ```bash
 lens list notes [--since 7d]            # Browse notes
 lens links <id>                         # Show all relationships
+lens tasks [--all|--done]               # List tasks (default: open)
 lens context "<query>"                  # Context pack (JSON)
 lens digest [week|month|year]           # Recent notes summary
 lens note "quick thought"               # Create a note directly

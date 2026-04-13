@@ -145,6 +145,11 @@ async function rebuildIndexCommand(args: string[], opts: CommandOptions) {
   await rebuildIndex(opts);
 }
 
+async function tasksCommand(args: string[], opts: CommandOptions) {
+  const { listTasks } = await import("./tasks");
+  await listTasks(args, opts);
+}
+
 export const commands: Record<string, CommandHandler> = {
   init: initCommand,
   status: statusCommand,
@@ -159,6 +164,7 @@ export const commands: Record<string, CommandHandler> = {
   feed: feedCommand,
   write: writeCommand,
   fetch: fetchCommand,
+  tasks: tasksCommand,
   "rebuild-index": rebuildIndexCommand,
 };
 
@@ -231,6 +237,10 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
     case "write": {
       const { handleWriteInput } = await import("./write");
       return handleWriteInput(req.input, opts);
+    }
+    case "tasks": {
+      const { listTasks } = await import("./tasks");
+      return listTasks(toArgv(req), opts);
     }
     case "note": {
       const title = (req.positional || []).join(" ");

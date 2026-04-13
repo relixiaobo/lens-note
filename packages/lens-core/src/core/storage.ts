@@ -5,7 +5,7 @@
  * 1. Markdown files (source of truth) — read/write objects as .md with YAML frontmatter
  * 2. SQLite cache (derived) — FTS5 full-text search, rebuildable from files
  *
- * 3 types: Source, Note, Thread
+ * 3 types: Source, Note, Task
  */
 
 import Database from "better-sqlite3";
@@ -14,7 +14,7 @@ import { dirname } from "path";
 import matter from "gray-matter";
 import { paths, objectPath } from "./paths";
 import { execFileSync } from "child_process";
-import type { LensObject, ObjectType, Note } from "./types";
+import type { LensObject, ObjectType, Note, Task } from "./types";
 
 // ============================================================
 // Initialization check
@@ -92,7 +92,7 @@ export function listObjects(type: ObjectType): string[] {
   const dirMap: Record<ObjectType, string> = {
     source: paths.sources,
     note: paths.notes,
-    thread: paths.threads,
+    task: paths.tasks,
   };
   const dir = dirMap[type];
   if (!existsSync(dir)) return [];
@@ -274,7 +274,7 @@ export function rebuildAllIndex() {
     db.exec("DELETE FROM objects");
     db.exec("DELETE FROM links");
 
-    for (const type of ["source", "note", "thread"] as ObjectType[]) {
+    for (const type of ["source", "note", "task"] as ObjectType[]) {
       const ids = listObjects(type);
       for (const id of ids) {
         const result = readObject(id);
@@ -301,19 +301,14 @@ function getTitle(obj: LensObject): string {
 function extractLinks(obj: LensObject): { to: string; rel: string }[] {
   const result: { to: string; rel: string }[] = [];
 
-  if (obj.type === "note") {
-    const n = obj as Note;
+  if (obj.type === "note" || obj.type === "task") {
+    const n = obj as Note | Task;
     if (n.source) result.push({ to: n.source, rel: "source" });
     if (n.links) {
       for (const link of n.links) {
         result.push({ to: link.to, rel: link.rel });
       }
     }
-  }
-
-  if (obj.type === "thread") {
-    for (const id of obj.references) result.push({ to: id, rel: "discusses" });
-    if (obj.started_from) result.push({ to: obj.started_from, rel: "started_from" });
   }
 
   return result;

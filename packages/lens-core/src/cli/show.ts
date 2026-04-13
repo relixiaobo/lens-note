@@ -44,6 +44,7 @@ export async function showObject(id: string, opts: CommandOptions) {
     const title = data.title || "(untitled)";
     console.log(`"${title}"\n`);
 
+    if (data.status) console.log(`Status: ${data.status}`);
     if (data.source) console.log(`Source: ${data.source}`);
     if (data.source_type) console.log(`Type: ${data.source_type}`);
     if (data.url) console.log(`URL: ${data.url}`);
@@ -62,7 +63,7 @@ export async function showObject(id: string, opts: CommandOptions) {
       }
     }
 
-    const backward = getBacklinks(id).filter(l => l.from_id.startsWith("note_"));
+    const backward = getBacklinks(id).filter(l => l.from_id.startsWith("note_") || l.from_id.startsWith("task_"));
     if (backward.length > 0) {
       console.log(`\nReferenced by:`);
       for (const l of backward) {

@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      edn-data:
+        specifier: ^1.1.2
+        version: 1.1.2
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
@@ -17,27 +20,9 @@ importers:
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0
-      defuddle:
-        specifier: ^0.15.0
-        version: 0.15.0
-      feedsmith:
-        specifier: ^2.9.1
-        version: 2.9.1
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
-      linkedom:
-        specifier: ^0.18.12
-        version: 0.18.12
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-      turndown:
-        specifier: ^7.2.4
-        version: 7.2.4
-      ulid:
-        specifier: ^3.0.2
-        version: 3.0.2
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.0
@@ -45,12 +30,30 @@ importers:
       '@types/turndown':
         specifier: ^5.0.6
         version: 5.0.6
+      defuddle:
+        specifier: ^0.15.0
+        version: 0.15.0
+      feedsmith:
+        specifier: ^2.9.1
+        version: 2.9.1
+      linkedom:
+        specifier: ^0.18.12
+        version: 0.18.12
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(tsx@4.21.0)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.0.0
+        version: 4.21.0
+      turndown:
+        specifier: ^7.2.4
+        version: 7.2.4
       typescript:
         specifier: ^5.9.0
         version: 5.9.3
+      ulid:
+        specifier: ^3.0.2
+        version: 3.0.2
 
 packages:
 
@@ -488,6 +491,10 @@ packages:
 
   domutils@3.2.2:
     resolution: {integrity: sha512-6kZKyUajlDuqlHKVX1w7gyslj9MPIXzIFiz/rGu35uC1wMi+kMhQwGhl4lt9unC9Vb9INnY9Z3/ZA3+FhASLaw==}
+
+  edn-data@1.1.2:
+    resolution: {integrity: sha512-RI1i17URvOrBtSNEccbsXkuUZdc67QUBMqXGF62KPek85EdFGS2UKw76hNhOBl5kK4h7V4d32Ut15b/XVwKEXA==}
+    engines: {node: '>=12.0.0'}
 
   end-of-stream@1.4.5:
     resolution: {integrity: sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==}
@@ -1148,6 +1155,8 @@ snapshots:
       dom-serializer: 2.0.0
       domelementtype: 2.3.0
       domhandler: 5.0.3
+
+  edn-data@1.1.2: {}
 
   end-of-stream@1.4.5:
     dependencies:

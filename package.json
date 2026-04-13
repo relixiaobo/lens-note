@@ -6,6 +6,7 @@
     "typecheck": "pnpm --filter lens-note typecheck"
   },
   "devDependencies": {
+    "edn-data": "^1.1.2",
     "typescript": "^5.9.0"
   }
 }

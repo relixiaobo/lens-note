@@ -63,13 +63,14 @@ Usage:
 Core (agent-facing):
   search "<query>" --json    Find knowledge (supports Chinese/CJK)
   show <id> --json           Read one object with full detail + links
-  write --file <path> --json   Write anything (note/source/link/update/delete/batch)
+  write --file <path> --json   Write anything (note/source/task/link/update/delete/batch)
   fetch <url> [--save] --json Extract web content as clean markdown
   status --json              Stats + health metrics
 
 Read:
-  list <type> [--since 7d]   Browse objects (notes, sources, threads)
+  list <type> [--since 7d]   Browse objects (notes, sources, tasks)
   links <id>                 Show all relationships
+  tasks [--all|--done]       List tasks (default: open)
   context "<query>"          Assemble context pack (JSON)
   digest [week|month|year]   Recent insights summary
 
@@ -101,7 +102,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.0.4");
+  console.log("lens v1.0.5");
   process.exit(0);
 }
 
