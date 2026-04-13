@@ -17,8 +17,10 @@ Requires Node.js >= 20.
 
 ```bash
 lens search "query" --json            # Find knowledge (Unicode/CJK-aware)
-lens show <id> --json                 # Read one object with links + reasons
+lens search "query" --resolve --json  # Resolve title → ID
+lens show <id> --json                 # Read one object with links + counts
 lens write --file <path> --json       # Write note/source/task/link/batch
+lens list notes --orphans --json      # List orphan notes (+ --limit/--offset)
 lens fetch <url> [--save] --json      # Extract web content as markdown
 lens status --json                    # Stats + graph health
 lens tasks [--all|--done] --json      # List tasks

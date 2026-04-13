@@ -2,7 +2,7 @@
  * lens list <type> [--since] — Browse objects by type.
  */
 
-import { listObjects, readObject, ensureInitialized } from "../core/storage";
+import { listObjects, readObject, getOrphanNotes, ensureInitialized } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
 import type { ObjectType } from "../core/types";
 
@@ -23,6 +23,26 @@ export async function listCommand(args: string[], opts: CommandOptions) {
   }
 
   const objType = TYPE_MAP[typeName];
+
+  // --orphans: list notes with no note-to-note links
+  if (flags.orphans) {
+    if (objType !== "note") throw new Error("--orphans only works with notes");
+    const limit = flags.limit ? parseInt(String(flags.limit)) : undefined;
+    const offset = flags.offset ? parseInt(String(flags.offset)) : undefined;
+    const orphans = getOrphanNotes(limit, offset);
+    if (opts.json) {
+      console.log(JSON.stringify({ type: "notes", filter: "orphans", count: orphans.length, items: orphans }, null, 2));
+    } else {
+      if (orphans.length === 0) { console.log("No orphan notes."); return; }
+      console.log(`${orphans.length} orphan notes:\n`);
+      for (const item of orphans) {
+        console.log(`  ${item.id} — ${item.title}`);
+        if (item.preview) console.log(`    ${item.preview}`);
+      }
+    }
+    return;
+  }
+
   const ids = listObjects(objType);
 
   let items: Record<string, any>[] = [];

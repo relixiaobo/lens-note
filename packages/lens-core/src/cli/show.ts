@@ -37,6 +37,8 @@ export async function showObject(id: string, opts: CommandOptions) {
     console.log(JSON.stringify({
       ...data,
       body: content.trim(),
+      forward_link_count: noteLinks.length,
+      backward_link_count: backward.length,
       links: { forward: noteLinks, backward },
     }, null, 2));
   } else {

@@ -43,6 +43,18 @@ Simplified to 3 types (Source, Note, Task). Links as only structure. Agent redes
 - Rewritten README (173 → 80 lines)
 - Removed 961 test data files from repo
 
+## v1.1.0 — Agent Ergonomics (2026-04-13)
+
+Feedback from an agent that processed 784 Tana notes into lens. Design doc: `docs/cli-improvements.md`.
+
+- Batch write partial success: per-item error handling, `{results:[...]}` output format
+- Link idempotency: unchanged/updated/repaired/created actions, never duplicates
+- `lens list notes --orphans` with `--limit`/`--offset` pagination
+- `lens search --resolve` for title→ID resolution with disambiguation
+- `lens show` adds `forward_link_count` and `backward_link_count`
+- Removed `orphan_ids` from `lens status` (use `list --orphans` instead)
+- SKILL.md: added capture trigger words, lens vs auto memory boundary rule
+
 ## Future
 
 - Embedding-based semantic search (for >2000 notes)

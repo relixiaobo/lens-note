@@ -42,7 +42,6 @@ export async function showStatus(opts: CommandOptions) {
 
   // Graph health metrics
   let orphanCount = 0;
-  const orphanIds: string[] = [];
   let totalLinks = 0;
   const linkTypes: Record<string, number> = {};
   let crossSourceLinks = 0;
@@ -59,7 +58,6 @@ export async function showStatus(opts: CommandOptions) {
 
     if (fwd.length === 0 && bck.length === 0) {
       orphanCount++;
-      if (orphanIds.length < 20) orphanIds.push(id);
     }
 
     const mySource = noteSourceMap.get(id) || "";
@@ -84,7 +82,6 @@ export async function showStatus(opts: CommandOptions) {
       cross_source_pct: totalLinks > 0 ? parseFloat((crossSourceLinks / totalLinks * 100).toFixed(1)) : 0,
     },
     link_types: linkTypes,
-    orphan_ids: orphanIds,
   };
 
   if (opts.json) {

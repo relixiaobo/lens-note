@@ -323,3 +323,31 @@ export function getForwardLinks(id: string): { to_id: string; rel: string }[] {
   const db = getDb();
   return db.prepare("SELECT to_id, rel FROM links WHERE from_id = ? ORDER BY rel").all(id) as any[];
 }
+
+export function getOrphanNotes(limit?: number, offset?: number): { id: string; title: string; preview: string }[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT o.id, o.data, o.body FROM objects o
+    WHERE o.type = 'note'
+      AND o.id NOT IN (SELECT from_id FROM links WHERE rel IN ('supports','contradicts','refines','related') AND to_id LIKE 'note_%')
+      AND o.id NOT IN (SELECT to_id FROM links WHERE rel IN ('supports','contradicts','refines','related') AND from_id LIKE 'note_%')
+    ORDER BY o.updated_at DESC
+    LIMIT ? OFFSET ?
+  `).all(limit ?? -1, offset ?? 0) as any[];
+
+  return rows.map((r: any) => {
+    const data = JSON.parse(r.data);
+    return {
+      id: r.id,
+      title: data.title || "(untitled)",
+      preview: (r.body || "").substring(0, 100).trim(),
+    };
+  });
+}
+
+export function findByTitle(title: string): { id: string; type: string; title: string }[] {
+  const db = getDb();
+  return db.prepare(
+    "SELECT id, type, json_extract(data, '$.title') as title FROM objects WHERE LOWER(json_extract(data, '$.title')) = LOWER(?)"
+  ).all(title) as any[];
+}

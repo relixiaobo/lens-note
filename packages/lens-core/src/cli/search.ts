@@ -4,11 +4,47 @@
  * JSON output includes type-specific fields so LLMs don't need follow-up show calls.
  */
 
-import { searchIndex, getObjectFromCache, ensureInitialized } from "../core/storage";
+import { searchIndex, getObjectFromCache, findByTitle, ensureInitialized } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
 export async function searchObjects(query: string, opts: CommandOptions) {
   ensureInitialized();
+
+  // --resolve: conservative ID resolution
+  if (opts.resolve) {
+    // 1. Exact ID match
+    if (/^(src|note|task)_[A-Z0-9]{26}$/.test(query)) {
+      const obj = getObjectFromCache(query);
+      if (obj) {
+        console.log(JSON.stringify({ id: query, title: (obj.obj as any).title }));
+        return;
+      }
+    }
+
+    // 2. Exact title match (case-insensitive)
+    const titleMatches = findByTitle(query);
+    if (titleMatches.length === 1) {
+      console.log(JSON.stringify({ id: titleMatches[0].id, title: titleMatches[0].title }));
+      return;
+    }
+    if (titleMatches.length > 1) {
+      console.log(JSON.stringify({ error: { code: "ambiguous_match", candidates: titleMatches.map(t => ({ id: t.id, title: t.title })) } }));
+      return;
+    }
+
+    // 3. FTS5 ranked search — only resolve if single clear winner
+    const ftsResults = searchIndex(query);
+    if (ftsResults.length === 0) {
+      console.log(JSON.stringify({ error: { code: "no_match", message: `No results for "${query}"` } }));
+      return;
+    }
+    if (ftsResults.length === 1) {
+      console.log(JSON.stringify({ id: ftsResults[0].id, title: ftsResults[0].title }));
+      return;
+    }
+    console.log(JSON.stringify({ error: { code: "ambiguous_match", candidates: ftsResults.slice(0, 5).map(r => ({ id: r.id, title: r.title })) } }));
+    return;
+  }
 
   const results = searchIndex(query);
 

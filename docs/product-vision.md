@@ -1,7 +1,7 @@
 # Lens Product Vision
 
 Date: 2026-04-12
-Status: Active (v1.0.5)
+Status: Active (v1.1.0)
 
 ---
 
@@ -62,8 +62,10 @@ Just as Git stores code without writing it, lens stores knowledge without genera
 
 ```bash
 lens search "<query>" --json     # Find notes (CJK-aware)
-lens show <id> --json            # Read one object with links
+lens search "<query>" --resolve --json  # Resolve title → ID
+lens show <id> --json            # Read one object with links + counts
 lens write --file <path> --json   # Write anything (from JSON file)
+lens list notes --orphans --json # List orphan notes (+ --limit/--offset)
 lens fetch <url> [--save] --json # Extract web content
 lens status --json               # Stats + graph health
 ```
@@ -107,9 +109,10 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 
 **Curate orphan notes:**
 1. `lens status --json` → orphan count
-2. `lens show <orphan_id> --json` → read orphan
-3. `lens search "related" --json` → find connections
-4. `lens write --file link.json --json` → add link
+2. `lens list notes --orphans --json` → get orphan IDs + previews
+3. `lens show <orphan_id> --json` → read orphan
+4. `lens search "related" --json` → find connections
+5. `lens write --file link.json --json` → add link (idempotent)
 
 ---
 

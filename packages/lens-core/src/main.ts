@@ -50,7 +50,7 @@ if (command === "--stdin") {
     console.log(JSON.stringify({ error: { code: "command_error", message, command: req.command } }, null, 2));
     process.exit(1);
   }
-  process.exit(0);
+  process.exit(process.exitCode || 0);
 }
 
 if (!command || command === "--help" || command === "-h") {
@@ -62,13 +62,15 @@ Usage:
 
 Core (agent-facing):
   search "<query>" --json    Find knowledge (supports Chinese/CJK)
-  show <id> --json           Read one object with full detail + links
+  search "<query>" --resolve --json  Resolve title → ID
+  show <id> --json           Read one object with full detail + links + counts
   write --file <path> --json   Write anything (note/source/task/link/update/delete/batch)
   fetch <url> [--save] --json Extract web content as clean markdown
   status --json              Stats + health metrics
 
 Read:
   list <type> [--since 7d]   Browse objects (notes, sources, tasks)
+  list notes --orphans       List unlinked notes (+ --limit/--offset)
   links <id>                 Show all relationships
   tasks [--all|--done]       List tasks (default: open)
   context "<query>"          Assemble context pack (JSON)
@@ -102,7 +104,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.0.5");
+  console.log("lens v1.1.0");
   process.exit(0);
 }
 

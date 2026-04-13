@@ -37,9 +37,11 @@ function validateId(id: string, label: string): void {
 // ============================================================
 
 interface WriteResult {
+  index?: number;
   id?: string;
   type: string;
   action: string;
+  message?: string;
   object?: Record<string, any>;
 }
 
@@ -195,6 +197,33 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   if (!from.startsWith("$")) validateId(from, "link.from");
   if (!to.startsWith("$")) validateId(to, "link.to");
 
+  // Idempotency: check existing links before creating
+  const fromObj = readObject(from);
+  const existingLinks: NoteLink[] = fromObj?.data.links || [];
+  const existing = existingLinks.find((l: NoteLink) => l.to === to && l.rel === rel);
+
+  if (existing) {
+    const sameReason = (existing.reason || undefined) === (reason || undefined);
+
+    if (!sameReason) {
+      updateLinkReason(from, rel, to, reason);
+      return { type: "link", action: "updated", object: { from, rel, to, reason } };
+    }
+
+    // Same link, same reason — check for contradicts repair
+    if (rel === "contradicts") {
+      const toObj = readObject(to);
+      const toLinks: NoteLink[] = toObj?.data.links || [];
+      if (!toLinks.some((l: NoteLink) => l.to === from && l.rel === "contradicts")) {
+        addLinkToExisting(to, "contradicts", from, reason);
+        return { type: "link", action: "repaired", object: { from, rel, to, reason } };
+      }
+    }
+
+    return { type: "link", action: "unchanged", object: { from, rel, to, reason } };
+  }
+
+  // New link
   addLinkToExisting(from, rel, to, reason);
   if (rel === "contradicts") addLinkToExisting(to, "contradicts", from, reason);
 
@@ -335,6 +364,21 @@ function removeLinkFromExisting(id: string, rel: string, targetId: string): void
   saveObject(obj, existing.content);
 }
 
+function updateLinkReason(id: string, rel: LinkRel, targetId: string, reason?: string): void {
+  const existing = readObject(id);
+  if (!existing) return;
+  const data = { ...existing.data };
+  const links: NoteLink[] = [...(data.links || [])];
+  const idx = links.findIndex((l: NoteLink) => l.to === targetId && l.rel === rel);
+  if (idx >= 0) {
+    links[idx] = { to: targetId, rel, ...(reason ? { reason } : {}) };
+    data.links = links;
+    data.updated_at = new Date().toISOString();
+    const obj = { ...data, id } as any;
+    saveObject(obj, existing.content);
+  }
+}
+
 // ============================================================
 // Main entry point
 // ============================================================
@@ -343,6 +387,22 @@ function removeLinkFromExisting(id: string, rel: string, targetId: string): void
 // Shared write execution (used by both CLI and --stdin paths)
 // ============================================================
 
+/** Scan a JSON value for $N batch references, return the referenced indices. */
+function getReferencedIndices(item: any): number[] {
+  const refs: number[] = [];
+  const visit = (val: any) => {
+    if (typeof val === "string" && /^\$\d+$/.test(val)) {
+      refs.push(parseInt(val.slice(1)));
+    } else if (Array.isArray(val)) {
+      for (const v of val) visit(v);
+    } else if (val && typeof val === "object") {
+      for (const v of Object.values(val)) visit(v);
+    }
+  };
+  visit(item);
+  return refs;
+}
+
 function executeWrite(parsed: any, opts: CommandOptions) {
   const isBatch = Array.isArray(parsed);
   const items = isBatch ? parsed : [parsed];
@@ -350,38 +410,72 @@ function executeWrite(parsed: any, opts: CommandOptions) {
 
   const results: WriteResult[] = [];
   const batchIds = new Map<string, string>();
+  const failedIndices = new Set<number>();
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    const type = item.type;
+    const type = item.type || "unknown";
 
-    if (!type) throw new Error(`Item ${i}: "type" field is required. Valid: note, source, task, link, unlink, update, delete`);
-
-    let result: WriteResult;
-    switch (type) {
-      case "note": result = writeNote(item, batchIds); break;
-      case "source": result = writeSource(item); break;
-      case "task": result = writeTask(item, batchIds); break;
-      case "link": result = writeLink(item, batchIds); break;
-      case "unlink": result = writeUnlink(item); break;
-      case "update": result = writeUpdate(item); break;
-      case "delete": result = writeDelete(item); break;
-      default: throw new Error(`Item ${i}: unknown type "${type}". Valid: note, source, task, link, unlink, update, delete`);
+    // In batch mode, check dependencies on failed items
+    if (isBatch) {
+      const deps = getReferencedIndices(item);
+      const failedDep = deps.find(d => failedIndices.has(d));
+      if (failedDep !== undefined) {
+        failedIndices.add(i);
+        results.push({ index: i, type, action: "error", message: `Depends on failed $${failedDep}` });
+        continue;
+      }
     }
 
-    if (result.id) batchIds.set(`$${i}`, result.id);
-    results.push(result);
+    try {
+      if (!item.type) throw new Error(`"type" field is required. Valid: note, source, task, link, unlink, update, delete`);
+
+      let result: WriteResult;
+      switch (type) {
+        case "note": result = writeNote(item, batchIds); break;
+        case "source": result = writeSource(item); break;
+        case "task": result = writeTask(item, batchIds); break;
+        case "link": result = writeLink(item, batchIds); break;
+        case "unlink": result = writeUnlink(item); break;
+        case "update": result = writeUpdate(item); break;
+        case "delete": result = writeDelete(item); break;
+        default: throw new Error(`Unknown type "${type}". Valid: note, source, task, link, unlink, update, delete`);
+      }
+
+      if (result.id) batchIds.set(`$${i}`, result.id);
+      if (isBatch) result.index = i;
+      results.push(result);
+    } catch (err) {
+      if (!isBatch) throw err; // Single writes: propagate error as before
+      failedIndices.add(i);
+      const message = err instanceof Error ? err.message : String(err);
+      results.push({ index: i, type, action: "error", message });
+    }
+  }
+
+  if (isBatch && failedIndices.size > 0) {
+    process.exitCode = 1;
   }
 
   if (opts.json) {
     const output = isBatch
-      ? { created: results.map(r => ({ id: r.id, type: r.type, action: r.action, ...(r.object || {}) })) }
+      ? { results: results.map(r => {
+          const base: Record<string, any> = { index: r.index, type: r.type, action: r.action };
+          if (r.id) base.id = r.id;
+          if (r.message) base.message = r.message;
+          return base;
+        }) }
       : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}) };
     console.log(JSON.stringify(output, null, 2));
   } else {
     for (const r of results) {
-      const id = r.id ? ` ${r.id}` : "";
-      console.log(`${r.action}: ${r.type}${id}`);
+      if (r.action === "error") {
+        const idx = r.index !== undefined ? `[${r.index}] ` : "";
+        console.error(`${idx}error: ${r.type} — ${r.message}`);
+      } else {
+        const id = r.id ? ` ${r.id}` : "";
+        console.log(`${r.action}: ${r.type}${id}`);
+      }
     }
   }
 }
