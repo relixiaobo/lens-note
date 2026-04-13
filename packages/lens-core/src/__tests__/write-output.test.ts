@@ -4,42 +4,16 @@
  * Runs via: node --import tsx/esm --test src/__tests__/write-output.test.ts
  */
 
-import { describe, it, before, after } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { writeFileSync, unlinkSync, mkdirSync } from "node:fs";
+import { writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { createTestEnv } from "./test-helpers";
 
-const ROOT = join(import.meta.dirname, "../..");
-const TSX = "npx";
+const { lens, lensStdin, cleanup } = createTestEnv();
 
-function lens(...args: string[]): { stdout: string; stderr: string; exitCode: number } {
-  try {
-    const stdout = execFileSync(TSX, ["tsx", join(ROOT, "src/main.ts"), ...args], {
-      encoding: "utf-8",
-      cwd: ROOT,
-      timeout: 15_000,
-    });
-    return { stdout, stderr: "", exitCode: 0 };
-  } catch (err: any) {
-    return { stdout: err.stdout || "", stderr: err.stderr || "", exitCode: err.status ?? 1 };
-  }
-}
-
-function lensStdin(envelope: object): { stdout: string; stderr: string; exitCode: number } {
-  try {
-    const stdout = execFileSync(TSX, ["tsx", join(ROOT, "src/main.ts"), "--stdin"], {
-      encoding: "utf-8",
-      cwd: ROOT,
-      input: JSON.stringify(envelope),
-      timeout: 15_000,
-    });
-    return { stdout, stderr: "", exitCode: 0 };
-  } catch (err: any) {
-    return { stdout: err.stdout || "", stderr: err.stderr || "", exitCode: err.status ?? 1 };
-  }
-}
+after(() => cleanup());
 
 // ================================================================
 // 1. JSON parse error messages include position info
@@ -75,8 +49,6 @@ describe("JSON parse error messages", () => {
   });
 
   it("reports via --stdin envelope too", () => {
-    // --stdin parses the envelope JSON itself (in main.ts), not in write.ts
-    // but --file parsing is in write.ts — verify that path specifically
     const tmpFile = join(tmpdir(), `lens-test-bad3-${Date.now()}.json`);
     writeFileSync(tmpFile, '["missing bracket"');
     try {
@@ -95,17 +67,6 @@ describe("JSON parse error messages", () => {
 // ================================================================
 
 describe("batch write link results", () => {
-  const createdIds: string[] = [];
-
-  after(() => {
-    // Clean up created test objects
-    for (const id of createdIds) {
-      try {
-        lensStdin({ command: "write", input: { type: "delete", id } });
-      } catch { /* best effort */ }
-    }
-  });
-
   it("link result includes from, to, rel fields", () => {
     const batch = [
       { type: "note", title: "Test link output A", body: "a" },
@@ -120,20 +81,15 @@ describe("batch write link results", () => {
       const out = JSON.parse(stdout);
 
       assert.equal(out.results.length, 3);
-
-      // Notes have id but no from/to
       assert.ok(out.results[0].id);
       assert.ok(out.results[1].id);
-      createdIds.push(out.results[0].id, out.results[1].id);
 
-      // Link result has from/to/rel
       const linkResult = out.results[2];
       assert.equal(linkResult.type, "link");
       assert.equal(linkResult.action, "created");
       assert.equal(linkResult.from, out.results[1].id);
       assert.equal(linkResult.to, out.results[0].id);
       assert.equal(linkResult.rel, "supports");
-      // id should NOT be present for link results
       assert.equal(linkResult.id, undefined);
     } finally {
       unlinkSync(tmpFile);
@@ -141,7 +97,6 @@ describe("batch write link results", () => {
   });
 
   it("unlink result includes from, to, rel fields", () => {
-    // First create two notes with a link
     const batch1 = [
       { type: "note", title: "Test unlink output A", body: "a" },
       { type: "note", title: "Test unlink output B", body: "b", links: [{ to: "$0", rel: "related" }] },
@@ -154,12 +109,10 @@ describe("batch write link results", () => {
       const out = JSON.parse(stdout);
       noteA = out.results[0].id;
       noteB = out.results[1].id;
-      createdIds.push(noteA, noteB);
     } finally {
       unlinkSync(tmpFile1);
     }
 
-    // Now unlink in a batch
     const batch2 = [{ type: "unlink", from: noteB!, to: noteA!, rel: "related" }];
     const tmpFile2 = join(tmpdir(), `lens-test-unlink2-${Date.now()}.json`);
     writeFileSync(tmpFile2, JSON.stringify(batch2));
@@ -189,8 +142,6 @@ describe("batch write link results", () => {
       const out = JSON.parse(stdout);
 
       const result = out.results[0];
-      createdIds.push(result.id);
-      // Should have index, type, action, id — but NOT body, title, etc.
       assert.equal(result.type, "note");
       assert.ok(result.id);
       assert.equal(result.body, undefined);
@@ -241,8 +192,6 @@ describe("secret detection", () => {
       assert.equal(exitCode, 0);
       const out = JSON.parse(stdout);
       assert.equal(out.action, "created");
-      // Clean up
-      lensStdin({ command: "write", input: { type: "delete", id: out.id } });
     } finally {
       unlinkSync(tmpFile);
     }
@@ -261,17 +210,11 @@ describe("secret detection", () => {
       assert.equal(exitCode, 1);
       const out = JSON.parse(stdout);
 
-      // First note succeeds
       assert.equal(out.results[0].action, "created");
-      // Second note rejected
       assert.equal(out.results[1].action, "error");
       assert.match(out.results[1].message, /API key or secret/);
-      // Third note fails because it depends on $1
       assert.equal(out.results[2].action, "error");
       assert.match(out.results[2].message, /failed \$1/);
-
-      // Clean up the first note
-      lensStdin({ command: "write", input: { type: "delete", id: out.results[0].id } });
     } finally {
       unlinkSync(tmpFile);
     }

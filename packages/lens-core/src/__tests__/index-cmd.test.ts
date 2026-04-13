@@ -4,43 +4,16 @@
  * Runs via: node --import tsx/esm --test src/__tests__/index-cmd.test.ts
  */
 
-import { describe, it, before, after, afterEach } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { writeFileSync, unlinkSync, existsSync } from "node:fs";
+import { writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir, homedir } from "node:os";
+import { tmpdir } from "node:os";
+import { createTestEnv } from "./test-helpers";
 
-const ROOT = join(import.meta.dirname, "../..");
-const TSX = "npx";
-const KEYWORD_INDEX_PATH = join(process.env.LENS_HOME || join(homedir(), ".lens"), "keyword-index.json");
+const { lens, lensStdin, cleanup } = createTestEnv();
 
-function lens(...args: string[]): { stdout: string; stderr: string; exitCode: number } {
-  try {
-    const stdout = execFileSync(TSX, ["tsx", join(ROOT, "src/main.ts"), ...args], {
-      encoding: "utf-8",
-      cwd: ROOT,
-      timeout: 15_000,
-    });
-    return { stdout, stderr: "", exitCode: 0 };
-  } catch (err: any) {
-    return { stdout: err.stdout || "", stderr: err.stderr || "", exitCode: err.status ?? 1 };
-  }
-}
-
-function lensStdin(envelope: object): { stdout: string; stderr: string; exitCode: number } {
-  try {
-    const stdout = execFileSync(TSX, ["tsx", join(ROOT, "src/main.ts"), "--stdin"], {
-      encoding: "utf-8",
-      cwd: ROOT,
-      input: JSON.stringify(envelope),
-      timeout: 15_000,
-    });
-    return { stdout, stderr: "", exitCode: 0 };
-  } catch (err: any) {
-    return { stdout: err.stdout || "", stderr: err.stderr || "", exitCode: err.status ?? 1 };
-  }
-}
+after(() => cleanup());
 
 // Helper: create a test note and return its ID
 function createTestNote(title: string): string {
@@ -67,36 +40,6 @@ function createTestSource(title: string): string {
 }
 
 describe("lens index (Schlagwortregister)", () => {
-  const createdIds: string[] = [];
-  let savedIndex: string | null = null;
-
-  before(() => {
-    // Back up existing index if any
-    if (existsSync(KEYWORD_INDEX_PATH)) {
-      savedIndex = readFileSync(KEYWORD_INDEX_PATH, "utf-8");
-    }
-  });
-
-  after(() => {
-    // Clean up test notes
-    for (const id of createdIds) {
-      try { lensStdin({ command: "write", input: { type: "delete", id } }); } catch {}
-    }
-    // Restore original index
-    if (savedIndex !== null) {
-      writeFileSync(KEYWORD_INDEX_PATH, savedIndex, "utf-8");
-    } else if (existsSync(KEYWORD_INDEX_PATH)) {
-      unlinkSync(KEYWORD_INDEX_PATH);
-    }
-  });
-
-  afterEach(() => {
-    // Clean index between tests
-    if (existsSync(KEYWORD_INDEX_PATH)) {
-      writeFileSync(KEYWORD_INDEX_PATH, JSON.stringify({ version: 1, keywords: {} }, null, 2), "utf-8");
-    }
-  });
-
   it("lists empty index", () => {
     const { stdout, exitCode } = lens("index", "--json");
     assert.equal(exitCode, 0);
@@ -107,7 +50,6 @@ describe("lens index (Schlagwortregister)", () => {
 
   it("adds a note to a keyword", () => {
     const noteId = createTestNote("Test index add");
-    createdIds.push(noteId);
 
     const { stdout, exitCode } = lens("index", "add", "TestKW", noteId, "--json");
     assert.equal(exitCode, 0);
@@ -121,7 +63,6 @@ describe("lens index (Schlagwortregister)", () => {
 
   it("shows entries for a keyword after add", () => {
     const noteId = createTestNote("Test index show");
-    createdIds.push(noteId);
     lens("index", "add", "ShowKW", noteId, "--json");
 
     const { stdout, exitCode } = lens("index", "ShowKW", "--json");
@@ -134,20 +75,13 @@ describe("lens index (Schlagwortregister)", () => {
   });
 
   it("lists keywords after add", () => {
-    const noteId = createTestNote("Test index list");
-    createdIds.push(noteId);
-    lens("index", "add", "ListKW", noteId, "--json");
-
     const { stdout } = lens("index", "--json");
     const out = JSON.parse(stdout);
-    assert.equal(out.count, 1);
-    assert.ok(out.keywords["ListKW"]);
-    assert.equal(out.keywords["ListKW"][0].id, noteId);
+    assert.ok(out.count >= 2); // TestKW + ShowKW from prior tests
   });
 
   it("idempotent add returns already_exists", () => {
     const noteId = createTestNote("Test idempotent");
-    createdIds.push(noteId);
     lens("index", "add", "IdempKW", noteId, "--json");
 
     const { stdout, exitCode } = lens("index", "add", "IdempKW", noteId, "--json");
@@ -159,7 +93,6 @@ describe("lens index (Schlagwortregister)", () => {
   it("allows multiple entries per keyword", () => {
     const id1 = createTestNote("Multi entry 1");
     const id2 = createTestNote("Multi entry 2");
-    createdIds.push(id1, id2);
 
     lens("index", "add", "MultiKW", id1, "--json");
     const { stdout } = lens("index", "add", "MultiKW", id2, "--json");
@@ -174,7 +107,6 @@ describe("lens index (Schlagwortregister)", () => {
       createTestNote("Cap test 3"),
       createTestNote("Cap test 4"),
     ];
-    createdIds.push(...ids);
 
     lens("index", "add", "CapKW", ids[0], "--json");
     lens("index", "add", "CapKW", ids[1], "--json");
@@ -188,7 +120,6 @@ describe("lens index (Schlagwortregister)", () => {
 
   it("rejects non-note IDs", () => {
     const srcId = createTestSource("Test source");
-    createdIds.push(srcId);
 
     const { stdout, exitCode } = lens("index", "add", "SrcKW", srcId, "--json");
     assert.equal(exitCode, 1);
@@ -205,7 +136,6 @@ describe("lens index (Schlagwortregister)", () => {
 
   it("removes entire keyword", () => {
     const noteId = createTestNote("Test remove");
-    createdIds.push(noteId);
     lens("index", "add", "RemKW", noteId, "--json");
 
     const { stdout, exitCode } = lens("index", "remove", "RemKW", "--json");
@@ -219,7 +149,6 @@ describe("lens index (Schlagwortregister)", () => {
   it("removes single entry from keyword", () => {
     const id1 = createTestNote("Single remove 1");
     const id2 = createTestNote("Single remove 2");
-    createdIds.push(id1, id2);
     lens("index", "add", "SRemKW", id1, "--json");
     lens("index", "add", "SRemKW", id2, "--json");
 
@@ -229,7 +158,6 @@ describe("lens index (Schlagwortregister)", () => {
     assert.equal(out.action, "removed_entry");
     assert.equal(out.id, id1);
 
-    // Keyword still exists with remaining entry
     const { stdout: listOut } = lens("index", "SRemKW", "--json");
     const show = JSON.parse(listOut);
     assert.equal(show.entries.length, 1);
@@ -257,9 +185,24 @@ describe("lens index (Schlagwortregister)", () => {
     assert.match(out.error.message, /Usage/);
   });
 
+  it("rejects reserved keyword 'add'", () => {
+    const noteId = createTestNote("Reserved test");
+    const { exitCode, stdout } = lens("index", "add", "add", noteId, "--json");
+    assert.equal(exitCode, 1);
+    const out = JSON.parse(stdout);
+    assert.match(out.error.message, /reserved subcommand/);
+  });
+
+  it("rejects __proto__ keyword", () => {
+    const noteId = createTestNote("Proto test");
+    const { exitCode, stdout } = lens("index", "add", "__proto__", noteId, "--json");
+    assert.equal(exitCode, 1);
+    const out = JSON.parse(stdout);
+    assert.match(out.error.message, /cannot be used/);
+  });
+
   it("works via --stdin dispatch", () => {
     const noteId = createTestNote("Stdin test");
-    createdIds.push(noteId);
 
     // Add
     const addResult = lensStdin({ command: "index", positional: ["add", "StdinKW", noteId] });

@@ -18,7 +18,7 @@ export async function handleFeed(sub: string, args: string[], opts: CommandOptio
 
   const allArgs = sub ? [sub, ...args] : args;
   const { positional, flags } = parseCliArgs(allArgs);
-  const mergedOpts = { ...opts, ...flags };
+  const mergedOpts: CommandOptions = { ...flags, json: opts.json || flags.json };
   const subcommand = positional[0];
 
   switch (subcommand) {
