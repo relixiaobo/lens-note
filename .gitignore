@@ -25,9 +25,7 @@ Thumbs.db
 # pnpm
 .npmrc
 
-# Spike cache & results
+# Spike cache, results, and test data
 spike/cache/
 spike/results/
-
-# Stale nested packages
-packages/lens-core/packages/
+spike/test-data/
