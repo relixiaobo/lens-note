@@ -1,12 +1,5 @@
 /**
- * lens list <type> [--filters] — Browse objects by type with optional filters.
- *
- * lens list notes --json
- * lens list notes --role claim --json
- * lens list notes --scope big_picture --json
- * lens list notes --since 7d --json
- * lens list sources --json
- * lens list threads --json
+ * lens list <type> [--since] — Browse objects by type.
  */
 
 import { listObjects, readObject, ensureInitialized } from "../core/storage";
@@ -14,12 +7,9 @@ import { parseCliArgs, type CommandOptions } from "./commands";
 import type { ObjectType } from "../core/types";
 
 const TYPE_MAP: Record<string, ObjectType> = {
-  notes: "note",
-  note: "note",
-  sources: "source",
-  source: "source",
-  threads: "thread",
-  thread: "thread",
+  notes: "note", note: "note",
+  sources: "source", source: "source",
+  threads: "thread", thread: "thread",
 };
 
 export async function listCommand(args: string[], opts: CommandOptions) {
@@ -29,15 +19,12 @@ export async function listCommand(args: string[], opts: CommandOptions) {
   const typeName = positional[0];
 
   if (!typeName || !TYPE_MAP[typeName]) {
-    throw new Error(
-      `Usage: lens list <type> [--filters]\nTypes: notes, sources, threads\n\nFilters for notes:\n  --role <role>     Filter by role (claim, frame, question, observation, connection, structure_note)\n  --scope <scope>   Filter by scope (big_picture, detail)\n  --since <period>  Filter by age (e.g. 7d, 2w, 1m)`
-    );
+    throw new Error("Usage: lens list <notes|sources|threads> [--since 7d]");
   }
 
   const objType = TYPE_MAP[typeName];
   const ids = listObjects(objType);
 
-  // Read all objects
   let items: Record<string, any>[] = [];
   for (const id of ids) {
     const obj = readObject(id);
@@ -45,24 +32,7 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     items.push({ id, ...obj.data });
   }
 
-  // Apply filters (derive effective role from fields if role hint is missing)
-  const VALID_ROLES = new Set(["claim", "frame", "question", "observation", "connection", "structure_note"]);
-  const roleFilter = flags.role as string | undefined;
-  if (roleFilter && !VALID_ROLES.has(roleFilter)) {
-    throw new Error(`Unknown role: "${roleFilter}". Valid roles: ${[...VALID_ROLES].join(", ")}`);
-  }
-  if (roleFilter) {
-    items = items.filter((item) => {
-      const effectiveRole = item.role || inferRoleFromFields(item);
-      return effectiveRole === roleFilter;
-    });
-  }
-
-  const scopeFilter = flags.scope as string | undefined;
-  if (scopeFilter) {
-    items = items.filter((item) => item.scope === scopeFilter);
-  }
-
+  // Time filter
   const sinceFilter = flags.since as string | undefined;
   if (sinceFilter) {
     const days = parseDays(sinceFilter);
@@ -70,94 +40,29 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     items = items.filter((item) => (item.created_at || "") > cutoff);
   }
 
-  // Build summary items (type-specific key fields, not full objects)
-  const summaries = items.map((item) => summarize(item, objType));
-
   if (opts.json) {
-    console.log(JSON.stringify({
-      type: typeName,
-      count: summaries.length,
-      filters: { role: roleFilter, scope: scopeFilter, since: sinceFilter },
-      items: summaries,
-    }, null, 2));
+    const summaries = items.map(item => {
+      const base: Record<string, any> = { id: item.id, title: item.title };
+      if (item.links?.length) base.links = item.links;
+      if (item.source) base.source = item.source;
+      if (item.source_type) base.source_type = item.source_type;
+      if (item.word_count) base.word_count = item.word_count;
+      if (item.url) base.url = item.url;
+      return base;
+    });
+    console.log(JSON.stringify({ type: typeName, count: summaries.length, items: summaries }, null, 2));
   } else {
-    if (summaries.length === 0) {
+    if (items.length === 0) {
       console.log(`No ${typeName} found.`);
       return;
     }
-
-    console.log(`${summaries.length} ${typeName}:\n`);
-
-    const qualifierBar: Record<string, string> = {
-      certain: "■■■", likely: "■■ ", presumably: "■  ", tentative: "·  ",
-    };
-
-    for (const s of summaries) {
-      switch (objType) {
-        case "note": {
-          const role = s.role || "observation";
-          switch (role) {
-            case "claim": {
-              const bar = qualifierBar[s.qualifier] || "   ";
-              const scope = s.scope === "big_picture" ? " *" : "";
-              console.log(`  ${bar} ${s.text}${scope}`);
-              break;
-            }
-            case "frame":
-              console.log(`  [frame] ${s.text}`);
-              if (s.sees) console.log(`    sees: ${s.sees}`);
-              if (s.ignores) console.log(`    ignores: ${s.ignores}`);
-              break;
-            case "question":
-              console.log(`  ? ${s.text} [${s.question_status || "open"}]`);
-              break;
-            case "connection":
-              console.log(`  <-> ${s.text}`);
-              break;
-            case "structure_note":
-              console.log(`  # ${s.text}`);
-              break;
-            default:
-              console.log(`  - ${s.text}`);
-              break;
-          }
-          break;
-        }
-        case "source":
-          console.log(`  ${s.title} (${s.word_count} words, ${s.source_type})`);
-          break;
-        case "thread":
-          console.log(`  ${s.title}`);
-          break;
-      }
+    console.log(`${items.length} ${typeName}:\n`);
+    for (const item of items) {
+      const title = item.title || "(untitled)";
+      const linkCount = item.links?.length || 0;
+      const linkInfo = linkCount > 0 ? ` (${linkCount} links)` : "";
+      console.log(`  ${title}${linkInfo}`);
     }
-  }
-}
-
-/** Extract type-specific summary fields (not the full object) */
-function summarize(item: Record<string, any>, type: ObjectType): Record<string, any> {
-  const base = { id: item.id };
-  switch (type) {
-    case "note":
-      return {
-        ...base,
-        text: item.text,
-        role: item.role,
-        qualifier: item.qualifier,
-        scope: item.scope,
-        sees: item.sees,
-        ignores: item.ignores,
-        question_status: item.question_status,
-      };
-    case "source":
-      return {
-        ...base, title: item.title, source_type: item.source_type,
-        word_count: item.word_count, url: item.url,
-      };
-    case "thread":
-      return { ...base, title: item.title, references: item.references };
-    default:
-      return base;
   }
 }
 
@@ -174,14 +79,4 @@ function parseDays(s: string): number {
     case "y": return n * 365;
     default: return n;
   }
-}
-
-/** Derive role from which optional fields are present (fallback when role hint is missing) */
-function inferRoleFromFields(item: Record<string, any>): string {
-  if (item.evidence?.length) return "claim";
-  if (item.sees || item.ignores) return "frame";
-  if (item.question_status) return "question";
-  if (item.bridges?.length) return "connection";
-  if (item.entries?.length) return "structure_note";
-  return "observation";
 }

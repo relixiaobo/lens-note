@@ -24,13 +24,13 @@ Core (agent-facing):
   status --json              Stats + health metrics
 
 Read:
-  list <type> [--filters]    Browse objects (notes, sources, threads)
+  list <type> [--since 7d]   Browse objects (notes, sources, threads)
   links <id>                 Show all relationships
   context "<query>"          Assemble context pack (JSON)
   digest [week|month|year]   Recent insights summary
 
 Write shortcuts:
-  note "<text>"              Quick note (alias for write)
+  note "<title>"             Quick note (alias for write)
   ingest <url|file>          Save source (alias for fetch --save)
 
 RSS:
@@ -53,7 +53,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.0.0");
+  console.log("lens v1.0.1");
   process.exit(0);
 }
 

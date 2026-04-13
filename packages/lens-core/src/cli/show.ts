@@ -1,9 +1,5 @@
 /**
- * lens show <id> — Show any lens object.
- *
- * For Sources: shows what the source contributed (backlinked notes).
- * For Notes: adapts display based on role (claim/frame/question/etc).
- * For other types: shows the object with its fields.
+ * lens show <id> — Show any lens object with links.
  */
 
 import { readObject, getBacklinks, getForwardLinks, ensureInitialized } from "../core/storage";
@@ -17,25 +13,13 @@ export async function showObject(id: string, opts: CommandOptions) {
 
   const { data, content } = result;
 
-  // Source-specific: show contributions
-  if (data.type === "source" && !opts.json) {
-    return showSourceContributions(id, data, content, opts);
-  }
-
-  // Note-specific: role-based display
-  if (data.type === "note" && !opts.json) {
-    return showNote(id, data, content, opts);
-  }
-
-  // Generic display for other types or --json
   if (opts.json) {
-    // Include links with reasons + 1-hop enrichment
     const enrichLink = (linkId: string) => {
       const linked = readObject(linkId);
       return linked ? (linked.data.title || "").substring(0, 120) : "";
     };
 
-    // Forward links from the note's own links array (preserves reason)
+    // Forward links from note's own links array (preserves reason)
     const noteLinks = (data.links || []).map((l: any) => ({
       to: l.to,
       rel: l.rel,
@@ -50,216 +34,47 @@ export async function showObject(id: string, opts: CommandOptions) {
       title: enrichLink(l.from_id),
     }));
 
-    console.log(JSON.stringify({ ...data, body: content.trim(), links: { forward: noteLinks, backward } }, null, 2));
+    console.log(JSON.stringify({
+      ...data,
+      body: content.trim(),
+      links: { forward: noteLinks, backward },
+    }, null, 2));
   } else {
-    console.log(`--- ${data.type}: ${id} ---`);
-    for (const [key, value] of Object.entries(data)) {
-      if (key === "type" || key === "id") continue;
-      if (value === null || value === undefined) continue;
-      if (Array.isArray(value)) {
-        if (value.length === 0) continue;
-        if (typeof value[0] === "object") {
-          console.log(`${key}:`);
-          for (const item of value) console.log(`  - ${JSON.stringify(item)}`);
-        } else {
-          console.log(`${key}: ${value.join(", ")}`);
-        }
-      } else if (typeof value === "object") {
-        console.log(`${key}: ${JSON.stringify(value)}`);
-      } else {
-        console.log(`${key}: ${value}`);
+    // Human-readable display
+    const title = data.title || "(untitled)";
+    console.log(`"${title}"\n`);
+
+    if (data.source) console.log(`Source: ${data.source}`);
+    if (data.source_type) console.log(`Type: ${data.source_type}`);
+    if (data.url) console.log(`URL: ${data.url}`);
+    if (data.author) console.log(`Author: ${data.author}`);
+    if (data.word_count) console.log(`Words: ${data.word_count}`);
+
+    // Links
+    const noteLinks = data.links || [];
+    if (noteLinks.length > 0) {
+      console.log(`\nLinks:`);
+      for (const l of noteLinks) {
+        const linked = readObject(l.to);
+        const linkedTitle = linked ? (linked.data.title || "").substring(0, 60) : l.to;
+        const reason = l.reason ? ` — ${l.reason}` : "";
+        console.log(`  ${l.rel} → ${linkedTitle}${reason}`);
       }
     }
-    if (content.trim()) console.log(`\n${content.trim()}`);
-  }
-}
 
-/** Show a Note with role-adapted display */
-function showNote(
-  id: string,
-  data: Record<string, any>,
-  content: string,
-  opts: CommandOptions,
-) {
-  const qualifierBar: Record<string, string> = {
-    certain: "■■■", likely: "■■ ", presumably: "■  ", tentative: "·  ",
-  };
-
-  const role = data.role || "observation";
-  const text = data.text || "";
-
-  // Header
-  if (role === "claim" || data.evidence?.length) {
-    // Toulmin-style display
-    const bar = qualifierBar[data.qualifier] || "   ";
-    console.log(`${bar} "${text}"\n`);
-    if (data.scope) console.log(`Scope: ${data.scope}`);
-    if (data.structure_type) console.log(`Type: ${data.structure_type}`);
-    if (data.voice) console.log(`Voice: ${data.voice}`);
-
-    if (data.evidence?.length) {
-      console.log(`\nEvidence:`);
-      for (const e of data.evidence) {
-        console.log(`  > "${e.text}"`);
-        if (e.source) console.log(`    -- ${e.source}${e.locator ? `, ${e.locator}` : ""}`);
+    const backward = getBacklinks(id).filter(l => l.from_id.startsWith("note_"));
+    if (backward.length > 0) {
+      console.log(`\nReferenced by:`);
+      for (const l of backward) {
+        const linked = readObject(l.from_id);
+        const linkedTitle = linked ? (linked.data.title || "").substring(0, 60) : l.from_id;
+        console.log(`  ${l.rel} ← ${linkedTitle}`);
       }
     }
-  } else if (role === "frame" || data.sees || data.ignores) {
-    // Frame display
-    console.log(`[frame] "${text}"\n`);
-    if (data.sees) console.log(`Sees: ${data.sees}`);
-    if (data.ignores) console.log(`Ignores: ${data.ignores}`);
-    if (data.assumptions?.length) {
-      console.log(`Assumptions:`);
-      for (const a of data.assumptions) {
-        console.log(`  - ${a}`);
-      }
+
+    if (content.trim()) {
+      console.log(`\n${content.trim()}`);
     }
-  } else if (role === "question" || data.question_status) {
-    // Question display
-    console.log(`? "${text}"\n`);
-    console.log(`Status: ${data.question_status || "open"}`);
-  } else if (role === "connection" || data.bridges?.length) {
-    // Connection display
-    console.log(`<-> "${text}"\n`);
-    if (data.bridges?.length) {
-      console.log(`Bridges:`);
-      for (const b of data.bridges) console.log(`  - ${b}`);
-    }
-  } else if (role === "structure_note" || data.entries?.length) {
-    // Structure note display
-    console.log(`# "${text}"\n`);
-    if (data.entries?.length) {
-      console.log(`Entries:`);
-      for (const e of data.entries) console.log(`  - ${e}`);
-    }
-  } else {
-    // Observation (default)
-    console.log(`"${text}"\n`);
+    console.log();
   }
-
-  // Typed links (common to all roles)
-  if (data.supports?.length) {
-    console.log(`\nSupports: ${data.supports.join(", ")}`);
-  }
-  if (data.contradicts?.length) {
-    console.log(`Contradicts: ${data.contradicts.join(", ")}`);
-  }
-  if (data.refines?.length) {
-    console.log(`Refines: ${data.refines.join(", ")}`);
-  }
-  if (data.related?.length) {
-    console.log(`Related:`);
-    for (const r of data.related) {
-      const note = typeof r === "object" && r.note ? ` (${r.note})` : "";
-      const rid = typeof r === "object" ? r.id : r;
-      console.log(`  - ${rid}${note}`);
-    }
-  }
-
-  if (data.source) {
-    console.log(`\nSource: ${data.source}`);
-  }
-
-  if (content.trim()) {
-    console.log(`\n${content.trim()}`);
-  }
-
-  console.log();
-}
-
-/** Show a Source with its contributions (backlinked notes) */
-function showSourceContributions(
-  id: string,
-  data: Record<string, any>,
-  content: string,
-  opts: CommandOptions,
-) {
-  const qualifierBar: Record<string, string> = {
-    certain: "■■■", likely: "■■ ", presumably: "■  ", tentative: "·  ",
-  };
-
-  console.log(`"${data.title}"`);
-  if (data.author) console.log(`by ${data.author}`);
-  if (data.url) console.log(`${data.url}`);
-  console.log(`${data.word_count} words · ${data.source_type} · ${data.ingested_at?.substring(0, 10)}`);
-  console.log(`${"━".repeat(50)}\n`);
-
-  // Find all notes sourced from this source (both "source" and "evidence" backlinks)
-  const backlinks = getBacklinks(id);
-  const noteIds = new Set(
-    backlinks
-      .filter((l) => (l.rel === "source" || l.rel === "evidence") && l.from_id.startsWith("note_"))
-      .map((l) => l.from_id)
-  );
-  const notes = [...noteIds]
-    .map((noteId) => {
-      const obj = readObject(noteId);
-      return obj ? {
-        id: noteId,
-        text: obj.data.text,
-        role: obj.data.role || "observation",
-        qualifier: obj.data.qualifier,
-        scope: obj.data.scope,
-        sees: obj.data.sees,
-        question_status: obj.data.question_status,
-      } : null;
-    })
-    .filter(Boolean) as any[];
-
-  if (notes.length === 0) {
-    console.log("No structured knowledge extracted yet.");
-    return;
-  }
-
-  console.log(`Contributed ${notes.length} note(s):\n`);
-
-  // Group by role for display
-  const claims = notes.filter((n: any) => n.role === "claim");
-  const frames = notes.filter((n: any) => n.role === "frame");
-  const questions = notes.filter((n: any) => n.role === "question");
-  const others = notes.filter((n: any) => !["claim", "frame", "question"].includes(n.role));
-
-  // Big picture claims first
-  const bigPicture = claims.filter((c: any) => c.scope === "big_picture");
-  const details = claims.filter((c: any) => c.scope !== "big_picture");
-
-  if (bigPicture.length) {
-    console.log(`  Key Insights`);
-    for (const c of bigPicture) {
-      const bar = qualifierBar[c.qualifier] || "   ";
-      console.log(`    ${bar} ${c.text}`);
-    }
-  }
-
-  if (details.length) {
-    console.log(`\n  Supporting (${details.length} notes)`);
-    for (const c of details) {
-      const bar = qualifierBar[c.qualifier] || "   ";
-      console.log(`    ${bar} ${c.text}`);
-    }
-  }
-
-  if (frames.length) {
-    console.log(`\n  Perspectives`);
-    for (const f of frames) {
-      console.log(`    [frame] ${f.text}${f.sees ? ` -- sees: ${f.sees}` : ""}`);
-    }
-  }
-
-  if (questions.length) {
-    console.log(`\n  Questions Raised`);
-    for (const q of questions) {
-      console.log(`    ? ${q.text} [${q.question_status || "open"}]`);
-    }
-  }
-
-  if (others.length) {
-    console.log(`\n  Other Notes`);
-    for (const o of others) {
-      console.log(`    - ${o.text}`);
-    }
-  }
-
-  console.log();
 }

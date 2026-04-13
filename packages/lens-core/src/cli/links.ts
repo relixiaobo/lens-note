@@ -21,7 +21,7 @@ function getLabel(id: string): { type?: string; label: string } {
   if (!obj) return { label: id };
   const data = obj.data;
   const type = data.type;
-  const label = data.text || data.title || id;
+  const label = data.title || id;
   return { type, label: typeof label === "string" ? label : id };
 }
 

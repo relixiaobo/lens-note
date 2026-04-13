@@ -51,21 +51,31 @@ export function saveObject(obj: LensObject, body: string = ""): string {
   return filePath;
 }
 
-/** Auto-commit changes to git if the repo is initialized */
+/** Debounced git commit — stages immediately, commits after a short delay */
+let _gitTimer: ReturnType<typeof setTimeout> | null = null;
+const _gitEnv = { GIT_AUTHOR_NAME: "lens", GIT_AUTHOR_EMAIL: "lens@local", GIT_COMMITTER_NAME: "lens", GIT_COMMITTER_EMAIL: "lens@local" };
+
 function gitCommit(filePath: string, obj: LensObject): void {
   try {
     const gitDir = paths.root;
-    // Check if git is initialized
-    execFileSync("git", ["-C", gitDir, "rev-parse", "--git-dir"], { stdio: "ignore" });
-    // Stage and commit
+    // Stage immediately
     execFileSync("git", ["-C", gitDir, "add", filePath], { stdio: "ignore" });
-    const msg = `${obj.type}: ${obj.title.substring(0, 60)}`;
-    execFileSync("git", ["-C", gitDir, "commit", "-m", msg, "--allow-empty-message", "--no-gpg-sign"], {
-      stdio: "ignore",
-      env: { ...process.env, GIT_AUTHOR_NAME: "lens", GIT_AUTHOR_EMAIL: "lens@local", GIT_COMMITTER_NAME: "lens", GIT_COMMITTER_EMAIL: "lens@local" },
-    });
+
+    // Debounce commit — batch multiple writes into one commit
+    if (_gitTimer) clearTimeout(_gitTimer);
+    _gitTimer = setTimeout(() => {
+      try {
+        execFileSync("git", ["-C", gitDir, "commit", "-m", "lens: update knowledge", "--no-gpg-sign"], {
+          stdio: "ignore",
+          env: { ...process.env, ..._gitEnv },
+        });
+      } catch {
+        // Nothing staged or commit failed
+      }
+      _gitTimer = null;
+    }, 500);
   } catch {
-    // Git not initialized or commit failed — silently continue
+    // Git not initialized — silently continue
   }
 }
 
@@ -229,7 +239,7 @@ function searchCJK(db: any, query: string): { id: string; type: string; title: s
         results.get(row.id)!.score++;
       } else {
         const data = JSON.parse(row.data);
-        const title = data.text || data.title || "";
+        const title = data.title || "";
         const bodyStr = row.body || "";
         // Extract snippet around the match
         const idx = bodyStr.indexOf(term);
