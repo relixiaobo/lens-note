@@ -13,9 +13,10 @@
  * Batch supports $N references to earlier items by index.
  */
 
-import { readFileSync } from "fs";
+import { readFileSync, unlinkSync } from "fs";
 import { generateId, type Note, type Source, type NoteLink, type LinkRel, type SourceType } from "../core/types";
-import { saveObject, readObject, ensureInitialized } from "../core/storage";
+import { saveObject, readObject, ensureInitialized, getDb } from "../core/storage";
+import { objectPath } from "../core/paths";
 import { parseCliArgs, type CommandOptions } from "./commands";
 
 // ============================================================
@@ -222,11 +223,9 @@ function writeDelete(input: any): WriteResult {
   if (!existing) throw new Error(`delete: "${id}" not found`);
 
   // Remove the file and re-index
-  const { unlinkSync } = require("fs");
-  const { objectPath } = require("../core/paths");
   try { unlinkSync(objectPath(id)); } catch {}
 
-  const db = require("../core/storage").getDb();
+  const db = getDb();
   db.prepare("DELETE FROM objects WHERE id = ?").run(id);
   db.prepare("DELETE FROM search_index WHERE id = ?").run(id);
   db.prepare("DELETE FROM links WHERE from_id = ? OR to_id = ?").run(id, id);

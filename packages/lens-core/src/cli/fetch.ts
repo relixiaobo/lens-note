@@ -47,8 +47,8 @@ export async function fetchUrl(url: string, opts: CommandOptions) {
   }
 
   if (opts.json) {
-    // Sanitize markdown for JSON output (replace control chars)
-    const cleanMarkdown = result.markdown.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, " ");
+    // Sanitize markdown for JSON output (replace all control chars except \n and \t)
+    const cleanMarkdown = result.markdown.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ");
     console.log(JSON.stringify({
       title: result.title,
       author: result.author || null,
