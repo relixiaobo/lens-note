@@ -351,3 +351,63 @@ export function findByTitle(title: string): { id: string; type: string; title: s
     "SELECT id, type, json_extract(data, '$.title') as title FROM objects WHERE LOWER(json_extract(data, '$.title')) = LOWER(?)"
   ).all(title) as any[];
 }
+
+// ============================================================
+// Similarity (character trigrams + Dice coefficient)
+// ============================================================
+
+function normalizeForSimilarity(text: string): string {
+  return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function charTrigrams(text: string): Set<string> {
+  const norm = normalizeForSimilarity(text);
+  const grams = new Set<string>();
+  for (let i = 0; i <= norm.length - 3; i++) {
+    grams.add(norm.substring(i, i + 3));
+  }
+  return grams;
+}
+
+function diceSimilarity(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  if (a.size === 0 || b.size === 0) return 0;
+  let intersection = 0;
+  const [smaller, larger] = a.size <= b.size ? [a, b] : [b, a];
+  for (const g of smaller) {
+    if (larger.has(g)) intersection++;
+  }
+  return (2 * intersection) / (a.size + b.size);
+}
+
+export function findSimilarNotes(id: string, threshold: number = 0.3): { id: string; title: string; similarity: number }[] {
+  const db = getDb();
+
+  const target = db.prepare("SELECT data, body FROM objects WHERE id = ?").get(id) as any;
+  if (!target) return [];
+  const targetData = JSON.parse(target.data);
+  const targetText = (targetData.title || "") + " " + (target.body || "");
+  const targetGrams = charTrigrams(targetText);
+  if (targetGrams.size === 0) return [];
+
+  const rows = db.prepare("SELECT id, data, body FROM objects WHERE type = 'note' AND id != ?").all(id) as any[];
+
+  const results: { id: string; title: string; similarity: number }[] = [];
+  for (const row of rows) {
+    const data = JSON.parse(row.data);
+    const text = (data.title || "") + " " + (row.body || "");
+    const grams = charTrigrams(text);
+
+    // Size pre-filter: skip vastly different lengths
+    if (grams.size === 0) continue;
+    const sizeRatio = Math.min(targetGrams.size, grams.size) / Math.max(targetGrams.size, grams.size);
+    if (sizeRatio < 0.3) continue;
+
+    const similarity = diceSimilarity(targetGrams, grams);
+    if (similarity >= threshold) {
+      results.push({ id: row.id, title: data.title || "(untitled)", similarity: parseFloat(similarity.toFixed(3)) });
+    }
+  }
+
+  return results.sort((a, b) => b.similarity - a.similarity);
+}

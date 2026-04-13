@@ -72,6 +72,7 @@ Read:
   list <type> [--since 7d]   Browse objects (notes, sources, tasks)
   list notes --orphans       List unlinked notes (+ --limit/--offset)
   links <id>                 Show all relationships
+  similar <id> [--threshold] Find near-duplicate notes
   tasks [--all|--done]       List tasks (default: open)
   context "<query>"          Assemble context pack (JSON)
   digest [week|month|year]   Recent insights summary
@@ -104,7 +105,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.1.0");
+  console.log("lens v1.2.0");
   process.exit(0);
 }
 

@@ -22,6 +22,7 @@ lens show <id> --json                 # Read one object with links + counts
 lens write --file <path> --json       # Write note/source/task/link/batch
 lens list notes --orphans --json      # List orphan notes (+ --limit/--offset)
 lens fetch <url> [--save] --json      # Extract web content as markdown
+lens similar <id> --json              # Find near-duplicate notes
 lens status --json                    # Stats + graph health
 lens tasks [--all|--done] --json      # List tasks
 ```

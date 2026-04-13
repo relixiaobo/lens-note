@@ -150,6 +150,14 @@ async function tasksCommand(args: string[], opts: CommandOptions) {
   await listTasks(args, opts);
 }
 
+async function similarCommand(args: string[], opts: CommandOptions) {
+  const { positional } = parseCliArgs(args);
+  const id = positional[0];
+  if (!id) throw new Error("Usage: lens similar <id> [--threshold 0.7]");
+  const { showSimilar } = await import("./similar");
+  await showSimilar(id, opts);
+}
+
 export const commands: Record<string, CommandHandler> = {
   init: initCommand,
   status: statusCommand,
@@ -165,6 +173,7 @@ export const commands: Record<string, CommandHandler> = {
   write: writeCommand,
   fetch: fetchCommand,
   tasks: tasksCommand,
+  similar: similarCommand,
   "rebuild-index": rebuildIndexCommand,
 };
 
@@ -259,6 +268,12 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
       if (!id) throw new Error('links: "positional" with object ID is required');
       const { showLinks } = await import("./links");
       return showLinks(id, opts);
+    }
+    case "similar": {
+      const id = req.positional?.[0];
+      if (!id) throw new Error('similar: "positional" with object ID is required');
+      const { showSimilar } = await import("./similar");
+      return showSimilar(id, opts);
     }
     case "context": {
       const query = (req.positional || []).join(" ");
