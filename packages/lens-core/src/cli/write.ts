@@ -32,6 +32,40 @@ function validateId(id: string, label: string): void {
   if (!readObject(id)) throw new Error(`${label}: "${id}" not found. Use \`lens search\` to find the correct ID.`);
 }
 
+// Secret patterns — prefix-based tokens and PEM private keys
+const SECRET_PATTERNS: RegExp[] = [
+  /sk-[a-zA-Z0-9_-]{20,}/,              // OpenAI
+  /sk-ant-[a-zA-Z0-9_-]{20,}/,          // Anthropic
+  /ghp_[a-zA-Z0-9]{36,}/,               // GitHub PAT
+  /gho_[a-zA-Z0-9]{36,}/,               // GitHub OAuth
+  /ghs_[a-zA-Z0-9]{36,}/,               // GitHub App
+  /github_pat_[a-zA-Z0-9_]{20,}/,       // GitHub fine-grained PAT
+  /xoxb-[a-zA-Z0-9-]+/,                 // Slack bot
+  /xoxp-[a-zA-Z0-9-]+/,                 // Slack user
+  /AKIA[A-Z0-9]{16}/,                   // AWS access key
+  /-----BEGIN[\s\S]*?PRIVATE KEY-----/,  // PEM private key
+];
+
+function checkForSecrets(input: any): void {
+  const texts: string[] = [];
+  if (typeof input.title === "string") texts.push(input.title);
+  if (typeof input.body === "string") texts.push(input.body);
+  if (typeof input.url === "string") texts.push(input.url);
+
+  const combined = texts.join("\n");
+  if (!combined) return;
+
+  for (const pat of SECRET_PATTERNS) {
+    if (pat.test(combined)) {
+      throw new Error(
+        "Content appears to contain an API key or secret. " +
+        "lens is git-tracked and stores content in plain text — secrets will be permanently recorded in history. " +
+        "Use environment variables, a keychain, or a secrets manager instead."
+      );
+    }
+  }
+}
+
 // ============================================================
 // Write handlers
 // ============================================================
@@ -429,6 +463,7 @@ function executeWrite(parsed: any, opts: CommandOptions) {
 
     try {
       if (!item.type) throw new Error(`"type" field is required. Valid: note, source, task, link, unlink, update, delete`);
+      checkForSecrets(item);
 
       let result: WriteResult;
       switch (type) {
@@ -462,6 +497,11 @@ function executeWrite(parsed: any, opts: CommandOptions) {
       ? { results: results.map(r => {
           const base: Record<string, any> = { index: r.index, type: r.type, action: r.action };
           if (r.id) base.id = r.id;
+          if ((r.type === "link" || r.type === "unlink") && r.object) {
+            if (r.object.from) base.from = r.object.from;
+            if (r.object.to) base.to = r.object.to;
+            if (r.object.rel) base.rel = r.object.rel;
+          }
           if (r.message) base.message = r.message;
           return base;
         }) }
@@ -512,8 +552,9 @@ export async function handleWrite(args: string[], opts: CommandOptions) {
   let parsed: any;
   try {
     parsed = JSON.parse(rawInput);
-  } catch {
-    throw new Error("Invalid JSON input");
+  } catch (e) {
+    const detail = e instanceof SyntaxError ? `: ${e.message}` : "";
+    throw new Error(`Invalid JSON input${detail}`);
   }
 
   executeWrite(parsed, opts);

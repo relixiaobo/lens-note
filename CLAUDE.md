@@ -158,6 +158,7 @@ Every write auto-commits to git. `git log notes/note_01.md` shows full evolution
 ```bash
 pnpm install
 npx tsx packages/lens-core/src/main.ts <cmd>    # Dev mode
+cd packages/lens-core && npm test               # Run tests
 npx tsc --noEmit --project packages/lens-core/tsconfig.json  # Type check
 cd packages/lens-core && npx tsup && npm publish --access public  # Publish
 ```

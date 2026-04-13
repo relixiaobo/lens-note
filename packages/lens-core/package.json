@@ -12,6 +12,7 @@
   "scripts": {
     "build": "tsup",
     "prepublishOnly": "npm run build",
+    "test": "node --import tsx/esm --test src/__tests__/*.test.ts",
     "typecheck": "tsc --noEmit",
     "dev": "tsx src/main.ts"
   },
