@@ -1,9 +1,8 @@
 /**
  * lens links <id> — Show all relationships for an object.
  *
- * Returns forward (outgoing) and backward (incoming) links with labels.
- * Labels are the text/title of the linked object so the LLM
- * doesn't need follow-up show calls.
+ * Returns forward and backward links with titles.
+ * Titles are resolved so the LLM doesn't need follow-up show calls.
  */
 
 import { getForwardLinks, getBacklinks, readObject, ensureInitialized } from "../core/storage";
@@ -13,16 +12,15 @@ interface LabeledLink {
   id: string;
   rel: string;
   type?: string;
-  label: string;
+  title: string;
 }
 
-function getLabel(id: string): { type?: string; label: string } {
-  const obj = readObject(id);
-  if (!obj) return { label: id };
+function resolveLink(linkId: string): { type?: string; title: string } {
+  const obj = readObject(linkId);
+  if (!obj) return { title: linkId };
   const data = obj.data;
-  const type = data.type;
-  const label = data.title || id;
-  return { type, label: typeof label === "string" ? label : id };
+  const title = data.title || linkId;
+  return { type: data.type, title: typeof title === "string" ? title : linkId };
 }
 
 export async function showLinks(id: string, opts: CommandOptions) {
@@ -34,42 +32,42 @@ export async function showLinks(id: string, opts: CommandOptions) {
   const obj = readObject(id);
   if (!obj) throw new Error(`Object not found: ${id}`);
 
-  const forward = getForwardLinks(id);
-  const backward = getBacklinks(id);
+  const rawForward = getForwardLinks(id);
+  const rawBackward = getBacklinks(id);
 
-  const outgoing: LabeledLink[] = forward.map((l) => {
-    const { type, label } = getLabel(l.to_id);
-    return { id: l.to_id, rel: l.rel, type, label };
+  const forward: LabeledLink[] = rawForward.map((l) => {
+    const { type, title } = resolveLink(l.to_id);
+    return { id: l.to_id, rel: l.rel, type, title };
   });
 
-  const incoming: LabeledLink[] = backward.map((l) => {
-    const { type, label } = getLabel(l.from_id);
-    return { id: l.from_id, rel: l.rel, type, label };
+  const backward: LabeledLink[] = rawBackward.map((l) => {
+    const { type, title } = resolveLink(l.from_id);
+    return { id: l.from_id, rel: l.rel, type, title };
   });
 
   if (opts.json) {
-    console.log(JSON.stringify({ id, outgoing, incoming }, null, 2));
+    console.log(JSON.stringify({ id, forward, backward }, null, 2));
   } else {
-    const selfLabel = obj.data.text || obj.data.title || id;
-    console.log(`Links for: "${typeof selfLabel === "string" ? selfLabel.substring(0, 60) : id}"\n`);
+    const selfTitle = obj.data.title || id;
+    console.log(`Links for: "${typeof selfTitle === "string" ? selfTitle.substring(0, 60) : id}"\n`);
 
-    if (outgoing.length) {
-      console.log(`Outgoing (${outgoing.length}):`);
-      for (const l of outgoing) {
+    if (forward.length) {
+      console.log(`Forward (${forward.length}):`);
+      for (const l of forward) {
         const typeTag = l.type ? ` (${l.type})` : "";
-        console.log(`  → [${l.rel}] ${l.label.substring(0, 70)}${typeTag}`);
+        console.log(`  → [${l.rel}] ${l.title.substring(0, 70)}${typeTag}`);
       }
     }
 
-    if (incoming.length) {
-      console.log(`\nIncoming (${incoming.length}):`);
-      for (const l of incoming) {
+    if (backward.length) {
+      console.log(`\nBackward (${backward.length}):`);
+      for (const l of backward) {
         const typeTag = l.type ? ` (${l.type})` : "";
-        console.log(`  ← [${l.rel}] ${l.label.substring(0, 70)}${typeTag}`);
+        console.log(`  ← [${l.rel}] ${l.title.substring(0, 70)}${typeTag}`);
       }
     }
 
-    if (!outgoing.length && !incoming.length) {
+    if (!forward.length && !backward.length) {
       console.log("No links found.");
     }
   }

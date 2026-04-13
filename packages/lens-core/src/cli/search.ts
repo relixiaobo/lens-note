@@ -61,7 +61,7 @@ export async function searchObjects(query: string, opts: CommandOptions) {
           return {
             ...base,
             title: obj.title,
-            links: obj.links || [],
+            forward_links: obj.links || [],
           };
         case "source":
           return { ...base, title: obj.title, source_type: obj.source_type, word_count: obj.word_count };

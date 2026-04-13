@@ -2,7 +2,7 @@
  * lens show <id> — Show any lens object with links.
  */
 
-import { readObject, getBacklinks, getForwardLinks, ensureInitialized } from "../core/storage";
+import { readObject, getBacklinks, ensureInitialized } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
 export async function showObject(id: string, opts: CommandOptions) {
@@ -20,27 +20,40 @@ export async function showObject(id: string, opts: CommandOptions) {
     };
 
     // Forward links from note's own links array (preserves reason)
-    const noteLinks = (data.links || []).map((l: any) => ({
-      to: l.to,
+    const forwardLinks = (data.links || []).map((l: any) => ({
+      id: l.to,
       rel: l.rel,
       ...(l.reason ? { reason: l.reason } : {}),
       title: enrichLink(l.to),
     }));
 
     // Backward links from SQLite cache
-    const backward = getBacklinks(id).map(l => ({
-      from: l.from_id,
+    const backwardLinks = getBacklinks(id).map(l => ({
+      id: l.from_id,
       rel: l.rel,
       title: enrichLink(l.from_id),
     }));
 
-    console.log(JSON.stringify({
-      ...data,
-      body: content.trim(),
-      forward_link_count: noteLinks.length,
-      backward_link_count: backward.length,
-      links: { forward: noteLinks, backward },
-    }, null, 2));
+    // Explicit field selection — no ...data spread
+    const output: Record<string, any> = {
+      id: data.id,
+      type: data.type,
+      title: data.title,
+    };
+    if (data.status) output.status = data.status;
+    if (data.source) output.source = data.source;
+    if (data.source_type) output.source_type = data.source_type;
+    if (data.url) output.url = data.url;
+    if (data.author) output.author = data.author;
+    if (data.word_count) output.word_count = data.word_count;
+    if (data.created_at) output.created_at = data.created_at;
+    if (data.updated_at) output.updated_at = data.updated_at;
+
+    output.body = content.trim();
+    output.forward_links = forwardLinks;
+    output.backward_links = backwardLinks;
+
+    console.log(JSON.stringify(output, null, 2));
   } else {
     // Human-readable display
     const title = data.title || "(untitled)";

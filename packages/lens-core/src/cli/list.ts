@@ -63,7 +63,7 @@ export async function listCommand(args: string[], opts: CommandOptions) {
   if (opts.json) {
     const summaries = items.map(item => {
       const base: Record<string, any> = { id: item.id, title: item.title };
-      if (item.links?.length) base.links = item.links;
+      if (item.links?.length) base.forward_links = item.links;
       if (item.source) base.source = item.source;
       if (item.source_type) base.source_type = item.source_type;
       if (item.word_count) base.word_count = item.word_count;
