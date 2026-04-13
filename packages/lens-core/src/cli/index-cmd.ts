@@ -27,6 +27,17 @@ interface KeywordIndexFile {
 }
 
 const MAX_ENTRIES_PER_KEYWORD = 3;
+const RESERVED_KEYWORDS = new Set(["add", "remove"]);
+const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
+function validateKeyword(keyword: string): string {
+  keyword = keyword.trim();
+  if (!keyword) throw new Error("Keyword cannot be empty");
+  if (RESERVED_KEYWORDS.has(keyword)) throw new Error(`"${keyword}" is a reserved subcommand and cannot be used as a keyword`);
+  if (DANGEROUS_KEYS.has(keyword)) throw new Error(`"${keyword}" cannot be used as a keyword`);
+  if (/[\x00-\x1f]/.test(keyword)) throw new Error("Keyword cannot contain control characters");
+  return keyword;
+}
 
 function load(): KeywordIndexFile {
   if (!existsSync(paths.keywordIndex)) return { version: 1, keywords: {} };
@@ -102,6 +113,7 @@ function indexList(opts: CommandOptions): void {
 }
 
 function indexShow(keyword: string, opts: CommandOptions): void {
+  keyword = keyword.trim();
   const { keywords } = load();
   const entries = keywords[keyword];
   if (!entries) throw new Error(`Keyword not found: "${keyword}"`);
@@ -121,8 +133,7 @@ function indexShow(keyword: string, opts: CommandOptions): void {
 function indexAdd(keyword: string | undefined, noteId: string | undefined, opts: CommandOptions): void {
   if (!keyword || !noteId) throw new Error('Usage: lens index add "<keyword>" <note_id>');
 
-  keyword = keyword.trim();
-  if (!keyword) throw new Error('Usage: lens index add "<keyword>" <note_id>');
+  keyword = validateKeyword(keyword);
 
   // Validate note exists and is a note
   if (!noteId.startsWith("note_")) {
@@ -131,6 +142,7 @@ function indexAdd(keyword: string | undefined, noteId: string | undefined, opts:
   }
   const obj = readObject(noteId);
   if (!obj) throw new Error(`Object not found: ${noteId}`);
+  if (obj.data.type !== "note") throw new Error(`Only notes can be indexed, got ${obj.data.type}`);
 
   const index = load();
   const entries = index.keywords[keyword] || [];
@@ -166,6 +178,7 @@ function indexAdd(keyword: string | undefined, noteId: string | undefined, opts:
 function indexRemove(keyword: string | undefined, noteId: string | undefined, opts: CommandOptions): void {
   if (!keyword) throw new Error('Usage: lens index remove "<keyword>" [note_id]');
 
+  keyword = keyword.trim();
   const index = load();
   const entries = index.keywords[keyword];
   if (!entries) throw new Error(`Keyword not found: "${keyword}"`);
@@ -220,8 +233,10 @@ export async function handleIndex(sub: string, args: string[], opts: CommandOpti
     case undefined:
       return indexList(mergedOpts);
     case "add":
+      if (positional.length > 3) throw new Error('Usage: lens index add "<keyword>" <note_id>');
       return indexAdd(positional[1], positional[2], mergedOpts);
     case "remove":
+      if (positional.length > 3) throw new Error('Usage: lens index remove "<keyword>" [note_id]');
       return indexRemove(positional[1], positional[2], mergedOpts);
     default:
       if (positional.length === 1) return indexShow(subcommand, mergedOpts);
