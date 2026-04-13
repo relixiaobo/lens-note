@@ -18,8 +18,8 @@ Requires Node.js >= 20.
 ```bash
 lens search "query" --json            # Find knowledge (Unicode/CJK-aware)
 lens search "query" --resolve --json  # Resolve title → ID
-lens show <id> --json                 # Read one object with body + links
-lens links <id> --json                # Show all relationships (outgoing + incoming)
+lens show <id> --json                 # Read one object with body + forward/backward links
+lens links <id> --json                # Show all relationships (forward + backward)
 lens write --file <path> --json       # Write note/source/task/link/unlink/update/delete/batch
 lens list notes --orphans --json      # List orphan notes (+ --limit/--offset)
 lens list notes --since 7d --json     # List notes from last 7 days

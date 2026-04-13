@@ -63,7 +63,7 @@ Usage:
 Core (agent-facing):
   search "<query>" --json    Find knowledge (supports Chinese/CJK)
   search "<query>" --resolve --json  Resolve title → ID
-  show <id> --json           Read one object with full detail + links + counts
+  show <id> --json           Read one object with body + forward/backward links
   write --file <path> --json   Write anything (note/source/task/link/unlink/update/delete/batch)
   fetch <url> [--save] --json Extract web content as clean markdown
   status --json              Stats + health metrics
@@ -71,7 +71,7 @@ Core (agent-facing):
 Read:
   list <type> [--since 7d]   Browse objects (notes, sources, tasks)
   list notes --orphans       List unlinked notes (+ --limit/--offset)
-  links <id>                 Show all relationships
+  links <id>                 Show all relationships (forward + backward)
   similar <id> [--threshold] Find near-duplicate notes
   similar --all [--threshold] Scan all notes, group duplicates
   tasks [--all|--done]       List tasks (default: open)
