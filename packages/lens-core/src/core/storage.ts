@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, rename
 import { dirname } from "path";
 import matter from "gray-matter";
 import { paths, objectPath } from "./paths";
+import { execFileSync } from "child_process";
 import type { LensObject, ObjectType, Note } from "./types";
 
 // ============================================================
@@ -46,7 +47,26 @@ export function writeObject(obj: LensObject, body: string = ""): string {
 export function saveObject(obj: LensObject, body: string = ""): string {
   const filePath = writeObject(obj, body);
   indexObject(obj, body);
+  gitCommit(filePath, obj);
   return filePath;
+}
+
+/** Auto-commit changes to git if the repo is initialized */
+function gitCommit(filePath: string, obj: LensObject): void {
+  try {
+    const gitDir = paths.root;
+    // Check if git is initialized
+    execFileSync("git", ["-C", gitDir, "rev-parse", "--git-dir"], { stdio: "ignore" });
+    // Stage and commit
+    execFileSync("git", ["-C", gitDir, "add", filePath], { stdio: "ignore" });
+    const msg = `${obj.type}: ${obj.title.substring(0, 60)}`;
+    execFileSync("git", ["-C", gitDir, "commit", "-m", msg, "--allow-empty-message", "--no-gpg-sign"], {
+      stdio: "ignore",
+      env: { ...process.env, GIT_AUTHOR_NAME: "lens", GIT_AUTHOR_EMAIL: "lens@local", GIT_COMMITTER_NAME: "lens", GIT_COMMITTER_EMAIL: "lens@local" },
+    });
+  } catch {
+    // Git not initialized or commit failed — silently continue
+  }
 }
 
 export function readObject(id: string): { data: Record<string, any>; content: string } | null {
@@ -128,14 +148,13 @@ export function indexObject(obj: LensObject, body: string = "") {
   const data = JSON.stringify(obj);
 
   const title = getTitle(obj);
-  const searchBody = [getSearchableText(obj), body].filter(Boolean).join(" ");
-  const role = obj.type === "note" ? (obj as Note).role || null : null;
+  const searchBody = [title, body].filter(Boolean).join(" ");
 
   db.transaction(() => {
     db.prepare(`
       INSERT INTO objects (id, type, role, data, body, updated_at) VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET type = ?, role = ?, data = ?, body = ?, updated_at = ?
-    `).run(obj.id, obj.type, role, data, body, now, obj.type, role, data, body, now);
+    `).run(obj.id, obj.type, null, data, body, now, obj.type, null, data, body, now);
 
     db.prepare("DELETE FROM search_index WHERE id = ?").run(obj.id);
     db.prepare("INSERT INTO search_index (id, type, title, body) VALUES (?, ?, ?, ?)").run(
@@ -267,70 +286,28 @@ export function rebuildAllIndex() {
 // ============================================================
 
 function getTitle(obj: LensObject): string {
-  switch (obj.type) {
-    case "source": return obj.title;
-    case "note": return obj.text;
-    case "thread": return obj.title;
-    default: return "";
-  }
-}
-
-function getSearchableText(obj: LensObject): string {
-  switch (obj.type) {
-    case "note": {
-      const n = obj as Note;
-      const parts = [n.text];
-      if (n.evidence) parts.push(...n.evidence.map((e) => e.text));
-      if (n.sees) parts.push(n.sees);
-      if (n.ignores) parts.push(n.ignores);
-      if (n.assumptions) parts.push(...n.assumptions);
-      return parts.join(" ");
-    }
-    case "source": return obj.title;
-    case "thread": return obj.title;
-    default: return "";
-  }
+  return obj.title;
 }
 
 function extractLinks(obj: LensObject): { to: string; rel: string }[] {
-  const links: { to: string; rel: string }[] = [];
+  const result: { to: string; rel: string }[] = [];
 
   if (obj.type === "note") {
     const n = obj as Note;
-
-    // Provenance
-    if (n.source) links.push({ to: n.source, rel: "source" });
-
-    // Evidence sources
-    if (n.evidence) {
-      for (const e of n.evidence) {
-        if (e.source) links.push({ to: e.source, rel: "evidence" });
+    if (n.source) result.push({ to: n.source, rel: "source" });
+    if (n.links) {
+      for (const link of n.links) {
+        result.push({ to: link.to, rel: link.rel });
       }
-    }
-
-    // Typed links
-    for (const id of n.supports || []) links.push({ to: id, rel: "supports" });
-    for (const id of n.contradicts || []) links.push({ to: id, rel: "contradicts" });
-    for (const id of n.refines || []) links.push({ to: id, rel: "refines" });
-
-    // Bridge
-    for (const id of n.bridges || []) links.push({ to: id, rel: "bridges" });
-
-    // Structure note entries
-    for (const id of n.entries || []) links.push({ to: id, rel: "entries" });
-
-    // Related
-    if (n.related) {
-      for (const r of n.related) links.push({ to: r.id, rel: "related" });
     }
   }
 
   if (obj.type === "thread") {
-    for (const id of obj.references) links.push({ to: id, rel: "discusses" });
-    if (obj.started_from) links.push({ to: obj.started_from, rel: "started_from" });
+    for (const id of obj.references) result.push({ to: id, rel: "discusses" });
+    if (obj.started_from) result.push({ to: obj.started_from, rel: "started_from" });
   }
 
-  return links;
+  return result;
 }
 
 export function getBacklinks(id: string): { from_id: string; rel: string }[] {

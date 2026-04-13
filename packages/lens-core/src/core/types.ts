@@ -2,7 +2,7 @@
  * Lens core types.
  *
  * 3 types: Source, Note, Thread.
- * Note is the universal knowledge card with optional fields.
+ * Note is the universal knowledge card — minimal frontmatter, rich body.
  * Structure emerges from links, not from categories.
  */
 
@@ -14,46 +14,16 @@ import { ulid } from "ulid";
 
 export type ISODate = string;
 
-export type Qualifier = "certain" | "likely" | "presumably" | "tentative";
-
-export type Voice = "extracted" | "restated" | "synthesized" | "experiential";
-
-export type StructureType =
-  | "taxonomy"
-  | "causal"
-  | "description"
-  | "timeline"
-  | "argument"
-  | "content"
-  | "story"
-  | "process"
-  | "relationships";
-
-export type NoteScope = "big_picture" | "detail";
-
-export type NoteRole =
-  | "claim"
-  | "frame"
-  | "question"
-  | "observation"
-  | "connection"
-  | "structure_note";
-
 export type ObjectType = "source" | "note" | "thread";
 
 export type SourceType = "web_article" | "markdown" | "plain_text" | "manual_note" | "note_batch";
 
-export type ObjectStatus = "active" | "superseded";
+export type LinkRel = "supports" | "contradicts" | "refines" | "related";
 
-export interface RelatedRef {
-  id: string;
-  note?: string;
-}
-
-export interface Evidence {
-  text: string;
-  source: string;
-  locator?: string;
+export interface NoteLink {
+  to: string;
+  rel: LinkRel;
+  reason?: string;
 }
 
 // ============================================================
@@ -71,66 +41,26 @@ export interface Source {
   raw_file?: string;
   ingested_at: ISODate;
   created_at: ISODate;
-  status: ObjectStatus;
 }
 
 // ============================================================
 // Note — universal knowledge card
 //
-// One idea per card. Optional fields express different roles:
-//   evidence + qualifier → claim
-//   sees + ignores → frame
-//   question_status → question
-//   bridges → connection
-//   entries → structure note
-//   (nothing extra) → observation
+// Frontmatter: id, type, title, source, links, created_at, updated_at
+// Body: everything else (evidence, reasoning, qualifier, scope, frames)
 //
-// Role is a soft hint for display, not a constraint.
+// One idea per card. Title is the thought in one sentence.
+// Body elaborates. Links connect.
 // ============================================================
 
 export interface Note {
   id: string;
   type: "note";
-  text: string; // the thought itself (always present)
-
-  // Optional: Role hint (for display)
-  role?: NoteRole;
-
-  // Optional: Claim fields (Toulmin structure)
-  evidence?: Evidence[];
-  qualifier?: Qualifier;
-  voice?: Voice;
-
-  // Optional: Hierarchy (Reif/Miller)
-  scope?: NoteScope;
-
-  // Optional: Structure type (Miller)
-  structure_type?: StructureType;
-
-  // Optional: Frame fields
-  sees?: string;
-  ignores?: string;
-  assumptions?: string[];
-
-  // Optional: Question field
-  question_status?: "open" | "tentative_answer" | "resolved" | "superseded";
-
-  // Optional: Bridge (connection note)
-  bridges?: string[];
-
-  // Optional: Structure note (index entry)
-  entries?: string[];
-
-  // Typed links
-  supports?: string[];
-  contradicts?: string[];
-  refines?: string[];
-  related?: RelatedRef[];
-
-  // Provenance
-  source?: string;
-  status: ObjectStatus;
+  title: string;       // the thought in one sentence
+  source?: string;     // source ID this note comes from
+  links?: NoteLink[];  // all relationships (supports/contradicts/refines/related + reason)
   created_at: ISODate;
+  updated_at: ISODate;
 }
 
 // ============================================================
@@ -143,7 +73,6 @@ export interface Thread {
   title: string;
   references: string[];
   started_from?: string;
-  status: ObjectStatus;
   created_at: ISODate;
 }
 

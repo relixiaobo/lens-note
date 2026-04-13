@@ -1,14 +1,14 @@
 /**
  * lens note "<text>" — Quick note shortcut.
  *
- * Alias for: echo '{"type":"note","text":"..."}' | lens write
+ * Alias for: lens write '{"type":"note","title":"..."}'
  */
 
 import { generateId, type Note } from "../core/types";
 import { saveObject, ensureInitialized } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
-export async function createNote(text: string, opts: CommandOptions) {
+export async function createNote(title: string, opts: CommandOptions) {
   ensureInitialized();
 
   const id = generateId("note");
@@ -17,18 +17,17 @@ export async function createNote(text: string, opts: CommandOptions) {
   const note: Note = {
     id,
     type: "note",
-    text,
-    role: "observation",
-    status: "active",
+    title,
     created_at: now,
+    updated_at: now,
   };
 
-  saveObject(note, text);
+  saveObject(note, "");
 
   if (opts.json) {
-    console.log(JSON.stringify({ id, type: "note", action: "created" }));
+    console.log(JSON.stringify({ ...note, action: "created" }));
   } else {
     console.log(`Created note: ${id}`);
-    console.log(`  "${text.length > 80 ? text.substring(0, 77) + "..." : text}"`);
+    console.log(`  "${title.length > 80 ? title.substring(0, 77) + "..." : title}"`);
   }
 }

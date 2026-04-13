@@ -41,7 +41,6 @@ export async function fetchUrl(url: string, opts: CommandOptions) {
       raw_file: rawPath,
       ingested_at: now,
       created_at: now,
-      status: "active",
     };
 
     saveObject(source, result.markdown);

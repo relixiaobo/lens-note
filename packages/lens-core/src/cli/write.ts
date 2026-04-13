@@ -1,10 +1,10 @@
 /**
  * lens write — Unified write entry point.
  *
- * Accepts JSON from stdin. Routes by `type` field:
- *   note    → create Note
+ * Accepts JSON from argument or stdin. Routes by `type` field:
+ *   note    → create Note (title + body + links)
  *   source  → create Source
- *   link    → add link between objects
+ *   link    → add link between notes
  *   unlink  → remove link
  *   update  → modify existing object
  *   delete  → soft-delete (set status: superseded)
@@ -14,40 +14,20 @@
  */
 
 import { readFileSync } from "fs";
-import { generateId, type Note, type Source, type NoteRole, type Qualifier, type Voice, type NoteScope, type SourceType, type ObjectStatus } from "../core/types";
+import { generateId, type Note, type Source, type NoteLink, type LinkRel, type SourceType } from "../core/types";
 import { saveObject, readObject, ensureInitialized } from "../core/storage";
-import type { CommandOptions } from "./commands";
+import { parseCliArgs, type CommandOptions } from "./commands";
 
 // ============================================================
 // Validation
 // ============================================================
 
-const VALID_ROLES = new Set<NoteRole>(["claim", "frame", "question", "observation", "connection", "structure_note"]);
-const VALID_QUALIFIERS = new Set<Qualifier>(["certain", "likely", "presumably", "tentative"]);
-const VALID_VOICES = new Set<Voice>(["extracted", "restated", "synthesized", "experiential"]);
-const VALID_SCOPES = new Set<NoteScope>(["big_picture", "detail"]);
+const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "related"]);
 const VALID_SOURCE_TYPES = new Set<SourceType>(["web_article", "markdown", "plain_text", "manual_note", "note_batch"]);
-const VALID_RELS = new Set(["supports", "contradicts", "refines", "related"]);
 
 function validateId(id: string, label: string): void {
   if (!id || typeof id !== "string") throw new Error(`${label}: ID is required`);
   if (!readObject(id)) throw new Error(`${label}: "${id}" not found. Use \`lens search\` to find the correct ID.`);
-}
-
-function validateOptionalId(id: string | undefined, label: string): void {
-  if (id) validateId(id, label);
-}
-
-function validateEnum<T>(value: T | undefined, valid: Set<T>, label: string): void {
-  if (value !== undefined && !valid.has(value)) {
-    throw new Error(`${label}: "${value}" is invalid. Valid values: ${[...valid].join(", ")}`);
-  }
-}
-
-function validateIdArray(ids: string[] | undefined, label: string): void {
-  if (!ids) return;
-  if (!Array.isArray(ids)) throw new Error(`${label}: must be an array`);
-  for (const id of ids) validateId(id, `${label}[${id}]`);
 }
 
 // ============================================================
@@ -58,114 +38,88 @@ interface WriteResult {
   id?: string;
   type: string;
   action: string;
-  object?: Record<string, any>; // full created/updated object for --json
+  object?: Record<string, any>;
 }
 
 function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
-  const text = input.text;
-  if (!text || typeof text !== "string" || text.trim().length === 0) {
-    throw new Error("note: text is required");
+  const title = input.title;
+  if (!title || typeof title !== "string" || title.trim().length === 0) {
+    throw new Error("note: title is required");
   }
 
-  validateEnum(input.role, VALID_ROLES, "role");
-  validateEnum(input.qualifier, VALID_QUALIFIERS, "qualifier");
-  validateEnum(input.voice, VALID_VOICES, "voice");
-  validateEnum(input.scope, VALID_SCOPES, "scope");
-
   const resolveRef = (ref: string) => resolveReference(ref, batchIds);
-
-  // Validate ID references (skip $N batch references)
-  if (input.source && !input.source.startsWith("$")) validateOptionalId(input.source, "source");
-  validateRefArray(input.supports, "supports", batchIds);
-  validateRefArray(input.contradicts, "contradicts", batchIds);
-  validateRefArray(input.refines, "refines", batchIds);
-  validateRefArray(input.bridges, "bridges", batchIds);
-  validateRefArray(input.entries, "entries", batchIds);
 
   const id = generateId("note");
   const now = new Date().toISOString();
 
-  const note: Note = {
-    id,
-    type: "note",
-    text: text.trim(),
-    status: "active" as ObjectStatus,
-    created_at: now,
-  };
-
-  if (input.role) note.role = input.role;
-  if (input.qualifier) note.qualifier = input.qualifier;
-  if (input.voice) note.voice = input.voice;
-  if (input.scope) note.scope = input.scope;
-  if (input.source) note.source = resolveRef(input.source);
-  if (input.structure_type) note.structure_type = input.structure_type;
-  if (input.sees) note.sees = input.sees;
-  if (input.ignores) note.ignores = input.ignores;
-  if (input.question_status) note.question_status = input.question_status;
-
-  if (input.assumptions?.length) note.assumptions = input.assumptions;
-  if (input.supports?.length) note.supports = input.supports.map(resolveRef);
-  if (input.contradicts?.length) note.contradicts = input.contradicts.map(resolveRef);
-  if (input.refines?.length) note.refines = input.refines.map(resolveRef);
-  if (input.bridges?.length) note.bridges = input.bridges.map(resolveRef);
-  if (input.entries?.length) note.entries = input.entries.map(resolveRef);
-
-  if (input.related?.length) {
-    note.related = input.related.map((r: any) => {
-      if (typeof r === "string") return { id: resolveRef(r) };
-      return { id: resolveRef(r.id), note: r.note };
-    });
-  }
-
-  if (input.evidence?.length) {
-    note.evidence = input.evidence.map((e: any) => ({
-      text: e.text,
-      source: e.source ? resolveRef(e.source) : undefined,
-      locator: e.locator,
-    }));
-  }
-
-  // Bidirectional contradicts
-  if (note.contradicts?.length) {
-    for (const targetId of note.contradicts) {
-      addLinkToExisting(targetId, "contradicts", id);
+  // Build links array
+  const links: NoteLink[] = [];
+  if (input.links) {
+    for (const link of input.links) {
+      if (!link.to || !link.rel) throw new Error("note.links: each link needs 'to' and 'rel'");
+      if (!VALID_RELS.has(link.rel)) throw new Error(`note.links: rel "${link.rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
+      links.push({
+        to: resolveRef(link.to),
+        rel: link.rel,
+        ...(link.reason ? { reason: link.reason } : {}),
+      });
     }
   }
 
-  saveObject(note, text.trim());
-  return { id, type: "note", action: "created", object: note };
-}
-
-function writeSource(input: any, batchIds?: Map<string, string>): WriteResult {
-  const title = input.title;
-  if (!title || typeof title !== "string") {
-    throw new Error("source: title is required");
+  // Legacy support: supports/contradicts/refines/related arrays → unified links
+  for (const rel of ["supports", "contradicts", "refines"] as const) {
+    if (input[rel]) {
+      for (const to of input[rel]) {
+        links.push({ to: resolveRef(to), rel });
+      }
+    }
   }
 
-  validateEnum(input.source_type, VALID_SOURCE_TYPES, "source_type");
+  const note: Note = {
+    id,
+    type: "note",
+    title: title.trim(),
+    created_at: now,
+    updated_at: now,
+    ...(input.source ? { source: resolveRef(input.source) } : {}),
+    ...(links.length > 0 ? { links } : {}),
+  };
+
+  // Bidirectional contradicts
+  for (const link of links) {
+    if (link.rel === "contradicts") {
+      addLinkToExisting(link.to, "contradicts", id, link.reason);
+    }
+  }
+
+  const body = input.body || "";
+  saveObject(note, body);
+  return { id, type: "note", action: "created", object: { ...note, body } };
+}
+
+function writeSource(input: any): WriteResult {
+  const title = input.title;
+  if (!title || typeof title !== "string") throw new Error("source: title is required");
+
+  if (input.source_type && !VALID_SOURCE_TYPES.has(input.source_type)) {
+    throw new Error(`source: source_type "${input.source_type}" is invalid. Valid: ${[...VALID_SOURCE_TYPES].join(", ")}`);
+  }
 
   const id = generateId("source");
   const now = new Date().toISOString();
+  const body = input.body || "";
 
   const source: Source = {
     id,
     type: "source",
     source_type: input.source_type || "manual_note",
     title: title.trim(),
-    word_count: input.word_count || 0,
+    word_count: input.word_count || (body ? body.split(/\s+/).filter(Boolean).length : 0),
     ingested_at: now,
     created_at: now,
-    status: "active",
+    ...(input.author ? { author: input.author } : {}),
+    ...(input.url ? { url: input.url } : {}),
   };
-
-  if (input.author) source.author = input.author;
-  if (input.url) source.url = input.url;
-  if (input.raw_file) source.raw_file = input.raw_file;
-
-  const body = input.body || "";
-  if (body && !source.word_count) {
-    source.word_count = body.split(/\s+/).filter(Boolean).length;
-  }
 
   saveObject(source, body);
   return { id, type: "source", action: "created", object: source };
@@ -174,7 +128,8 @@ function writeSource(input: any, batchIds?: Map<string, string>): WriteResult {
 function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   const from = resolveReference(input.from, batchIds);
   const to = resolveReference(input.to, batchIds);
-  const rel = input.rel;
+  const rel = input.rel as LinkRel;
+  const reason = input.reason;
 
   if (!from) throw new Error("link: 'from' is required");
   if (!to) throw new Error("link: 'to' is required");
@@ -185,10 +140,10 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   if (!from.startsWith("$")) validateId(from, "link.from");
   if (!to.startsWith("$")) validateId(to, "link.to");
 
-  addLinkToExisting(from, rel, to);
-  if (rel === "contradicts") addLinkToExisting(to, "contradicts", from);
+  addLinkToExisting(from, rel, to, reason);
+  if (rel === "contradicts") addLinkToExisting(to, "contradicts", from, reason);
 
-  return { type: "link", action: "created", object: { from, rel, to } };
+  return { type: "link", action: "created", object: { from, rel, to, reason } };
 }
 
 function writeUnlink(input: any): WriteResult {
@@ -213,60 +168,49 @@ function writeUpdate(input: any): WriteResult {
   if (!existing) throw new Error(`update: "${id}" not found`);
 
   const data = { ...existing.data };
+  const now = new Date().toISOString();
+  data.updated_at = now;
 
   // Set scalar fields
   if (input.set) {
     for (const [key, value] of Object.entries(input.set)) {
-      if (key === "id" || key === "type" || key === "created_at") continue; // immutable
+      if (key === "id" || key === "type" || key === "created_at") continue;
       data[key] = value;
     }
   }
 
-  // Add to array fields
-  if (input.add) {
-    for (const [key, values] of Object.entries(input.add)) {
-      if (!Array.isArray(values)) continue;
-      const arr = data[key] || [];
-      for (const v of values) {
-        if (key === "related") {
-          const ref = typeof v === "string" ? { id: v } : v;
-          if (!arr.some((r: any) => (typeof r === "string" ? r : r.id) === ref.id)) arr.push(ref);
-        } else if (key === "evidence") {
-          arr.push(v);
-        } else {
-          if (!arr.includes(v)) arr.push(v);
-          // Enforce bidirectional contradicts
-          if (key === "contradicts" && typeof v === "string") {
-            addLinkToExisting(v, "contradicts", id);
-          }
+  // Add links
+  if (input.add?.links) {
+    const links: NoteLink[] = data.links || [];
+    for (const newLink of input.add.links) {
+      if (!links.some((l: NoteLink) => l.to === newLink.to && l.rel === newLink.rel)) {
+        links.push(newLink);
+        if (newLink.rel === "contradicts") {
+          addLinkToExisting(newLink.to, "contradicts", id, newLink.reason);
         }
       }
-      data[key] = arr;
+    }
+    data.links = links;
+  }
+
+  // Remove links
+  if (input.remove?.links) {
+    if (data.links) {
+      for (const rmLink of input.remove.links) {
+        data.links = data.links.filter((l: NoteLink) => !(l.to === rmLink.to && l.rel === rmLink.rel));
+        if (rmLink.rel === "contradicts") {
+          removeLinkFromExisting(rmLink.to, "contradicts", id);
+        }
+      }
     }
   }
 
-  // Remove from array fields
-  if (input.remove) {
-    for (const [key, values] of Object.entries(input.remove)) {
-      if (!Array.isArray(values) || !data[key]) continue;
-      if (key === "related") {
-        data[key] = data[key].filter((r: any) => !(values as string[]).includes(typeof r === "string" ? r : r.id));
-      } else {
-        data[key] = data[key].filter((v: any) => !(values as string[]).includes(v));
-        // Enforce bidirectional contradicts removal
-        if (key === "contradicts") {
-          for (const v of values as string[]) {
-            removeLinkFromExisting(v, "contradicts", id);
-          }
-        }
-      }
-    }
-  }
+  // Update body if provided
+  const body = input.body !== undefined ? input.body : existing.content;
 
   const obj = { ...data, id } as any;
-  saveObject(obj, existing.content);
-
-  return { id, type: data.type, action: "updated", object: obj };
+  saveObject(obj, body);
+  return { id, type: data.type, action: "updated", object: { ...obj, body } };
 }
 
 function writeDelete(input: any): WriteResult {
@@ -277,10 +221,17 @@ function writeDelete(input: any): WriteResult {
   const existing = readObject(id);
   if (!existing) throw new Error(`delete: "${id}" not found`);
 
-  const obj = { ...existing.data, id, status: "superseded" } as any;
-  saveObject(obj, existing.content);
+  // Remove the file and re-index
+  const { unlinkSync } = require("fs");
+  const { objectPath } = require("../core/paths");
+  try { unlinkSync(objectPath(id)); } catch {}
 
-  return { id, type: existing.data.type, action: "deleted", object: obj };
+  const db = require("../core/storage").getDb();
+  db.prepare("DELETE FROM objects WHERE id = ?").run(id);
+  db.prepare("DELETE FROM search_index WHERE id = ?").run(id);
+  db.prepare("DELETE FROM links WHERE from_id = ? OR to_id = ?").run(id, id);
+
+  return { id, type: existing.data.type, action: "deleted" };
 }
 
 // ============================================================
@@ -297,31 +248,16 @@ function resolveReference(ref: string, batchIds?: Map<string, string>): string {
   return ref;
 }
 
-function validateRefArray(arr: string[] | undefined, label: string, batchIds?: Map<string, string>): void {
-  if (!arr) return;
-  for (const ref of arr) {
-    if (ref.startsWith("$")) continue; // batch reference, resolved later
-    validateId(ref, label);
-  }
-}
-
-function addLinkToExisting(id: string, rel: string, targetId: string): void {
+function addLinkToExisting(id: string, rel: LinkRel, targetId: string, reason?: string): void {
   const existing = readObject(id);
   if (!existing) return;
 
   const data = { ...existing.data };
-  if (rel === "related") {
-    const arr = data.related || [];
-    if (!arr.some((r: any) => (typeof r === "string" ? r : r.id) === targetId)) {
-      arr.push({ id: targetId });
-      data.related = arr;
-    }
-  } else {
-    const arr = data[rel] || [];
-    if (!arr.includes(targetId)) {
-      arr.push(targetId);
-      data[rel] = arr;
-    }
+  const links: NoteLink[] = data.links || [];
+  if (!links.some((l: NoteLink) => l.to === targetId && l.rel === rel)) {
+    links.push({ to: targetId, rel, ...(reason ? { reason } : {}) });
+    data.links = links;
+    data.updated_at = new Date().toISOString();
   }
 
   const obj = { ...data, id } as any;
@@ -333,10 +269,9 @@ function removeLinkFromExisting(id: string, rel: string, targetId: string): void
   if (!existing) return;
 
   const data = { ...existing.data };
-  if (rel === "related") {
-    data.related = (data.related || []).filter((r: any) => (typeof r === "string" ? r : r.id) !== targetId);
-  } else {
-    data[rel] = (data[rel] || []).filter((v: string) => v !== targetId);
+  if (data.links) {
+    data.links = data.links.filter((l: NoteLink) => !(l.to === targetId && l.rel === rel));
+    data.updated_at = new Date().toISOString();
   }
 
   const obj = { ...data, id } as any;
@@ -351,24 +286,20 @@ export async function handleWrite(args: string[], opts: CommandOptions) {
   ensureInitialized();
 
   // Accept JSON as argument or from stdin
-  const { positional } = await import("./commands").then(m => m.parseCliArgs(args));
+  const { positional } = parseCliArgs(args);
   let rawInput: string;
 
   if (positional.length > 0) {
-    // JSON passed as argument: lens write '{"type":"note",...}' --json
     rawInput = positional.join(" ").trim();
   } else {
-    // JSON from stdin: echo '...' | lens write --json
     try {
       rawInput = readFileSync("/dev/stdin", "utf-8").trim();
     } catch {
-      throw new Error('Usage: lens write \'{"type":"note","text":"..."}\' --json\n   or: echo \'{"type":"note","text":"..."}\' | lens write --json');
+      throw new Error('Usage: lens write \'{"type":"note","title":"..."}\' --json\n   or: echo \'...\' | lens write --json');
     }
   }
 
-  if (!rawInput) {
-    throw new Error('Empty input. Pass JSON as argument or pipe to stdin.');
-  }
+  if (!rawInput) throw new Error("Empty input.");
 
   let parsed: any;
   try {
@@ -379,54 +310,32 @@ export async function handleWrite(args: string[], opts: CommandOptions) {
 
   const isBatch = Array.isArray(parsed);
   const items = isBatch ? parsed : [parsed];
+  if (items.length === 0) throw new Error("Empty array.");
 
-  if (items.length === 0) {
-    throw new Error("Empty array. Provide at least one item.");
-  }
-
-  // Process items
   const results: WriteResult[] = [];
-  const batchIds = new Map<string, string>(); // $0 → note_01..., $1 → src_01...
+  const batchIds = new Map<string, string>();
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const type = item.type;
 
-    if (!type) throw new Error(`Item ${i}: "type" field is required. Valid types: note, source, link, unlink, update, delete`);
+    if (!type) throw new Error(`Item ${i}: "type" field is required. Valid: note, source, link, unlink, update, delete`);
 
     let result: WriteResult;
     switch (type) {
-      case "note":
-        result = writeNote(item, batchIds);
-        break;
-      case "source":
-        result = writeSource(item, batchIds);
-        break;
-      case "link":
-        result = writeLink(item, batchIds);
-        break;
-      case "unlink":
-        result = writeUnlink(item);
-        break;
-      case "update":
-        result = writeUpdate(item);
-        break;
-      case "delete":
-        result = writeDelete(item);
-        break;
-      default:
-        throw new Error(`Item ${i}: unknown type "${type}". Valid types: note, source, link, unlink, update, delete`);
+      case "note": result = writeNote(item, batchIds); break;
+      case "source": result = writeSource(item); break;
+      case "link": result = writeLink(item, batchIds); break;
+      case "unlink": result = writeUnlink(item); break;
+      case "update": result = writeUpdate(item); break;
+      case "delete": result = writeDelete(item); break;
+      default: throw new Error(`Item ${i}: unknown type "${type}". Valid: note, source, link, unlink, update, delete`);
     }
 
-    // Register batch reference
-    if (result.id) {
-      batchIds.set(`$${i}`, result.id);
-    }
-
+    if (result.id) batchIds.set(`$${i}`, result.id);
     results.push(result);
   }
 
-  // Output — include full object so agents don't need a follow-up show call
   if (opts.json) {
     const output = isBatch
       ? { created: results.map(r => ({ id: r.id, type: r.type, action: r.action, ...(r.object || {}) })) }

@@ -29,21 +29,28 @@ export async function showObject(id: string, opts: CommandOptions) {
 
   // Generic display for other types or --json
   if (opts.json) {
-    // Include forward + backward links in JSON output
-    const forward = getForwardLinks(id);
-    const backward = getBacklinks(id);
-
-    // Include 1-hop linked note text so agent can see context without extra show calls
+    // Include links with reasons + 1-hop enrichment
     const enrichLink = (linkId: string) => {
       const linked = readObject(linkId);
-      return linked ? (linked.data.text || linked.data.title || "").substring(0, 120) : "";
+      return linked ? (linked.data.title || "").substring(0, 120) : "";
     };
 
-    const links = {
-      forward: forward.map(l => ({ to: l.to_id, rel: l.rel, text: enrichLink(l.to_id) })),
-      backward: backward.map(l => ({ from: l.from_id, rel: l.rel, text: enrichLink(l.from_id) })),
-    };
-    console.log(JSON.stringify({ ...data, body: content.trim(), links }, null, 2));
+    // Forward links from the note's own links array (preserves reason)
+    const noteLinks = (data.links || []).map((l: any) => ({
+      to: l.to,
+      rel: l.rel,
+      ...(l.reason ? { reason: l.reason } : {}),
+      title: enrichLink(l.to),
+    }));
+
+    // Backward links from SQLite cache
+    const backward = getBacklinks(id).map(l => ({
+      from: l.from_id,
+      rel: l.rel,
+      title: enrichLink(l.from_id),
+    }));
+
+    console.log(JSON.stringify({ ...data, body: content.trim(), links: { forward: noteLinks, backward } }, null, 2));
   } else {
     console.log(`--- ${data.type}: ${id} ---`);
     for (const [key, value] of Object.entries(data)) {
