@@ -382,6 +382,11 @@ function diceSimilarity(a: Set<string>, b: Set<string>): number {
   return (2 * intersection) / (a.size + b.size);
 }
 
+/** Minimum size ratio for a pair to possibly reach a Dice threshold: r >= t / (2 - t). */
+function minSizeRatio(threshold: number): number {
+  return threshold / (2 - threshold);
+}
+
 export function findSimilarNotes(id: string, threshold: number = 0.3): { id: string; title: string; similarity: number }[] {
   const db = getDb();
 
@@ -392,6 +397,7 @@ export function findSimilarNotes(id: string, threshold: number = 0.3): { id: str
   const targetGrams = charNgrams(targetText);
   if (targetGrams.size === 0) return [];
 
+  const minRatio = minSizeRatio(threshold);
   const rows = db.prepare("SELECT id, data, body FROM objects WHERE type = 'note' AND id != ?").all(id) as any[];
 
   const results: { id: string; title: string; similarity: number }[] = [];
@@ -400,10 +406,9 @@ export function findSimilarNotes(id: string, threshold: number = 0.3): { id: str
     const text = (data.title || "") + " " + (row.body || "");
     const grams = charNgrams(text);
 
-    // Size pre-filter: skip vastly different lengths
     if (grams.size === 0) continue;
     const sizeRatio = Math.min(targetGrams.size, grams.size) / Math.max(targetGrams.size, grams.size);
-    if (sizeRatio < 0.3) continue;
+    if (sizeRatio < minRatio) continue;
 
     const similarity = diceSimilarity(targetGrams, grams);
     if (similarity >= threshold) {
@@ -446,11 +451,12 @@ export function findAllSimilarGroups(threshold: number = 0.3): { count: number; 
   };
 
   // Pairwise comparison with pre-filters
+  const minRatio = minSizeRatio(threshold);
   const allPairs: { a: string; b: string; similarity: number }[] = [];
   for (let i = 0; i < notes.length; i++) {
     for (let j = i + 1; j < notes.length; j++) {
       const sizeRatio = Math.min(notes[i].grams.size, notes[j].grams.size) / Math.max(notes[i].grams.size, notes[j].grams.size);
-      if (sizeRatio < 0.3) continue;
+      if (sizeRatio < minRatio) continue;
 
       const sim = diceSimilarity(notes[i].grams, notes[j].grams);
       if (sim >= threshold) {

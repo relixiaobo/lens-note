@@ -17,8 +17,12 @@ export async function showSimilar(id: string | undefined, opts: CommandOptions) 
     throw new Error("--threshold must be a number between 0 and 1");
   }
 
+  if (id && opts.all) {
+    throw new Error("Cannot use both <id> and --all. Use one or the other.");
+  }
+
   // --all mode: global scan
-  if (opts.all || !id) {
+  if (opts.all) {
     const result = findAllSimilarGroups(threshold);
 
     if (opts.json) {
@@ -45,7 +49,8 @@ export async function showSimilar(id: string | undefined, opts: CommandOptions) 
     return;
   }
 
-  // Single-note mode
+  // Single-note mode — id is guaranteed defined here (--all returned above)
+  if (!id) throw new Error("Usage: lens similar <id> [--threshold 0.3]  or  lens similar --all");
   const target = readObject(id);
   if (!target) throw new Error(`Object not found: ${id}`);
   if (target.data.type !== "note") throw new Error(`similar only works with notes, got ${target.data.type}`);
