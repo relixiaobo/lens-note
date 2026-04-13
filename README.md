@@ -80,7 +80,7 @@ Evidence and reasoning in markdown body.
 
 | Agent | Setup |
 |-------|-------|
-| **Claude Code** | `/plugin marketplace add relixiaobo/lens-note-plugin` then `/plugin install lens` |
+| **Claude Code** | `/plugin marketplace add relixiaobo/lens-note-plugin` then `/plugin install lens`. Update: `claude plugin update lens@lens-note-plugin --scope user` |
 | **Codex CLI** | Copy [SKILL.md](https://github.com/relixiaobo/lens-note-plugin/blob/main/plugin/skills/lens/SKILL.md) to `~/.codex/skills/lens/` |
 | **Gemini CLI** | Copy SKILL.md to `~/.gemini/skills/lens/` |
 | **Cursor** | Copy SKILL.md to `.cursor/skills/lens/` |
