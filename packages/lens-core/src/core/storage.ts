@@ -360,11 +360,13 @@ function normalizeForSimilarity(text: string): string {
   return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function charTrigrams(text: string): Set<string> {
+function charNgrams(text: string): Set<string> {
   const norm = normalizeForSimilarity(text);
   const grams = new Set<string>();
-  for (let i = 0; i <= norm.length - 3; i++) {
-    grams.add(norm.substring(i, i + 3));
+  const n = Math.min(3, norm.length);
+  if (n === 0) return grams;
+  for (let i = 0; i <= norm.length - n; i++) {
+    grams.add(norm.substring(i, i + n));
   }
   return grams;
 }
@@ -387,7 +389,7 @@ export function findSimilarNotes(id: string, threshold: number = 0.3): { id: str
   if (!target) return [];
   const targetData = JSON.parse(target.data);
   const targetText = (targetData.title || "") + " " + (target.body || "");
-  const targetGrams = charTrigrams(targetText);
+  const targetGrams = charNgrams(targetText);
   if (targetGrams.size === 0) return [];
 
   const rows = db.prepare("SELECT id, data, body FROM objects WHERE type = 'note' AND id != ?").all(id) as any[];
@@ -396,7 +398,7 @@ export function findSimilarNotes(id: string, threshold: number = 0.3): { id: str
   for (const row of rows) {
     const data = JSON.parse(row.data);
     const text = (data.title || "") + " " + (row.body || "");
-    const grams = charTrigrams(text);
+    const grams = charNgrams(text);
 
     // Size pre-filter: skip vastly different lengths
     if (grams.size === 0) continue;

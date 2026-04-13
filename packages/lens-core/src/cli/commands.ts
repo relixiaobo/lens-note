@@ -153,7 +153,7 @@ async function tasksCommand(args: string[], opts: CommandOptions) {
 async function similarCommand(args: string[], opts: CommandOptions) {
   const { positional } = parseCliArgs(args);
   const id = positional[0];
-  if (!id) throw new Error("Usage: lens similar <id> [--threshold 0.7]");
+  if (!id) throw new Error("Usage: lens similar <id> [--threshold 0.3]");
   const { showSimilar } = await import("./similar");
   await showSimilar(id, opts);
 }

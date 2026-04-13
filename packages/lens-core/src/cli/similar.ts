@@ -13,6 +13,7 @@ export async function showSimilar(id: string, opts: CommandOptions) {
 
   const target = readObject(id);
   if (!target) throw new Error(`Object not found: ${id}`);
+  if (target.data.type !== "note") throw new Error(`similar only works with notes, got ${target.data.type}`);
 
   const threshold = opts.threshold ? parseFloat(String(opts.threshold)) : 0.3;
   if (isNaN(threshold) || threshold < 0 || threshold > 1) {
