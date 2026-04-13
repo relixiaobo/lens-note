@@ -89,6 +89,12 @@ RSS:
   feed check [--dry-run]     Check for new articles
   feed remove <id|url>       Unsubscribe
 
+Index (Schlagwortregister):
+  index                      List all keyword entries
+  index "<keyword>"          Show entries for a keyword
+  index add "<kw>" <id>      Register entry point (max 3 per keyword)
+  index remove "<kw>" [id]   Remove keyword or single entry
+
 System:
   init                       First-time setup
   rebuild-index              Rebuild SQLite cache
@@ -106,7 +112,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.4.0");
+  console.log("lens v1.5.0");
   process.exit(0);
 }
 

@@ -16,6 +16,7 @@ export const paths = {
   raw: join(LENS_HOME, "raw"),
   db: join(LENS_HOME, "index.sqlite"),
   config: join(LENS_HOME, "config.yaml"),
+  keywordIndex: join(LENS_HOME, "keyword-index.json"),
 } as const;
 
 /** Strict ID format: prefix_ULID */

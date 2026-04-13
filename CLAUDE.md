@@ -4,7 +4,7 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — it stores, queries, and links. Any agent can use it. No API keys, no LLM dependencies.
 
-**Status**: v1.4.0. 3 types (Source, Note, Task). --stdin agent mode. Git version tracking.
+**Status**: v1.5.0. 3 types (Source, Note, Task). --stdin agent mode. Git version tracking.
 
 **Methodology**: The Collision Method — Spark → Collide → Crystallize. Knowledge grows through collision, not collection.
 
@@ -38,6 +38,8 @@ lens similar <id> --json                # Find near-duplicate notes (+ --thresho
 lens similar --all --json               # Scan all notes, group duplicates
 lens context "<query>" --json           # Assemble full context pack (notes with bodies)
 lens digest [week|month|year] --json    # Recent insights summary (tensions/connected/seeds)
+lens index --json                       # List keyword entry points (Schlagwortregister)
+lens index add "<kw>" <id> --json       # Register entry point (max 3 per keyword)
 lens status --json                      # Stats + graph health
 lens tasks [--all|--done] --json        # List tasks
 ```

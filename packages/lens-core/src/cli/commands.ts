@@ -158,6 +158,12 @@ async function similarCommand(args: string[], opts: CommandOptions) {
   await showSimilar(id, opts);
 }
 
+async function indexCommand(args: string[], opts: CommandOptions) {
+  const sub = args[0];
+  const { handleIndex } = await import("./index-cmd");
+  await handleIndex(sub, args.slice(1), opts);
+}
+
 export const commands: Record<string, CommandHandler> = {
   init: initCommand,
   status: statusCommand,
@@ -174,6 +180,7 @@ export const commands: Record<string, CommandHandler> = {
   fetch: fetchCommand,
   tasks: tasksCommand,
   similar: similarCommand,
+  index: indexCommand,
   "rebuild-index": rebuildIndexCommand,
 };
 
