@@ -161,6 +161,14 @@ Downstream files that reference the data model:
 - `../lens-note-plugin/plugin/skills/lens/references/curation.md` — Merge/supersede examples
 - `../lens-note-plugin/plugin/skills/lens/references/note-fields.md` — Field reference table
 
+### Publish checklist
+
+When publishing changes, bump versions and push in order:
+
+1. **lens-note (npm)**: `packages/lens-core/package.json` version + `main.ts` version string → `tsup` → `npm publish`
+2. **lens-note-plugin**: `plugin/.claude-plugin/plugin.json` version + `marketplace.json` version → `git push`
+3. **Local install**: `npm install -g lens-note@latest` → verify `lens --version`
+
 ## Language Rules
 
 - **All project artifacts in English**: code, comments, commits, docs, CLI output.
