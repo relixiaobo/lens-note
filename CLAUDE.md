@@ -27,10 +27,25 @@ lens CLI (npm package: lens-note, compiled JS via tsup)
 ```bash
 lens search "<query>" --json     # Find knowledge (CJK-aware)
 lens show <id> --json            # Read one object with links + reasons
-lens write '<json>' --json       # Write anything (note/source/link/batch)
+lens write --file <path> --json  # Write anything (note/source/link/batch)
 lens fetch <url> [--save] --json # Extract web content
 lens status --json               # Stats + graph health
 ```
+
+### Agent Mode (--stdin)
+
+All commands can be called via `--stdin` with a JSON request envelope — bypasses shell escaping entirely:
+
+```bash
+printf '%s' '{"command":"write","input":{"type":"note","title":"...","body":"..."}}' | lens --stdin
+printf '%s' '{"command":"search","positional":["query"]}' | lens --stdin
+printf '%s' '{"command":"fetch","positional":["https://..."],"flags":{"save":true}}' | lens --stdin
+```
+
+Envelope: `{"command":"...", "positional":["..."], "flags":{...}, "input":{...}}`
+- `positional` — command arguments (query text, ID, URL)
+- `flags` — options like `save`, `since`
+- `input` — structured payload for `write` (note/source/link objects, or batch array)
 
 ## Data Model
 
@@ -123,6 +138,28 @@ npx tsx packages/lens-core/src/main.ts <cmd>    # Dev mode
 npx tsc --noEmit --project packages/lens-core/tsconfig.json  # Type check
 cd packages/lens-core && npx tsup && npm publish --access public  # Publish
 ```
+
+## Change Protocol
+
+When modifying the data model (`types.ts`), check ALL downstream references:
+
+```bash
+# Run from project root — checks both lens and lens-note-plugin repos
+grep -rn 'role\|qualifier\|scope\|voice\|evidence\|status\|entries\|sees\|ignores\|assumptions' \
+  docs/ skills/ README.md CLAUDE.md \
+  ../lens-note-plugin/plugin/skills/ \
+  --include='*.md' | grep -v archive/
+```
+
+Downstream files that reference the data model:
+- `README.md` — Write API examples, Data Model section
+- `CLAUDE.md` — Data Model section
+- `docs/product-vision.md` — Note card description, Write API
+- `docs/product-evolution.md` — Design decisions
+- `../lens-note-plugin/plugin/skills/lens/SKILL.md` — Write API Reference, mode examples
+- `../lens-note-plugin/plugin/skills/lens/references/compilation.md` — Crystallization table
+- `../lens-note-plugin/plugin/skills/lens/references/curation.md` — Merge/supersede examples
+- `../lens-note-plugin/plugin/skills/lens/references/note-fields.md` — Field reference table
 
 ## Language Rules
 

@@ -161,3 +161,109 @@ export const commands: Record<string, CommandHandler> = {
   fetch: fetchCommand,
   "rebuild-index": rebuildIndexCommand,
 };
+
+// ============================================================
+// Structured dispatch (--stdin mode, future MCP)
+// ============================================================
+
+/**
+ * Request envelope for structured agent input.
+ * Content goes through JSON, never through the shell.
+ */
+export interface RequestEnvelope {
+  command: string;
+  positional?: string[];
+  flags?: Record<string, string | boolean>;
+  input?: unknown;
+}
+
+/**
+ * Convert RequestEnvelope to argv for commands that still use string[] handlers.
+ */
+function toArgv(req: RequestEnvelope): string[] {
+  const argv: string[] = [...(req.positional || [])];
+  if (req.flags) {
+    for (const [key, value] of Object.entries(req.flags)) {
+      if (key === "json") continue; // handled separately
+      if (value === true) {
+        argv.push(`--${key}`);
+      } else if (typeof value === "string") {
+        argv.push(`--${key}`, value);
+      }
+    }
+  }
+  return argv;
+}
+
+/**
+ * Dispatch a structured request to the appropriate handler.
+ * Used by --stdin mode. Designed to be shared with a future MCP server.
+ */
+export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
+  // Validate envelope shape
+  if (req.positional !== undefined && !Array.isArray(req.positional)) {
+    throw new Error('"positional" must be a string array');
+  }
+  if (req.positional && !req.positional.every((p: unknown) => typeof p === "string")) {
+    throw new Error('"positional" must be a string array');
+  }
+
+  // Force json:true — stdin mode is always structured output
+  const opts: CommandOptions = { ...(req.flags || {}), json: true };
+
+  switch (req.command) {
+    case "search": {
+      const query = (req.positional || []).join(" ");
+      if (!query) throw new Error('search: "positional" with query text is required');
+      const { searchObjects } = await import("./search");
+      return searchObjects(query, opts);
+    }
+    case "show": {
+      const id = req.positional?.[0];
+      if (!id) throw new Error('show: "positional" with object ID is required');
+      const { showObject } = await import("./show");
+      return showObject(id, opts);
+    }
+    case "status": {
+      const { showStatus } = await import("./status");
+      return showStatus(opts);
+    }
+    case "write": {
+      const { handleWriteInput } = await import("./write");
+      return handleWriteInput(req.input, opts);
+    }
+    case "note": {
+      const title = (req.positional || []).join(" ");
+      if (!title) throw new Error('note: "positional" with title text is required');
+      const { createNote } = await import("./note");
+      return createNote(title, opts);
+    }
+    case "fetch": {
+      const url = req.positional?.[0];
+      if (!url) throw new Error('fetch: "positional" with URL is required');
+      const { fetchUrl } = await import("./fetch");
+      return fetchUrl(url, opts); // opts already includes flags like save:true
+    }
+    case "links": {
+      const id = req.positional?.[0];
+      if (!id) throw new Error('links: "positional" with object ID is required');
+      const { showLinks } = await import("./links");
+      return showLinks(id, opts);
+    }
+    case "context": {
+      const query = (req.positional || []).join(" ");
+      if (!query) throw new Error('context: "positional" with query text is required');
+      const { assembleContext } = await import("./context");
+      return assembleContext(query, { ...opts, json: true });
+    }
+    default: {
+      // Compatibility path: reconstruct argv for remaining commands
+      const handler = commands[req.command];
+      if (!handler) {
+        const available = Object.keys(commands).join(", ");
+        throw new Error(`Unknown command: "${req.command}". Available: ${available}`);
+      }
+      return handler(toArgv(req), opts);
+    }
+  }
+}

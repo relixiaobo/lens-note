@@ -4,10 +4,54 @@
  * lens CLI entry point.
  */
 
-import { commands, parseCliArgs } from "./cli/commands";
+import { commands, parseCliArgs, dispatchRequest, type RequestEnvelope } from "./cli/commands";
+import { readFileSync } from "fs";
 
 const args = process.argv.slice(2);
 const command = args[0];
+
+// --stdin mode: structured JSON input, bypasses shell escaping entirely.
+// Used by AI agents. Content never touches the shell parser.
+if (command === "--stdin") {
+  if (process.stdin.isTTY) {
+    console.log(JSON.stringify({ error: { code: "no_input", message: "No piped input. Usage: printf '%s' '{\"command\":\"...\"}' | lens --stdin" } }));
+    process.exit(1);
+  }
+
+  let raw: string;
+  try {
+    raw = readFileSync(0, "utf-8").trim();
+  } catch {
+    console.log(JSON.stringify({ error: { code: "empty_stdin", message: "Expected JSON request on stdin" } }));
+    process.exit(1);
+  }
+
+  if (!raw) {
+    console.log(JSON.stringify({ error: { code: "empty_stdin", message: "Expected JSON request on stdin" } }));
+    process.exit(1);
+  }
+
+  let req: RequestEnvelope;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || typeof parsed.command !== "string") {
+      throw new Error('Expected object with string "command" field');
+    }
+    req = parsed as RequestEnvelope;
+  } catch (e: any) {
+    console.log(JSON.stringify({ error: { code: "invalid_request", message: e.message } }));
+    process.exit(1);
+  }
+
+  try {
+    await dispatchRequest(req);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.log(JSON.stringify({ error: { code: "command_error", message, command: req.command } }, null, 2));
+    process.exit(1);
+  }
+  process.exit(0);
+}
 
 if (!command || command === "--help" || command === "-h") {
   console.log(`
@@ -19,7 +63,7 @@ Usage:
 Core (agent-facing):
   search "<query>" --json    Find knowledge (supports Chinese/CJK)
   show <id> --json           Read one object with full detail + links
-  write '<json>' --json       Write anything (note/source/link/update/delete/batch)
+  write --file <path> --json   Write anything (note/source/link/update/delete/batch)
   fetch <url> [--save] --json Extract web content as clean markdown
   status --json              Stats + health metrics
 
@@ -44,6 +88,10 @@ System:
   init                       First-time setup
   rebuild-index              Rebuild SQLite cache
 
+Agent mode:
+  --stdin                 Read JSON request from stdin (shell-safe)
+                          {"command":"...", "positional":[], "flags":{}, "input":{}}
+
 Options:
   --json                  Structured JSON output
   --help, -h              Show this help
@@ -53,7 +101,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.0.2");
+  console.log("lens v1.0.4");
   process.exit(0);
 }
 

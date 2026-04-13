@@ -63,7 +63,7 @@ Just as Git stores code without writing it, lens stores knowledge without genera
 ```bash
 lens search "<query>" --json     # Find notes (CJK-aware)
 lens show <id> --json            # Read one object with links
-lens write --json < input        # Write anything (stdin JSON)
+lens write --file <path> --json   # Write anything (from JSON file)
 lens fetch <url> [--save] --json # Extract web content
 lens status --json               # Stats + graph health
 ```
@@ -71,12 +71,12 @@ lens status --json               # Stats + graph health
 `lens write` accepts JSON with a `type` field that routes the operation:
 
 ```json
-{"type": "note", "text": "...", "role": "claim", "supports": ["note_ID"]}
+{"type": "note", "title": "...", "links": [{"to": "note_ID", "rel": "supports", "reason": "..."}], "body": "..."}
 {"type": "source", "title": "...", "url": "..."}
-{"type": "link", "from": "note_ID", "rel": "supports", "to": "note_ID"}
-{"type": "update", "id": "note_ID", "set": {...}, "add": {...}}
+{"type": "link", "from": "note_ID", "rel": "supports", "to": "note_ID", "reason": "..."}
+{"type": "update", "id": "note_ID", "set": {...}, "add": {"links": [...]}, "body": "..."}
 {"type": "delete", "id": "note_ID"}
-[{...}, {...}]  // batch (atomic, $N references)
+[{...}, {...}]  // batch ($0/$1 reference earlier items)
 ```
 
 ---
@@ -98,7 +98,7 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 1. `lens fetch <url> --save --json` → source_id + markdown
 2. `lens search "topics" --json` → existing knowledge
 3. Agent thinks: what's new? what supports/contradicts?
-4. `echo '[...]' | lens write --json` → batch create notes with links
+4. `lens write --file batch.json --json` → batch create notes with links
 
 **Answer a question from knowledge:**
 1. `lens search "<query>" --json` → relevant notes
@@ -109,7 +109,7 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 1. `lens status --json` → orphan count
 2. `lens show <orphan_id> --json` → read orphan
 3. `lens search "related" --json` → find connections
-4. `echo '{"type":"link",...}' | lens write --json` → add link
+4. `lens write --file link.json --json` → add link
 
 ---
 
@@ -125,16 +125,7 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 
 ### Note: the Universal Card
 
-Role is a soft hint for display, not a constraint:
-
-| Role | Key Fields |
-|------|-----------|
-| claim | evidence[], qualifier, voice |
-| frame | sees, ignores, assumptions[] |
-| question | question_status |
-| observation | (none — default) |
-| connection | bridges[] |
-| structure_note | entries[] |
+7 frontmatter fields: `id`, `type`, `title`, `source`, `links[]`, `created_at`, `updated_at`. Everything else (evidence, confidence, scope, perspective) goes in the body as free-form markdown.
 
 ### Links Are the Only Structure
 
@@ -189,7 +180,7 @@ No server, no daemon, no account, no API key.
 2. **CLI is the product.** Not a transitional step toward GUI. The CLI is the final form.
 3. **Skill file is application logic.** Compile/curate/converse workflows live in documentation, not code.
 4. **Zero LLM dependency.** The calling agent is the LLM. lens doesn't duplicate that.
-5. **Validation at the boundary.** lens validates all writes (role enums, ID existence, bidirectional contradicts). The skill file guides; the CLI enforces.
+5. **Validation at the boundary.** lens validates all writes (ID existence, link targets, bidirectional contradicts). The skill file guides; the CLI enforces.
 6. **Zettelkasten model.** One idea per card. Structure from links. Index sparse and post-hoc.
 7. **File-as-Truth.** Markdown files are the source of truth. Everything else is derived.
 8. **CJK-native search.** Full-text search works for Chinese, Japanese, Korean out of the box.

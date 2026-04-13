@@ -50,10 +50,21 @@ Any agent that can run bash commands can use lens. The [skill file](https://gith
 ```bash
 lens search "<query>" --json       # Find knowledge (multilingual, CJK-aware)
 lens show <id> --json              # Read one object with links + reasons
-lens write '<json>' --json         # Write anything: note, source, link, batch
+lens write --file <path> --json    # Write anything: note, source, link, batch
 lens fetch <url> [--save] --json   # Extract web content as clean markdown
 lens status --json                 # Stats + graph health metrics
 ```
+
+### Agent Mode (--stdin)
+
+For agents that need to pass complex content (Chinese, quotes, newlines), `--stdin` accepts any command as a JSON request — content never touches the shell:
+
+```bash
+printf '%s' '{"command":"write","input":{"type":"note","title":"标题","body":"正文..."}}' | lens --stdin
+printf '%s' '{"command":"search","positional":["distributed systems"]}' | lens --stdin
+```
+
+Request format: `{"command":"...", "positional":[], "flags":{}, "input":{}}`
 
 ## What Agents Do With lens
 
@@ -68,13 +79,9 @@ lens fetch https://example.com/article --save --json
 # 2. Search existing knowledge
 lens search "related topic" --json
 
-# 3. Agent thinks, then writes notes with links and reasons
-lens write '[
-  {"type": "note", "title": "Key insight from article",
-   "source": "$0",
-   "links": [{"to": "note_01DEF", "rel": "contradicts", "reason": "..."}],
-   "body": "Detailed reasoning and evidence here..."}
-]' --json
+# 3. Agent writes JSON to file, then imports
+#    (file approach avoids shell escaping issues with quotes/CJK)
+lens write --file notes.json --json
 ```
 
 ### Answer from knowledge
@@ -115,7 +122,7 @@ Evidence, reasoning, and elaboration in markdown body.
 
 ## Write API
 
-`lens write` accepts JSON (as argument or stdin). The `type` field routes:
+`lens write --file input.json --json` accepts JSON from a file. Also supports stdin and shell argument. The `type` field routes:
 
 ```json
 {"type": "note", "title": "...", "links": [{"to": "note_ID", "rel": "supports", "reason": "..."}], "body": "..."}

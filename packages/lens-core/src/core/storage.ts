@@ -135,7 +135,6 @@ function initSchema(db: InstanceType<typeof Database>) {
     CREATE TABLE IF NOT EXISTS objects (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
-      role TEXT,
       data TEXT NOT NULL,
       body TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
@@ -162,9 +161,9 @@ export function indexObject(obj: LensObject, body: string = "") {
 
   db.transaction(() => {
     db.prepare(`
-      INSERT INTO objects (id, type, role, data, body, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET type = ?, role = ?, data = ?, body = ?, updated_at = ?
-    `).run(obj.id, obj.type, null, data, body, now, obj.type, null, data, body, now);
+      INSERT INTO objects (id, type, data, body, updated_at) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET type = ?, data = ?, body = ?, updated_at = ?
+    `).run(obj.id, obj.type, data, body, now, obj.type, data, body, now);
 
     db.prepare("DELETE FROM search_index WHERE id = ?").run(obj.id);
     db.prepare("INSERT INTO search_index (id, type, title, body) VALUES (?, ?, ?, ?)").run(

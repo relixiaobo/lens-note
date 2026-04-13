@@ -7,7 +7,7 @@
  *   link    → add link between notes
  *   unlink  → remove link
  *   update  → modify existing object
- *   delete  → soft-delete (set status: superseded)
+ *   delete  → remove file and deindex
  *
  * Accepts single object or array (batch).
  * Batch supports $N references to earlier items by index.
@@ -281,32 +281,11 @@ function removeLinkFromExisting(id: string, rel: string, targetId: string): void
 // Main entry point
 // ============================================================
 
-export async function handleWrite(args: string[], opts: CommandOptions) {
-  ensureInitialized();
+// ============================================================
+// Shared write execution (used by both CLI and --stdin paths)
+// ============================================================
 
-  // Accept JSON as argument or from stdin
-  const { positional } = parseCliArgs(args);
-  let rawInput: string;
-
-  if (positional.length > 0) {
-    rawInput = positional.join(" ").trim();
-  } else {
-    try {
-      rawInput = readFileSync("/dev/stdin", "utf-8").trim();
-    } catch {
-      throw new Error('Usage: lens write \'{"type":"note","title":"..."}\' --json\n   or: echo \'...\' | lens write --json');
-    }
-  }
-
-  if (!rawInput) throw new Error("Empty input.");
-
-  let parsed: any;
-  try {
-    parsed = JSON.parse(rawInput);
-  } catch {
-    throw new Error("Invalid JSON input");
-  }
-
+function executeWrite(parsed: any, opts: CommandOptions) {
   const isBatch = Array.isArray(parsed);
   const items = isBatch ? parsed : [parsed];
   if (items.length === 0) throw new Error("Empty array.");
@@ -346,4 +325,54 @@ export async function handleWrite(args: string[], opts: CommandOptions) {
       console.log(`${r.action}: ${r.type}${id}`);
     }
   }
+}
+
+/** CLI entry: parse JSON from --file, argument, or stdin, then execute. */
+export async function handleWrite(args: string[], opts: CommandOptions) {
+  ensureInitialized();
+
+  const { positional, flags } = parseCliArgs(args);
+  let rawInput: string;
+
+  if (flags.file === true) {
+    throw new Error("--file requires a path: lens write --file <path> --json");
+  }
+
+  if (flags.file && typeof flags.file === "string") {
+    try {
+      rawInput = readFileSync(flags.file, "utf-8").trim();
+    } catch (e: any) {
+      throw new Error(`Cannot read file: ${flags.file} (${e.message})`);
+    }
+  } else if (positional.length > 0) {
+    rawInput = positional.join(" ").trim();
+  } else {
+    try {
+      rawInput = readFileSync(0, "utf-8").trim();
+    } catch {
+      throw new Error('Usage: lens write --file <path> --json\n   or: lens write \'{"type":"note","title":"..."}\' --json');
+    }
+  }
+
+  if (!rawInput) throw new Error("Empty input.");
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(rawInput);
+  } catch {
+    throw new Error("Invalid JSON input");
+  }
+
+  executeWrite(parsed, opts);
+}
+
+/** Structured entry: accepts parsed payload directly (used by --stdin dispatch). */
+export async function handleWriteInput(input: unknown, opts: CommandOptions) {
+  ensureInitialized();
+
+  if (!input || typeof input !== "object") {
+    throw new Error("write: input must be a JSON object or array");
+  }
+
+  executeWrite(input, opts);
 }

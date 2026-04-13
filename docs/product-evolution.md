@@ -39,10 +39,10 @@ This question triggered a fundamental rethink. We studied Luhmann's actual metho
 ### Decisions
 
 - **3 types replace 6**: Source, Note, Thread. Note is the universal knowledge card.
-- **Programme is gone**: Replaced by structure notes (Notes with `role: structure_note`).
-- **Links are the only structure**: `supports`, `contradicts`, `refines`, `related`.
+- **Programme is gone**: Structure is emergent from links between notes.
+- **Links are the only structure**: `supports`, `contradicts`, `refines`, `related` — each with a `reason`.
 - **Agent redesigned as "thinker"**: Reads → explores existing knowledge → thinks about connections → creates linked Notes. Not a mechanical extractor.
-- **Role is a soft hint**: `claim`, `frame`, `question`, `observation`, `connection`, `structure_note` are display hints, not type constraints.
+- **7 frontmatter fields**: `id`, `type`, `title`, `source`, `links[]`, `created_at`, `updated_at`. Everything else (evidence, confidence, scope, perspective) goes in body as free-form markdown.
 
 ### Validation
 
