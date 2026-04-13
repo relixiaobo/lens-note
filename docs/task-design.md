@@ -20,16 +20,16 @@ Task is a Note with status. Same infrastructure, same links, same files. Only 1 
 ---
 id: task_01ABC
 type: task
-title: 实现阅读辅助的互动问答功能
+title: Implement interactive Q&A for reading assistance
 status: open
 links:
   - to: note_01DEF
     rel: related
-    reason: 来自「AI辅助阅读方案」的具体落地
+    reason: Concrete action from the AI reading assistance design
 created_at: '2026-04-13T06:30:43.574Z'
 updated_at: '2026-04-13T06:30:43.574Z'
 ---
-具体的任务描述、拆解、进展记录...
+Task description, breakdown, and progress notes...
 ```
 
 ### vs Note
@@ -58,7 +58,7 @@ Use existing `supports`, `contradicts`, `refines`, `related` with descriptive `r
 links:
   - to: note_01DEF
     rel: related
-    reason: 这个任务来自那篇阅读笔记的启发
+    reason: This task was inspired by that reading note
 ```
 
 ### Search: tasks included by default
@@ -79,7 +79,7 @@ lens tasks --done --json         # done tasks
 
 ```bash
 # Create
-printf '%s' '{"command":"write","input":{"type":"task","title":"重构搜索模块","status":"open"}}' | lens --stdin
+printf '%s' '{"command":"write","input":{"type":"task","title":"Refactor search module","status":"open"}}' | lens --stdin
 
 # Complete
 printf '%s' '{"command":"write","input":{"type":"update","id":"task_01ABC","set":{"status":"done"}}}' | lens --stdin
@@ -87,7 +87,7 @@ printf '%s' '{"command":"write","input":{"type":"update","id":"task_01ABC","set"
 # Complete with reflection (batch)
 printf '%s' '{"command":"write","input":[
   {"type":"update","id":"task_01ABC","set":{"status":"done"}},
-  {"type":"note","title":"重构的教训","body":"...","links":[{"to":"$0","rel":"related","reason":"完成任务后的反思"}]}
+  {"type":"note","title":"Lessons from the refactoring","body":"...","links":[{"to":"$0","rel":"related","reason":"Reflection after completing this task"}]}
 ]}' | lens --stdin
 ```
 

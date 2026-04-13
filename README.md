@@ -60,7 +60,7 @@ lens status --json                 # Stats + graph health metrics
 For agents that need to pass complex content (Chinese, quotes, newlines), `--stdin` accepts any command as a JSON request — content never touches the shell:
 
 ```bash
-printf '%s' '{"command":"write","input":{"type":"note","title":"标题","body":"正文..."}}' | lens --stdin
+printf '%s' '{"command":"write","input":{"type":"note","title":"My insight","body":"Details..."}}' | lens --stdin
 printf '%s' '{"command":"search","positional":["distributed systems"]}' | lens --stdin
 ```
 
