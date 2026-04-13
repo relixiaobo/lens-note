@@ -33,8 +33,6 @@ That's it. Claude Code now knows how to use lens. Try:
 > "Fetch this article and compile the key insights into lens"
 >
 > "What do I know about distributed systems? Check lens."
->
-> "Find orphan notes in lens and link them."
 
 ## Use with Any Agent
 
@@ -42,133 +40,120 @@ Any agent that can run bash commands can use lens. The [skill file](https://gith
 
 | Agent | Skill location |
 |-------|---------------|
-| Claude Code | `.claude/skills/lens.claude-skill.md` |
-| Cursor | `.cursor/rules/lens.mdc` |
-| Generic | System prompt or project instructions |
+| Claude Code | `/plugin install lens` |
+| Codex CLI | `~/.codex/skills/lens/SKILL.md` |
+| Gemini CLI | `~/.gemini/skills/lens/SKILL.md` |
+| Cursor | `.cursor/skills/lens/SKILL.md` |
 
 ## 5 Core Commands
 
 ```bash
-lens search "<query>" --json       # Find notes (multilingual, CJK-aware)
-lens show <id> --json              # Read one object with full detail + links
-echo '<json>' | lens write --json  # Write anything: note, source, link, batch
+lens search "<query>" --json       # Find knowledge (multilingual, CJK-aware)
+lens show <id> --json              # Read one object with links + reasons
+lens write '<json>' --json         # Write anything: note, source, link, batch
 lens fetch <url> [--save] --json   # Extract web content as clean markdown
 lens status --json                 # Stats + graph health metrics
 ```
 
 ## What Agents Do With lens
 
-### Compile an article
+### Compile an article (The Collision Method)
 
-The agent fetches content, searches for existing knowledge, thinks about what's new, and writes structured notes with links.
+Spark → Collide → Crystallize. Fetch content, carry your thoughts into the knowledge graph, wander through existing notes, write what emerges from the collision.
 
 ```bash
 # 1. Fetch and save as source
 lens fetch https://example.com/article --save --json
-# → {"source_id": "src_01ABC", "title": "...", "markdown": "..."}
 
 # 2. Search existing knowledge
 lens search "related topic" --json
-# → {"count": 5, "results": [{"id": "note_01DEF", "text": "...", "role": "claim"}]}
 
-# 3. Agent thinks, then writes notes with links
-echo '[
-  {"type": "note", "text": "Key insight from article", "role": "claim",
-   "source": "src_01ABC", "supports": ["note_01DEF"]}
-]' | lens write --json
-# → {"created": [{"id": "note_01XYZ", "type": "note", "action": "created"}]}
+# 3. Agent thinks, then writes notes with links and reasons
+lens write '[
+  {"type": "note", "title": "Key insight from article",
+   "source": "$0",
+   "links": [{"to": "note_01DEF", "rel": "contradicts", "reason": "..."}],
+   "body": "Detailed reasoning and evidence here..."}
+]' --json
 ```
 
-### Answer a question from knowledge
+### Answer from knowledge
 
 ```bash
 lens search "software quality" --json    # Find relevant notes
-lens show note_01ABC --json              # Read full detail
+lens show note_01ABC --json              # Read full detail with link reasons
 # Agent synthesizes answer, citing note IDs as evidence
 ```
 
-### Maintain the knowledge graph
+## Data Model
 
-```bash
-lens status --json                       # Check orphan rate, connectivity
-# Agent finds orphans, searches for related notes, adds links
-echo '{"type":"link","from":"note_01A","rel":"supports","to":"note_01B"}' | lens write --json
+Each note is a markdown file with minimal frontmatter:
+
+```yaml
+---
+id: note_01ABC
+type: note
+title: "High internal quality has negative cost in software"
+source: src_01DEF
+links:
+  - to: note_01GHI
+    rel: contradicts
+    reason: "AI changes the cost equation"
+created_at: '2026-04-13T02:50:14.932Z'
+updated_at: '2026-04-13T02:50:14.932Z'
+---
+Evidence, reasoning, and elaboration in markdown body.
+
+> "the trade-off does not apply to internal quality" — Fowler
 ```
+
+**7 frontmatter fields.** Everything else goes in the body as natural prose.
+
+**Link types**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related`. Each link can carry a `reason`.
+
+**Version tracking**: Every write auto-commits to git. `git log` shows full note evolution.
 
 ## Write API
 
-`lens write` accepts JSON via stdin. The `type` field determines the operation:
+`lens write` accepts JSON (as argument or stdin). The `type` field routes:
 
 ```json
-{"type": "note", "text": "...", "role": "claim", "qualifier": "likely", "supports": ["note_ID"]}
+{"type": "note", "title": "...", "links": [{"to": "note_ID", "rel": "supports", "reason": "..."}], "body": "..."}
 {"type": "source", "title": "...", "url": "...", "source_type": "web_article"}
-{"type": "link", "from": "note_A", "rel": "supports", "to": "note_B"}
-{"type": "update", "id": "note_A", "set": {"qualifier": "certain"}, "add": {"supports": ["note_B"]}}
+{"type": "link", "from": "note_A", "rel": "supports", "to": "note_B", "reason": "..."}
+{"type": "update", "id": "note_A", "set": {"title": "..."}, "add": {"links": [...]}}
 {"type": "delete", "id": "note_A"}
 ```
 
-**Batch**: pass a JSON array. Use `$0`, `$1` to reference earlier items by index.
+Batch: pass a JSON array. Use `$0`, `$1` to reference earlier items by index.
 
-**Link types**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related`.
-
-**Note roles**: `claim`, `frame`, `question`, `observation`, `connection`, `structure_note`.
-
-## Data Model
-
-3 types, stored as markdown files with YAML frontmatter in `~/.lens/`:
-
-| Type | Prefix | Purpose |
-|------|--------|---------|
-| **Source** | `src_` | Where content came from (provenance) |
-| **Note** | `note_` | One idea per card (universal knowledge card) |
-| **Thread** | `thr_` | Conversation record |
-
-Structure emerges from **links between notes**, not from folders or categories. This is the [Zettelkasten](https://en.wikipedia.org/wiki/Zettelkasten) model — the same system Niklas Luhmann used to write 70 books.
-
-**File-as-Truth**: Markdown files are the source of truth. SQLite is a derived cache, rebuildable via `lens rebuild-index`.
-
-## Design Philosophy
+## Philosophy
 
 1. **lens never thinks.** It stores, queries, and links. Agents provide the intelligence.
 2. **Infrastructure, not application.** Like Git outlasts every IDE, lens outlasts every agent.
-3. **Zero dependencies on AI.** No API keys, no LLM calls, no cloud services. Pure local CLI.
-4. **Links are the only structure.** No folders, no tags, no categories. Knowledge organizes itself through connections.
-5. **Any agent works.** Claude Code, Cursor, ChatGPT, custom agents — anything with bash.
+3. **Zero dependencies on AI.** No API keys, no LLM calls, no cloud services.
+4. **Links are the only structure.** No folders, no tags, no categories.
+5. **The Collision Method.** Knowledge grows through collision (Spark → Collide → Crystallize), not through collection.
 
 ## Additional Commands
 
 ```bash
-# Browsing
-lens list notes [--role claim] [--scope big_picture] [--since 7d]
-lens links <id>                     # Show all relationships
-lens context "<query>"              # Assemble context pack (JSON)
-lens digest [week|month|year]       # Recent insights summary
-
-# Shortcuts
-lens note "quick thought"           # Create a note directly
-lens ingest <url|file>              # Save source (alias for fetch --save)
-
-# RSS feeds
-lens feed add <url>                 # Subscribe
-lens feed import <file.opml>        # Import from OPML
-lens feed check --dry-run           # Check for new articles
-
-# System
-lens init                           # First-time setup
-lens status                         # Object counts
-lens rebuild-index                  # Rebuild SQLite cache
+lens list notes [--since 7d]            # Browse notes
+lens links <id>                         # Show all relationships
+lens context "<query>"                  # Context pack (JSON)
+lens digest [week|month|year]           # Recent notes summary
+lens note "quick thought"               # Create a note directly
+lens ingest <url|file>                  # Save source (alias for fetch --save)
+lens feed add <url>                     # Subscribe to RSS
+lens feed check --dry-run               # Check for new articles
+lens init                               # First-time setup
+lens rebuild-index                       # Rebuild SQLite cache
 ```
-
-All commands support `--json` for structured output.
 
 ## Install
 
 ```bash
-# Global install
 npm install -g lens-note
-
-# Or zero-install via npx
-npx lens-note search "query" --json
 ```
 
 Requires Node.js >= 20.

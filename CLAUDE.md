@@ -4,58 +4,103 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — it stores, queries, and links. Any agent can use it. No API keys, no LLM dependencies.
 
-**Status**: v0.4.0. Pure infrastructure. Zero LLM dependency. 5 core commands for agents.
+**Status**: v1.0. Pure infrastructure. Zero LLM dependency. 5 core commands. Git version tracking.
+
+**Methodology**: The Collision Method — Spark → Collide → Crystallize. Knowledge grows through collision, not collection.
 
 **Key docs**: `docs/product-vision.md`, `docs/product-evolution.md`.
 
 ## Architecture
 
 ```
-lens CLI (npm package, compiled JS via tsup)
-├── Storage (File-as-Truth + SQLite derived cache)
-│   Markdown files = truth, better-sqlite3 FTS5 = search cache
+lens CLI (npm package: lens-note, compiled JS via tsup)
+├── Storage (File-as-Truth + SQLite cache + Git version tracking)
+│   Markdown files = truth, better-sqlite3 FTS5 = search cache, git = history
 ├── Write API (lens write: note/source/link/update/delete/batch)
 ├── Read API (lens search, show, list, links, context, digest)
 ├── Web extraction (Defuddle + Turndown → markdown)
 └── RSS feeds (feedsmith, OPML import)
 ```
 
-No agent framework. No LLM calls. No API keys. Agents provide the intelligence; lens provides the storage.
-
-## 5 Core Commands (Agent-Facing)
+## 5 Core Commands
 
 ```bash
-lens search "<query>" --json     # Find notes (CJK-aware)
-lens show <id> --json            # Read one object with full detail + links
-lens write --json < input.json   # Write anything (stdin JSON)
+lens search "<query>" --json     # Find knowledge (CJK-aware)
+lens show <id> --json            # Read one object with links + reasons
+lens write '<json>' --json       # Write anything (note/source/link/batch)
 lens fetch <url> [--save] --json # Extract web content
 lens status --json               # Stats + graph health
 ```
 
-### `lens write` accepts JSON by type:
-
-```json
-{"type": "note", "text": "...", "role": "claim", "supports": ["note_ID"]}
-{"type": "source", "title": "...", "url": "..."}
-{"type": "link", "from": "note_ID", "rel": "supports", "to": "note_ID"}
-{"type": "update", "id": "note_ID", "set": {...}, "add": {...}}
-{"type": "delete", "id": "note_ID"}
-[{...}, {...}]  // batch (atomic, $N references)
-```
-
 ## Data Model
 
-3 types, stored as `type/id.md`:
+### Note (7 frontmatter fields + body)
 
-| Type | Prefix | Purpose |
-|---|---|---|
-| **Source** | `src_` | Provenance record |
-| **Note** | `note_` | Universal knowledge card |
-| **Thread** | `thr_` | Conversation record |
+```yaml
+---
+id: note_01ABC
+type: note
+title: "High internal quality has negative cost in software"
+source: src_01DEF
+links:
+  - to: note_01GHI
+    rel: contradicts
+    reason: "AI changes the cost equation"
+created_at: '2026-04-13T02:50:14.932Z'
+updated_at: '2026-04-13T02:50:14.932Z'
+---
+Body: evidence, reasoning, qualifier, scope, frames — all as natural markdown.
+```
 
-Note roles (soft hint): claim, frame, question, observation, connection, structure_note.
-Links: supports, contradicts, refines, related.
-File-as-Truth: Markdown files = source of truth. SQLite = derived cache.
+### Source
+
+```yaml
+---
+id: src_01ABC
+type: source
+title: "Article Title"
+source_type: web_article
+url: https://example.com
+word_count: 2718
+created_at: '2026-04-13T02:50:14.932Z'
+---
+Full article content in markdown.
+```
+
+### Links
+
+Unified `links[]` array with `{to, rel, reason}`:
+- `supports` — strengthens another note
+- `contradicts` — conflicts (auto-bidirectional)
+- `refines` — more precise version
+- `related` — loose association
+
+### Write API
+
+```json
+{"type": "note", "title": "...", "links": [{"to": "note_ID", "rel": "supports", "reason": "..."}], "body": "..."}
+{"type": "source", "title": "...", "url": "..."}
+{"type": "link", "from": "note_A", "rel": "supports", "to": "note_B", "reason": "..."}
+{"type": "update", "id": "note_A", "set": {"title": "..."}, "add": {"links": [...]}}
+{"type": "delete", "id": "note_A"}
+[{...}, {...}]  // batch, $0/$1 reference earlier items
+```
+
+## Storage
+
+```
+~/.lens/ (git-tracked)
+├── notes/note_01.md      # Frontmatter (YAML) + body (markdown)
+├── sources/src_01.md
+├── threads/thr_01.md
+├── raw/                  # Original files
+├── .git/                 # Version history
+├── .gitignore            # Excludes SQLite cache
+├── index.sqlite          # Derived cache (FTS5 + links)
+└── config.yaml
+```
+
+Every write auto-commits to git. `git log notes/note_01.md` shows full evolution.
 
 ## Tech Stack
 
@@ -68,38 +113,7 @@ File-as-Truth: Markdown files = source of truth. SQLite = derived cache.
 | **feedsmith** | RSS/Atom parsing |
 | **gray-matter** | YAML frontmatter |
 | **ulid** | ID generation |
-
-## Project Structure
-
-```
-lens/
-├── CLAUDE.md
-├── packages/lens-core/src/
-│   ├── main.ts              # CLI entry point
-│   ├── cli/
-│   │   ├── commands.ts      # Command registry
-│   │   ├── write.ts         # lens write (unified write API)
-│   │   ├── fetch.ts         # lens fetch (web extraction)
-│   │   ├── search.ts        # lens search (FTS5 + CJK)
-│   │   ├── show.ts, list.ts, links.ts, context.ts
-│   │   ├── status.ts        # Stats + graph health
-│   │   ├── digest.ts, note.ts, ingest.ts
-│   │   ├── feed.ts, init.ts, rebuild-index.ts
-│   ├── core/
-│   │   ├── types.ts         # Source, Note, Thread
-│   │   ├── storage.ts       # File I/O + SQLite cache
-│   │   └── paths.ts
-│   ├── sources/
-│   │   ├── web.ts           # Defuddle + Turndown
-│   │   └── file.ts
-│   └── feeds/
-│       ├── feed-store.ts
-│       └── feed-checker.ts
-├── skills/
-│   └── lens.claude-skill.md # Skill file for any agent
-├── docs/
-└── dist/lens                # Compiled binary
-```
+| **tsup** | Build (TS → JS) |
 
 ## Development
 
@@ -107,7 +121,7 @@ lens/
 pnpm install
 npx tsx packages/lens-core/src/main.ts <cmd>    # Dev mode
 npx tsc --noEmit --project packages/lens-core/tsconfig.json  # Type check
-npx lens-note <cmd>                               # After npm publish
+cd packages/lens-core && npx tsup && npm publish --access public  # Publish
 ```
 
 ## Language Rules
