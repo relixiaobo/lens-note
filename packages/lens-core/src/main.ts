@@ -17,9 +17,9 @@ Usage:
   lens <command> [options]
 
 Core (agent-facing):
-  search "<query>" --json    Find notes (supports Chinese/CJK)
+  search "<query>" --json    Find knowledge (supports Chinese/CJK)
   show <id> --json           Read one object with full detail + links
-  write --json               Write anything (stdin JSON: note/source/link/update/delete/batch)
+  write '<json>' --json       Write anything (note/source/link/update/delete/batch)
   fetch <url> [--save] --json Extract web content as clean markdown
   status --json              Stats + health metrics
 
@@ -53,7 +53,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v0.5.0");
+  console.log("lens v0.5.1");
   process.exit(0);
 }
 

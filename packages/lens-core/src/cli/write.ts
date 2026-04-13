@@ -188,7 +188,7 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   addLinkToExisting(from, rel, to);
   if (rel === "contradicts") addLinkToExisting(to, "contradicts", from);
 
-  return { type: "link", action: "created" };
+  return { type: "link", action: "created", object: { from, rel, to } };
 }
 
 function writeUnlink(input: any): WriteResult {
@@ -201,7 +201,7 @@ function writeUnlink(input: any): WriteResult {
   removeLinkFromExisting(from, rel, to);
   if (rel === "contradicts") removeLinkFromExisting(to, "contradicts", from);
 
-  return { type: "unlink", action: "removed" };
+  return { type: "unlink", action: "removed", object: { from, rel, to } };
 }
 
 function writeUpdate(input: any): WriteResult {
@@ -235,6 +235,10 @@ function writeUpdate(input: any): WriteResult {
           arr.push(v);
         } else {
           if (!arr.includes(v)) arr.push(v);
+          // Enforce bidirectional contradicts
+          if (key === "contradicts" && typeof v === "string") {
+            addLinkToExisting(v, "contradicts", id);
+          }
         }
       }
       data[key] = arr;
@@ -246,9 +250,15 @@ function writeUpdate(input: any): WriteResult {
     for (const [key, values] of Object.entries(input.remove)) {
       if (!Array.isArray(values) || !data[key]) continue;
       if (key === "related") {
-        data[key] = data[key].filter((r: any) => !values.includes(typeof r === "string" ? r : r.id));
+        data[key] = data[key].filter((r: any) => !(values as string[]).includes(typeof r === "string" ? r : r.id));
       } else {
-        data[key] = data[key].filter((v: any) => !values.includes(v));
+        data[key] = data[key].filter((v: any) => !(values as string[]).includes(v));
+        // Enforce bidirectional contradicts removal
+        if (key === "contradicts") {
+          for (const v of values as string[]) {
+            removeLinkFromExisting(v, "contradicts", id);
+          }
+        }
       }
     }
   }
@@ -256,7 +266,7 @@ function writeUpdate(input: any): WriteResult {
   const obj = { ...data, id } as any;
   saveObject(obj, existing.content);
 
-  return { id, type: data.type, action: "updated" };
+  return { id, type: data.type, action: "updated", object: obj };
 }
 
 function writeDelete(input: any): WriteResult {
@@ -270,7 +280,7 @@ function writeDelete(input: any): WriteResult {
   const obj = { ...existing.data, id, status: "superseded" } as any;
   saveObject(obj, existing.content);
 
-  return { id, type: existing.data.type, action: "deleted" };
+  return { id, type: existing.data.type, action: "deleted", object: obj };
 }
 
 // ============================================================
