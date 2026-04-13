@@ -6,7 +6,7 @@
 import { join, resolve } from "path";
 import { homedir } from "os";
 
-export const LENS_HOME = join(homedir(), ".lens");
+export const LENS_HOME = process.env.LENS_HOME || join(homedir(), ".lens");
 
 export const paths = {
   root: LENS_HOME,
