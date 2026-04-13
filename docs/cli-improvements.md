@@ -115,28 +115,22 @@ lens search "nonexistent" --resolve --json
 
 **Implementation**: ~20 lines in `search.ts`. Title-match query in `storage.ts`.
 
-## 5. Show: Directional Link Counts
+## 5. Show: Unified Link Schema (v1.6.0)
 
-**Problem**: `links` is a dict `{forward, backward}`, not a list. `len(d['links'])` returns 2 (dict keys), misleading.
+**Problem**: `links` was a dict `{forward, backward}` that collided with the frontmatter `links[]` array via `...data` spread. Agents consistently misused it.
 
-**Solution**: Add directional counts that match the JSON payload:
+**Solution (v1.6.0)**: Replaced with top-level `forward_links[]` and `backward_links[]` arrays. Removed `...data` spread, explicit field selection. Dropped `forward_link_count`/`backward_link_count` (use `.length`).
 
 ```json
 {
   "id": "note_01ABC",
   "title": "...",
-  "forward_link_count": 2,
-  "backward_link_count": 3,
-  "links": {
-    "forward": [...],
-    "backward": [...]
-  }
+  "forward_links": [{"id": "note_01B", "rel": "supports", "title": "..."}],
+  "backward_links": [{"id": "note_01C", "rel": "refines", "title": "..."}]
 }
 ```
 
-Counts only include displayed links (not hidden `source` edges).
-
-**Implementation**: 2 lines in `show.ts`.
+**Implementation**: Rewrite of `show.ts` JSON output.
 
 ## 6. Documentation Updates (same release)
 

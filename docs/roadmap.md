@@ -51,7 +51,7 @@ Feedback from an agent that processed 784 Tana notes into lens. Design doc: `doc
 - Link idempotency: unchanged/updated/repaired/created actions, never duplicates
 - `lens list notes --orphans` with `--limit`/`--offset` pagination
 - `lens search --resolve` for title→ID resolution with disambiguation
-- `lens show` adds `forward_link_count` and `backward_link_count`
+- `lens show` uses `forward_links[]` and `backward_links[]` (v1.6.0: replaced `links:{forward,backward}` and count fields)
 - Removed `orphan_ids` from `lens status` (use `list --orphans` instead)
 - SKILL.md: added capture trigger words, lens vs auto memory boundary rule
 
