@@ -153,7 +153,7 @@ async function tasksCommand(args: string[], opts: CommandOptions) {
 async function similarCommand(args: string[], opts: CommandOptions) {
   const { positional } = parseCliArgs(args);
   const id = positional[0];
-  if (!id) throw new Error("Usage: lens similar <id> [--threshold 0.3]");
+  if (!id && !opts.all) throw new Error("Usage: lens similar <id> [--threshold 0.3]  or  lens similar --all");
   const { showSimilar } = await import("./similar");
   await showSimilar(id, opts);
 }
@@ -271,7 +271,7 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
     }
     case "similar": {
       const id = req.positional?.[0];
-      if (!id) throw new Error('similar: "positional" with object ID is required');
+      if (!id && !opts.all) throw new Error('similar: "positional" with object ID is required, or use "flags": {"all": true}');
       const { showSimilar } = await import("./similar");
       return showSimilar(id, opts);
     }

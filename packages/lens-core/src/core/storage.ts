@@ -413,3 +413,71 @@ export function findSimilarNotes(id: string, threshold: number = 0.3): { id: str
 
   return results.sort((a, b) => b.similarity - a.similarity);
 }
+
+/** Scan all notes pairwise → group similar ones via Union-Find. */
+export function findAllSimilarGroups(threshold: number = 0.3): { count: number; groups: { notes: { id: string; title: string }[]; pairs: { a: string; b: string; similarity: number }[] }[] } {
+  const db = getDb();
+  const rows = db.prepare("SELECT id, data, body FROM objects WHERE type = 'note'").all() as any[];
+
+  // Pre-compute trigrams for every note
+  const notes: { id: string; title: string; grams: Set<string> }[] = [];
+  for (const row of rows) {
+    const data = JSON.parse(row.data);
+    const text = (data.title || "") + " " + (row.body || "");
+    const grams = charNgrams(text);
+    if (grams.size > 0) {
+      notes.push({ id: row.id, title: data.title || "(untitled)", grams });
+    }
+  }
+
+  // Union-Find
+  const parent = new Map<string, string>();
+  const find = (x: string): string => {
+    if (!parent.has(x)) parent.set(x, x);
+    while (parent.get(x) !== x) {
+      parent.set(x, parent.get(parent.get(x)!)!);
+      x = parent.get(x)!;
+    }
+    return x;
+  };
+  const union = (a: string, b: string) => {
+    const ra = find(a), rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+
+  // Pairwise comparison with pre-filters
+  const allPairs: { a: string; b: string; similarity: number }[] = [];
+  for (let i = 0; i < notes.length; i++) {
+    for (let j = i + 1; j < notes.length; j++) {
+      const sizeRatio = Math.min(notes[i].grams.size, notes[j].grams.size) / Math.max(notes[i].grams.size, notes[j].grams.size);
+      if (sizeRatio < 0.3) continue;
+
+      const sim = diceSimilarity(notes[i].grams, notes[j].grams);
+      if (sim >= threshold) {
+        union(notes[i].id, notes[j].id);
+        allPairs.push({ a: notes[i].id, b: notes[j].id, similarity: parseFloat(sim.toFixed(3)) });
+      }
+    }
+  }
+
+  // Build groups from Union-Find
+  const groupMap = new Map<string, { ids: Set<string>; pairs: typeof allPairs }>();
+  for (const pair of allPairs) {
+    const root = find(pair.a);
+    if (!groupMap.has(root)) groupMap.set(root, { ids: new Set(), pairs: [] });
+    const g = groupMap.get(root)!;
+    g.ids.add(pair.a);
+    g.ids.add(pair.b);
+    g.pairs.push(pair);
+  }
+
+  const noteMap = new Map(notes.map(n => [n.id, n.title]));
+  const groups = [...groupMap.values()]
+    .map(g => ({
+      notes: [...g.ids].map(id => ({ id, title: noteMap.get(id) || "(untitled)" })),
+      pairs: g.pairs.sort((a, b) => b.similarity - a.similarity),
+    }))
+    .sort((a, b) => b.pairs[0].similarity - a.pairs[0].similarity);
+
+  return { count: groups.length, groups };
+}

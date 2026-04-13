@@ -73,6 +73,7 @@ Read:
   list notes --orphans       List unlinked notes (+ --limit/--offset)
   links <id>                 Show all relationships
   similar <id> [--threshold] Find near-duplicate notes
+  similar --all [--threshold] Scan all notes, group duplicates
   tasks [--all|--done]       List tasks (default: open)
   context "<query>"          Assemble context pack (JSON)
   digest [week|month|year]   Recent insights summary

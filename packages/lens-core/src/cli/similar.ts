@@ -1,24 +1,54 @@
 /**
  * lens similar <id> — Find notes similar to a given note.
+ * lens similar --all — Scan all notes and group near-duplicates.
  *
  * Uses character trigrams + Dice coefficient for language-agnostic
  * near-duplicate detection. Works for all scripts (Latin, CJK, Arabic, etc).
  */
 
-import { readObject, findSimilarNotes, ensureInitialized } from "../core/storage";
+import { readObject, findSimilarNotes, findAllSimilarGroups, ensureInitialized } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
-export async function showSimilar(id: string, opts: CommandOptions) {
+export async function showSimilar(id: string | undefined, opts: CommandOptions) {
   ensureInitialized();
-
-  const target = readObject(id);
-  if (!target) throw new Error(`Object not found: ${id}`);
-  if (target.data.type !== "note") throw new Error(`similar only works with notes, got ${target.data.type}`);
 
   const threshold = opts.threshold ? parseFloat(String(opts.threshold)) : 0.3;
   if (isNaN(threshold) || threshold < 0 || threshold > 1) {
     throw new Error("--threshold must be a number between 0 and 1");
   }
+
+  // --all mode: global scan
+  if (opts.all || !id) {
+    const result = findAllSimilarGroups(threshold);
+
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      if (result.count === 0) {
+        console.log(`No similar groups found (threshold: ${threshold})`);
+        return;
+      }
+      console.log(`${result.count} group(s) of similar notes:\n`);
+      for (let i = 0; i < result.groups.length; i++) {
+        const g = result.groups[i];
+        console.log(`Group ${i + 1} (${g.notes.length} notes):`);
+        for (const n of g.notes) {
+          console.log(`  ${n.id}  ${n.title}`);
+        }
+        for (const p of g.pairs) {
+          const pct = (p.similarity * 100).toFixed(0);
+          console.log(`    ${pct}%  ${p.a} ↔ ${p.b}`);
+        }
+        console.log();
+      }
+    }
+    return;
+  }
+
+  // Single-note mode
+  const target = readObject(id);
+  if (!target) throw new Error(`Object not found: ${id}`);
+  if (target.data.type !== "note") throw new Error(`similar only works with notes, got ${target.data.type}`);
 
   const results = findSimilarNotes(id, threshold);
 

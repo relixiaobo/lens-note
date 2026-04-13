@@ -33,6 +33,7 @@ lens write --file <path> --json         # Write note/source/task/link/unlink/upd
 lens list notes --orphans --json        # List orphan notes (+ --limit/--offset)
 lens fetch <url> [--save] --json        # Extract web content
 lens similar <id> --json                # Find near-duplicate notes (+ --threshold)
+lens similar --all --json               # Scan all notes, group duplicates
 lens status --json                      # Stats + graph health
 lens tasks [--all|--done] --json        # List tasks
 ```
