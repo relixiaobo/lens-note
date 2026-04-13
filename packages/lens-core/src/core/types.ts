@@ -17,7 +17,12 @@ export type ISODate = string;
 
 export type ObjectType = "source" | "note" | "task";
 
-export type SourceType = "web_article" | "markdown" | "plain_text" | "manual_note" | "note_batch" | "conversation";
+export type SourceType =
+  | "book" | "paper" | "report"                              // published works
+  | "video" | "podcast" | "course"                           // media
+  | "web_article" | "newsletter" | "social_post"             // digital
+  | "conversation" | "manual_note" | "note_batch"            // input
+  | "markdown" | "plain_text";                               // raw format
 
 export type LinkRel = "supports" | "contradicts" | "refines" | "related";
 

@@ -77,7 +77,7 @@ Evidence, reasoning, perspective — all as natural markdown body.
 ---
 id: src_01ABC
 type: source
-source_type: web_article    # web_article | markdown | plain_text | manual_note | note_batch | conversation
+source_type: web_article    # book | paper | report | video | podcast | course | web_article | newsletter | social_post | conversation | manual_note | note_batch | markdown | plain_text
 title: "Article Title"
 url: https://example.com
 word_count: 2718
