@@ -36,6 +36,7 @@ printf '%s' '{"command":"write","input":{"type":"note","title":"...","body":"...
 - **Any agent, any model.** Claude Code, Codex, Gemini, Cursor — anything that runs bash.
 - **File-as-truth.** Markdown files are the source of truth. SQLite is a derived cache. Git tracks history.
 - **Links are the only structure.** No folders, no tags, no categories. Structure emerges from connections.
+- **The Collision Method.** Knowledge grows through collision, not collection. Built on [Luhmann's Zettelkasten, Karpathy's LLM Wiki, and Li Jigang's viewfinders](docs/theoretical-foundations.md).
 
 ## Data Model
 
