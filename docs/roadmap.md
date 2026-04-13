@@ -27,38 +27,34 @@ Simplified to 3 types (Source, Note, Task). Links as only structure. Agent redes
 
 **Key insight**: The calling agent IS the LLM. lens doesn't need its own.
 
-## v0.4 — Polish + Distribution (NEXT)
+## v1.0.4 — Agent Mode (2026-04-13)
 
-- [ ] `lens status --json` include health metrics (merge status + health)
-- [ ] `lens show --json` include forward + backward links in output
-- [ ] Error envelope consistency across all commands
-- [ ] Batch atomicity (transaction rollback on validation failure)
-- [ ] `brew install lens` / `npm install -g lens-cli` distribution
-- [ ] Comprehensive skill files for multiple platforms (Claude Code, Cursor, generic)
-- [ ] End-to-end test suite
-- [ ] Build + publish compiled binary for macOS (arm64 + x86_64) and Linux
+- Added `--stdin` mode: JSON request envelope bypasses shell escaping for all commands
+- Added `--file` flag for `lens write`
+- Added `dispatchRequest()` shared layer (CLI + future MCP)
+- Removed stale v0.2 field references across all docs
 
-## v0.5 — Scale + Search
+## v1.0.5 — Task + Thread Removal (2026-04-13)
 
-- [ ] Embedding-based semantic search (for >2000 notes)
-- [ ] `lens similar <id>` — find semantically similar notes
-- [ ] Performance optimization for large graphs (>10K notes)
-- [ ] Feed check improvements (incremental, ETag caching)
+- Added Task type (`status: open|done`) for human-agent collaboration
+- Added `lens tasks` command
+- Added `conversation` source_type
+- Removed Thread type (conversations are now Sources)
+- Rewritten README (173 → 80 lines)
+- Removed 961 test data files from repo
 
-## Backlog
+## Future
 
-- PDF extraction (Marker or similar)
-- Audio source type (Whisper transcription)
-- Image source type (Vision API)
-- Export formats (Obsidian, Notion, LaTeX)
-- Browser extension (one-click "save to lens")
-- MCP server (thin wrapper around CLI for agent hosts that prefer MCP)
+- Embedding-based semantic search (for >2000 notes)
+- MCP server (thin wrapper around --stdin dispatch for agent hosts that prefer MCP)
+- PDF extraction
+- Session import (Claude Code / ChatGPT conversation export → Source)
 - Multi-device sync documentation (iCloud/Dropbox for markdown files)
 
 ## Non-Goals
 
-- ❌ Cloud-hosted lens (local-first, always)
-- ❌ GUI as core product (CLI is the product; GUI is optional consumer)
-- ❌ Built-in LLM (agents provide intelligence)
-- ❌ Task/project management
-- ❌ Categories, tags, folders (links only)
+- Cloud-hosted lens (local-first, always)
+- GUI as core product (CLI is the product; GUI is optional consumer)
+- Built-in LLM (agents provide intelligence)
+- Full project management (tasks are lightweight collaboration, not Jira)
+- Categories, tags, folders (links only)

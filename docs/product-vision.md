@@ -1,7 +1,7 @@
 # Lens Product Vision
 
 Date: 2026-04-12
-Status: Active (v0.3)
+Status: Active (v1.0.5)
 
 ---
 

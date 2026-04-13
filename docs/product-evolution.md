@@ -203,7 +203,7 @@ lens isn't a standalone product. It's **the knowledge layer that all agents shar
 |-----------|--------|-------|
 | LLM for display | Never use LLM for display | **Storage/single Note: no LLM. Synthesis/output: LLM required.** |
 | Compilation | One-shot at ingest time | **Continuous: create → accumulate → merge → evolve → supersede** |
-| Thread | Appendage to Notes | **Primary interface for human-knowledge interaction** |
+| Thread | Appendage to Notes | **Primary interface for human-knowledge interaction** *(Thread later removed; conversations stored as Sources with `source_type: "conversation"`. Task type added for human-agent collaboration.)* |
 | Agent | One-time compiler | **Knowledge steward: compile + converse + curate** |
 | Input | Separate commands per type | **Single surface, Agent classifies and routes** |
 | Output | Not lens's job | **lens provides Context; final artifacts are other tools' job** |
@@ -288,7 +288,7 @@ Intelligence moved from code (compilation-agent.ts) to documentation (skill file
 - **Infrastructure outlasts applications.** Git survived every IDE. lens should survive every agent.
 - **Fewer dependencies = more reliable.** 164 packages removed. Zero streaming bugs. Zero API key issues.
 
-### Current State (v0.4.0)
+### State at v0.4.0
 
 - 756 Notes, 174 Sources
 - 0 LLM dependencies

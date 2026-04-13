@@ -91,6 +91,11 @@ id: task_01ABC
 type: task
 title: "Refactor search module"
 status: open                # open | done
+source: note_01DEF          # optional: what prompted this task
+links:
+  - to: note_01GHI
+    rel: related
+    reason: "Inspired by this insight"
 created_at: '2026-04-13T02:50:14.932Z'
 updated_at: '2026-04-13T02:50:14.932Z'
 ---
