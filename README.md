@@ -19,7 +19,7 @@ Requires Node.js >= 20.
 lens search "query" --json            # Find knowledge (Unicode/CJK-aware)
 lens search "query" --resolve --json  # Resolve title → ID
 lens show <id> --json                 # Read one object with links + counts
-lens write --file <path> --json       # Write note/source/task/link/batch
+lens write --file <path> --json       # Write note/source/task/link/unlink/update/delete/batch
 lens list notes --orphans --json      # List orphan notes (+ --limit/--offset)
 lens fetch <url> [--save] --json      # Extract web content as markdown
 lens similar <id> --json              # Find near-duplicate notes

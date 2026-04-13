@@ -76,6 +76,7 @@ lens status --json               # Stats + graph health
 {"type": "note", "title": "...", "links": [{"to": "note_ID", "rel": "supports", "reason": "..."}], "body": "..."}
 {"type": "source", "title": "...", "url": "..."}
 {"type": "link", "from": "note_ID", "rel": "supports", "to": "note_ID", "reason": "..."}
+{"type": "unlink", "from": "note_ID", "rel": "supports", "to": "note_ID"}
 {"type": "update", "id": "note_ID", "set": {...}, "add": {"links": [...]}, "body": "..."}
 {"type": "delete", "id": "note_ID"}
 [{...}, {...}]  // batch ($0/$1 reference earlier items)

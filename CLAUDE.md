@@ -16,7 +16,7 @@
 lens CLI (npm package: lens-note, compiled JS via tsup)
 ├── Storage (File-as-Truth + SQLite cache + Git version tracking)
 │   Markdown files = truth, better-sqlite3 FTS5 = search cache, git = history
-├── Write API (lens write: note/source/task/link/update/delete/batch)
+├── Write API (lens write: note/source/task/link/unlink/update/delete/batch)
 ├── Read API (lens search, show, list, links, tasks, context, digest)
 ├── Agent Mode (--stdin: JSON envelope, bypasses shell)
 ├── Web extraction (Defuddle + Turndown → markdown)
@@ -29,7 +29,7 @@ lens CLI (npm package: lens-note, compiled JS via tsup)
 lens search "<query>" --json            # Find knowledge (CJK-aware)
 lens search "<query>" --resolve --json  # Resolve title → ID (exact or disambiguate)
 lens show <id> --json                   # Read one object with links + counts
-lens write --file <path> --json         # Write note/source/task/link/batch
+lens write --file <path> --json         # Write note/source/task/link/unlink/update/delete/batch
 lens list notes --orphans --json        # List orphan notes (+ --limit/--offset)
 lens fetch <url> [--save] --json        # Extract web content
 lens similar <id> --json                # Find near-duplicate notes (+ --threshold)
@@ -120,6 +120,7 @@ Task description and progress notes.
 {"type": "source", "title": "...", "url": "...", "source_type": "web_article"}
 {"type": "task", "title": "...", "status": "open"}
 {"type": "link", "from": "note_A", "rel": "supports", "to": "note_B", "reason": "..."}
+{"type": "unlink", "from": "note_A", "rel": "supports", "to": "note_B"}
 {"type": "update", "id": "note_A", "set": {"title": "..."}, "add": {"links": [...]}}
 {"type": "delete", "id": "note_A"}
 [{...}, {...}]  // batch, $0/$1 reference earlier items

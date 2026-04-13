@@ -64,7 +64,7 @@ Core (agent-facing):
   search "<query>" --json    Find knowledge (supports Chinese/CJK)
   search "<query>" --resolve --json  Resolve title → ID
   show <id> --json           Read one object with full detail + links + counts
-  write --file <path> --json   Write anything (note/source/task/link/update/delete/batch)
+  write --file <path> --json   Write anything (note/source/task/link/unlink/update/delete/batch)
   fetch <url> [--save] --json Extract web content as clean markdown
   status --json              Stats + health metrics
 
