@@ -24,7 +24,7 @@ export async function assembleContext(query: string, opts: CommandOptions) {
       id: note.id,
       title: note.title,
       source: note.source,
-      links: note.links || [],
+      forward_links: note.links || [],
       body: cached.body?.trim() || "",
     });
   }

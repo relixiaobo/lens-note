@@ -44,8 +44,8 @@ export async function showDigest(args: string[], opts: CommandOptions) {
     console.log(JSON.stringify({
       period: period || `${days}d`,
       total: recentNotes.length,
-      tensions: withContradicts.map(n => ({ id: n.id, title: n.title, links: n.links })),
-      connected: rest.map(n => ({ id: n.id, title: n.title, links: n.links })),
+      tensions: withContradicts.map(n => ({ id: n.id, title: n.title, forward_links: n.links })),
+      connected: rest.map(n => ({ id: n.id, title: n.title, forward_links: n.links })),
       seeds: noLinks.map(n => ({ id: n.id, title: n.title })),
     }, null, 2));
     return;
