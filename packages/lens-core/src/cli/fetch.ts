@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { generateId, type Source } from "../core/types";
-import { saveObject, ensureInitialized } from "../core/storage";
+import { saveObject, ensureInitialized, getDb } from "../core/storage";
 import { paths } from "../core/paths";
 import type { CommandOptions } from "./commands";
 
@@ -21,6 +21,15 @@ export async function fetchUrl(url: string, opts: CommandOptions) {
   let sourceId: string | undefined;
 
   if (opts.save) {
+    // Check for duplicate URL
+    const db = getDb();
+    const existing = db.prepare(
+      "SELECT id, json_extract(data, '$.url') as url FROM objects WHERE json_extract(data, '$.type') = 'source' AND json_extract(data, '$.url') = ?"
+    ).get(url) as { id: string; url: string } | undefined;
+    if (existing) {
+      throw new Error(`URL already saved as ${existing.id}. Use \`lens show ${existing.id}\` to view it.`);
+    }
+
     sourceId = generateId("source");
     const now = new Date().toISOString();
 

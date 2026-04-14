@@ -16,7 +16,8 @@
 import { readFileSync, unlinkSync } from "fs";
 import { generateId, type Note, type Source, type Task, type TaskStatus, type NoteLink, type LinkRel, type SourceType } from "../core/types";
 import { saveObject, readObject, ensureInitialized, getDb } from "../core/storage";
-import { objectPath } from "../core/paths";
+import { objectPath, paths } from "../core/paths";
+import { join } from "path";
 import { parseCliArgs, type CommandOptions } from "./commands";
 
 // ============================================================
@@ -367,6 +368,10 @@ function writeDelete(input: any): WriteResult {
 
   // Remove the file and re-index
   try { unlinkSync(objectPath(id)); } catch {}
+
+  // Clean up raw file if it exists (e.g., HTML saved by fetch --save)
+  const rawPath = join(paths.raw, `${id}.html`);
+  try { unlinkSync(rawPath); } catch {}
 
   db.prepare("DELETE FROM objects WHERE id = ?").run(id);
   db.prepare("DELETE FROM search_index WHERE id = ?").run(id);
