@@ -19,7 +19,11 @@
 
 import { readFileSync, writeFileSync } from "fs";
 
-const TANA_FILE = process.argv[2] || "/Users/lixiaobo/Downloads/b8AyeCJNsefK@2026-03-01.json";
+const TANA_FILE = process.argv[2];
+if (!TANA_FILE) {
+  console.error("Usage: npx tsx spike/tana-clean.ts <tana-export.json> [output.jsonl]");
+  process.exit(1);
+}
 const OUTPUT_FILE = process.argv[3] || "/tmp/tana-cleaned.jsonl";
 
 // ============================================================
