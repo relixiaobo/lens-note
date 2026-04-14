@@ -297,7 +297,11 @@ export function rebuildAllIndex() {
 /** Remove links to non-existent objects from YAML frontmatter and SQLite cache. */
 function pruneDeadLinks(): void {
   const db = getDb();
-  const existsStmt = db.prepare("SELECT 1 FROM objects WHERE id = ?");
+
+  // Load all live IDs once — avoids N×M DB lookups per link reference
+  const liveIds = new Set<string>(
+    (db.prepare("SELECT id FROM objects").all() as { id: string }[]).map(r => r.id)
+  );
 
   for (const type of ["note", "task"] as ObjectType[]) {
     for (const id of listObjects(type)) {
@@ -308,7 +312,7 @@ function pruneDeadLinks(): void {
 
       // Filter dead entries from links[] array
       if (Array.isArray(data.links) && data.links.length > 0) {
-        const validLinks = data.links.filter((l: any) => !!(existsStmt.get(l.to) as any));
+        const validLinks = data.links.filter((l: any) => liveIds.has(l.to));
         if (validLinks.length !== data.links.length) {
           data.links = validLinks;
           changed = true;
@@ -316,7 +320,7 @@ function pruneDeadLinks(): void {
       }
 
       // Clear dead source reference
-      if (data.source && !(existsStmt.get(data.source) as any)) {
+      if (data.source && !liveIds.has(data.source)) {
         delete data.source;
         changed = true;
       }
@@ -324,8 +328,7 @@ function pruneDeadLinks(): void {
       if (changed) {
         data.updated_at = new Date().toISOString();
         const obj = { ...data, id, type } as unknown as LensObject;
-        writeObject(obj, result.content.trim()); // Fix YAML on disk
-        indexObject(obj, result.content.trim()); // Sync SQLite with cleaned data
+        saveObject(obj, result.content.trim()); // Fix YAML on disk, update SQLite, commit to git
       }
     }
   }

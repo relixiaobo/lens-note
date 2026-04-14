@@ -347,13 +347,17 @@ function writeDelete(input: any): WriteResult {
 
   // Clean up YAML frontmatter in all notes/tasks that link to this object.
   // Must happen before file deletion so SQLite inbound link data is still queryable.
+  // Group by from_id so each referring file is read and saved exactly once.
   const inbound = db.prepare("SELECT from_id, rel FROM links WHERE to_id = ?").all(id) as { from_id: string; rel: string }[];
+  const byRef = new Map<string, { rels: string[]; clearSource: boolean }>();
   for (const { from_id, rel } of inbound) {
-    if (rel === "source") {
-      clearSourceField(from_id, id);
-    } else {
-      removeLinkFromExisting(from_id, rel, id);
-    }
+    if (!byRef.has(from_id)) byRef.set(from_id, { rels: [], clearSource: false });
+    const entry = byRef.get(from_id)!;
+    if (rel === "source") entry.clearSource = true;
+    else entry.rels.push(rel);
+  }
+  for (const [from_id, { rels, clearSource }] of byRef) {
+    cleanReferringObject(from_id, id, rels, clearSource);
   }
 
   // Remove the file and re-index
@@ -410,18 +414,28 @@ function removeLinkFromExisting(id: string, rel: string, targetId: string): void
   saveObject(obj, existing.content);
 }
 
-function clearSourceField(id: string, deletedSourceId: string): void {
+/** Handle all cleanup for one referring object in a single saveObject() call. */
+function cleanReferringObject(id: string, deletedId: string, linkRels: string[], clearSource: boolean): void {
   const existing = readObject(id);
   if (!existing) return;
-
   const data = { ...existing.data };
-  if (data.source !== deletedSourceId) return;
+  let changed = false;
 
-  delete data.source;
-  data.updated_at = new Date().toISOString();
+  if (linkRels.length > 0 && Array.isArray(data.links)) {
+    const before = data.links.length;
+    data.links = data.links.filter((l: NoteLink) => !(l.to === deletedId && linkRels.includes(l.rel)));
+    if (data.links.length !== before) changed = true;
+  }
 
-  const obj = { ...data, id } as any;
-  saveObject(obj, existing.content);
+  if (clearSource && data.source === deletedId) {
+    delete data.source;
+    changed = true;
+  }
+
+  if (changed) {
+    data.updated_at = new Date().toISOString();
+    saveObject({ ...data, id } as any, existing.content);
+  }
 }
 
 function updateLinkReason(id: string, rel: LinkRel, targetId: string, reason?: string): void {
