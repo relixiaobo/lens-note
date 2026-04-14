@@ -1,6 +1,6 @@
 {
   "name": "lens-note",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "description": "Knowledge graph CLI for humans and agents. Like Git for knowledge.",
   "type": "module",
   "bin": {
@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/turndown": "^5.0.6",
     "defuddle": "^0.15.0",
     "feedsmith": "^2.9.1",

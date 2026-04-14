@@ -7,6 +7,7 @@
 import { existsSync, statSync } from "fs";
 import { paths } from "../core/paths";
 import { listObjects, readObject, getForwardLinks, getBacklinks } from "../core/storage";
+import { readConfig } from "./config";
 import type { CommandOptions } from "./commands";
 
 function fileSize(path: string): number {
@@ -69,7 +70,9 @@ export async function showStatus(opts: CommandOptions) {
     }
   }
 
-  const status = {
+  const config = readConfig();
+
+  const status: Record<string, any> = {
     path: paths.root,
     notes: noteIds.length,
     sources: sourceIds.length,
@@ -83,6 +86,8 @@ export async function showStatus(opts: CommandOptions) {
     },
     link_types: linkTypes,
   };
+
+  if (config.context) status.context = config.context;
 
   if (opts.json) {
     console.log(JSON.stringify(status, null, 2));

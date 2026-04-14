@@ -164,6 +164,11 @@ async function indexCommand(args: string[], opts: CommandOptions) {
   await handleIndex(sub, args.slice(1), opts);
 }
 
+async function configCommand(args: string[], opts: CommandOptions) {
+  const { handleConfig } = await import("./config");
+  await handleConfig(args, opts);
+}
+
 export const commands: Record<string, CommandHandler> = {
   init: initCommand,
   status: statusCommand,
@@ -181,6 +186,7 @@ export const commands: Record<string, CommandHandler> = {
   tasks: tasksCommand,
   similar: similarCommand,
   index: indexCommand,
+  config: configCommand,
   "rebuild-index": rebuildIndexCommand,
 };
 
@@ -287,6 +293,10 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
       if (!query) throw new Error('context: "positional" with query text is required');
       const { assembleContext } = await import("./context");
       return assembleContext(query, { ...opts, json: true });
+    }
+    case "config": {
+      const { handleConfigInput } = await import("./config");
+      return handleConfigInput(req.input, opts);
     }
     default: {
       // Compatibility path: reconstruct argv for remaining commands

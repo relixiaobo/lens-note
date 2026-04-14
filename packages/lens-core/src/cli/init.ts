@@ -29,6 +29,15 @@ export async function initLens(opts: CommandOptions) {
   const defaultConfig = `# lens configuration
 # lens is a pure storage+query tool. No API keys required.
 # Agents (Claude Code, Cursor, etc.) provide the intelligence.
+
+# User context — agents read this to adapt writing style.
+# Set via: lens config set context.role "product manager"
+# Or edit this file directly.
+# context:
+#   role: ""        # Your role (e.g., "product manager", "researcher", "student")
+#   audience: ""    # Who reads your notes (e.g., "myself", "engineering team")
+#   language: ""    # Primary language (e.g., "zh", "en")
+#   style: ""       # Writing style guidance (e.g., "explain why it matters, not just what")
 `;
 
   writeFileSync(paths.config, defaultConfig, "utf-8");

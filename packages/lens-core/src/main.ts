@@ -97,6 +97,9 @@ Index (Schlagwortregister):
 
 System:
   init                       First-time setup
+  config list                Show all config
+  config get <key>           Get config value (e.g., context.role)
+  config set <key> <value>   Set config value
   rebuild-index              Rebuild SQLite cache
 
 Agent mode:
@@ -112,7 +115,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.7.0");
+  console.log("lens v1.7.1");
   process.exit(0);
 }
 
