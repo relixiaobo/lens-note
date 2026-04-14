@@ -2,7 +2,7 @@
  * lens show <id> — Show any lens object with links.
  */
 
-import { readObject, getBacklinks, ensureInitialized } from "../core/storage";
+import { readObject, getBacklinks, ensureInitialized, extractBodyRefs, resolveBodyRefs } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
 export async function showObject(id: string, opts: CommandOptions) {
@@ -49,7 +49,10 @@ export async function showObject(id: string, opts: CommandOptions) {
     if (data.created_at) output.created_at = data.created_at;
     if (data.updated_at) output.updated_at = data.updated_at;
 
-    output.body = content.trim();
+    const bodyText = content.trim();
+    output.body = bodyText;
+    const bodyRefs = extractBodyRefs(bodyText);
+    if (bodyRefs.length > 0) output.body_refs = bodyRefs;
     output.forward_links = forwardLinks;
     output.backward_links = backwardLinks;
 
@@ -89,7 +92,7 @@ export async function showObject(id: string, opts: CommandOptions) {
     }
 
     if (content.trim()) {
-      console.log(`\n${content.trim()}`);
+      console.log(`\n${resolveBodyRefs(content.trim())}`);
     }
     console.log();
   }

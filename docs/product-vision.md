@@ -139,6 +139,7 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 | contradicts | Conflicts (always bidirectional) |
 | refines | More precise version |
 | related | Loose association (with optional reason) |
+| indexes | MOC/index entry point (index → child) |
 
 No folders, no tags, no categories. Structure emerges from links.
 

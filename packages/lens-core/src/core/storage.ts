@@ -373,8 +373,8 @@ export function getOrphanNotes(limit?: number, offset?: number): { id: string; t
   const rows = db.prepare(`
     SELECT o.id, o.data, o.body FROM objects o
     WHERE o.type = 'note'
-      AND o.id NOT IN (SELECT from_id FROM links WHERE rel IN ('supports','contradicts','refines','related') AND to_id LIKE 'note_%')
-      AND o.id NOT IN (SELECT to_id FROM links WHERE rel IN ('supports','contradicts','refines','related') AND from_id LIKE 'note_%')
+      AND o.id NOT IN (SELECT from_id FROM links WHERE rel IN ('supports','contradicts','refines','related','indexes') AND to_id LIKE 'note_%')
+      AND o.id NOT IN (SELECT to_id FROM links WHERE rel IN ('supports','contradicts','refines','related','indexes') AND from_id LIKE 'note_%')
     ORDER BY o.updated_at DESC
     LIMIT ? OFFSET ?
   `).all(limit ?? -1, offset ?? 0) as any[];
@@ -530,4 +530,69 @@ export function findAllSimilarGroups(threshold: number = 0.3): { count: number; 
     .sort((a, b) => b.pairs[0].similarity - a.pairs[0].similarity);
 
   return { count: groups.length, groups };
+}
+
+// ============================================================
+// Body reference extraction: [[note_ID]] → refs list with titles
+// ============================================================
+
+const BODY_REF_RE = /\[\[(note_[A-Z0-9]+|src_[A-Z0-9]+|task_[A-Z0-9]+)\]\]/g;
+
+/** Build list of [start, end) ranges for code blocks and inline code spans. */
+function codeRanges(body: string): [number, number][] {
+  const ranges: [number, number][] = [];
+  const re = /```[\s\S]*?```|`[^`\n]+`/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body)) !== null) {
+    ranges.push([m.index, m.index + m[0].length]);
+  }
+  return ranges;
+}
+
+function isInsideCode(offset: number, ranges: [number, number][]): boolean {
+  for (const [start, end] of ranges) {
+    if (offset >= start && offset < end) return true;
+  }
+  return false;
+}
+
+export function extractBodyRefs(body: string): { id: string; title: string }[] {
+  if (!body) return [];
+
+  const ranges = codeRanges(body);
+  const seen = new Set<string>();
+  const refs: { id: string; title: string }[] = [];
+  let match: RegExpExecArray | null;
+
+  BODY_REF_RE.lastIndex = 0;
+  while ((match = BODY_REF_RE.exec(body)) !== null) {
+    if (isInsideCode(match.index, ranges)) continue;
+    const id = match[1];
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    const obj = readObject(id);
+    refs.push({
+      id,
+      title: obj ? (obj.data.title || "(untitled)").substring(0, 120) : "⚠ not found",
+    });
+  }
+
+  return refs;
+}
+
+export function resolveBodyRefs(body: string): string {
+  if (!body) return body;
+
+  const ranges = codeRanges(body);
+
+  BODY_REF_RE.lastIndex = 0;
+  return body.replace(BODY_REF_RE, (match, id, offset) => {
+    if (isInsideCode(offset, ranges)) return match;
+
+    const obj = readObject(id);
+    if (!obj) return `[⚠ not found](${id})`;
+    const title = (obj.data.title || "(untitled)").substring(0, 120);
+    return `[${title}](${id})`;
+  });
 }

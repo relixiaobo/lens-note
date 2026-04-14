@@ -4,7 +4,7 @@
  * Searches for relevant Notes, returns structured JSON with titles, links, and body.
  */
 
-import { searchIndex, getObjectFromCache, readObject, ensureInitialized } from "../core/storage";
+import { searchIndex, getObjectFromCache, readObject, ensureInitialized, extractBodyRefs } from "../core/storage";
 import type { Note } from "../core/types";
 import type { CommandOptions } from "./commands";
 
@@ -20,12 +20,15 @@ export async function assembleContext(query: string, opts: CommandOptions) {
     if (!cached || cached.obj.type !== "note") continue;
 
     const note = cached.obj as Note;
+    const bodyText = cached.body?.trim() || "";
+    const bodyRefs = extractBodyRefs(bodyText);
     noteMap.set(note.id, {
       id: note.id,
       title: note.title,
       source: note.source,
       forward_links: note.links || [],
-      body: cached.body?.trim() || "",
+      body: bodyText,
+      ...(bodyRefs.length > 0 ? { body_refs: bodyRefs } : {}),
     });
   }
 

@@ -24,7 +24,7 @@ import { parseCliArgs, type CommandOptions } from "./commands";
 // Validation
 // ============================================================
 
-const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "related"]);
+const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "related", "indexes"]);
 const VALID_SOURCE_TYPES = new Set<SourceType>(["book", "paper", "report", "video", "podcast", "course", "web_article", "newsletter", "social_post", "conversation", "manual_note", "note_batch", "markdown", "plain_text"]);
 const VALID_STATUSES = new Set<TaskStatus>(["open", "done"]);
 

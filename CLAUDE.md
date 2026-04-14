@@ -4,7 +4,7 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — it stores, queries, and links. Any agent can use it. No API keys, no LLM dependencies.
 
-**Status**: v1.6.5. 3 types (Source, Note, Task). --stdin agent mode. Git version tracking.
+**Status**: v1.7.0. 3 types (Source, Note, Task). --stdin agent mode. Git version tracking. `indexes` rel + `[[ID]]` body refs.
 
 **Methodology**: The Collision Method — Spark → Collide → Crystallize. Knowledge grows through collision, not collection.
 
@@ -119,6 +119,17 @@ Task description and progress notes.
 - `contradicts` — conflicts (auto-bidirectional)
 - `refines` — more precise version
 - `related` — loose association
+- `indexes` — MOC/index entry point (directional: index → child)
+
+### Body Inline References
+
+When referencing another object in body text, use double-bracket syntax with the object ID:
+
+```markdown
+[[note_01ABC]]   [[src_01DEF]]   [[task_01GHI]]
+```
+
+Same ID as `links[].to`. On read, JSON output (`--json`) returns body unchanged + `body_refs: [{id, title}]` with resolved titles. Text output resolves `[[ID]]` → `[Title](ID)` inline. Body references are for **readability only** — they do not create graph edges. To create an actual graph connection, add an entry to `links[]`. For MOC/index notes, use `rel: "indexes"` in `links[]` for each sub-note.
 
 ### Write API
 

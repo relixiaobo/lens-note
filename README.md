@@ -74,7 +74,7 @@ updated_at: '2026-04-13T02:50:14.932Z'
 Evidence and reasoning in markdown body.
 ```
 
-**Links**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related`. Each carries a `reason`.
+**Links**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related`, `indexes` (MOC → child). Each carries a `reason`.
 
 ## Use with Agents
 

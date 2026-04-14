@@ -24,7 +24,7 @@ export type SourceType =
   | "conversation" | "manual_note" | "note_batch"            // input
   | "markdown" | "plain_text";                               // raw format
 
-export type LinkRel = "supports" | "contradicts" | "refines" | "related";
+export type LinkRel = "supports" | "contradicts" | "refines" | "related" | "indexes";
 
 export interface NoteLink {
   to: string;
@@ -64,7 +64,7 @@ export interface Note {
   type: "note";
   title: string;       // the thought in one sentence
   source?: string;     // source ID this note comes from
-  links?: NoteLink[];  // all relationships (supports/contradicts/refines/related + reason)
+  links?: NoteLink[];  // all relationships (supports/contradicts/refines/related/indexes + reason)
   created_at: ISODate;
   updated_at: ISODate;
 }

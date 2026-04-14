@@ -40,7 +40,7 @@ This question triggered a fundamental rethink. We studied Luhmann's actual metho
 
 - **3 types replace 6**: Source, Note, Thread (Thread later removed; now 3 types: Source, Note, Task).
 - **Programme is gone**: Structure is emergent from links between notes.
-- **Links are the only structure**: `supports`, `contradicts`, `refines`, `related` — each with a `reason`.
+- **Links are the only structure**: `supports`, `contradicts`, `refines`, `related`, `indexes` — each with a `reason`.
 - **Agent redesigned as "thinker"**: Reads → explores existing knowledge → thinks about connections → creates linked Notes. Not a mechanical extractor.
 - **7 frontmatter fields**: `id`, `type`, `title`, `source`, `links[]`, `created_at`, `updated_at`. Everything else (evidence, confidence, scope, perspective) goes in body as free-form markdown.
 
