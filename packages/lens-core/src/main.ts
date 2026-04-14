@@ -112,7 +112,7 @@ Options:
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.6.4");
+  console.log("lens v1.6.5");
   process.exit(0);
 }
 

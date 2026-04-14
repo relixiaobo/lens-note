@@ -116,7 +116,7 @@ function indexShow(keyword: string, opts: CommandOptions): void {
   keyword = keyword.trim();
   const { keywords } = load();
   const entries = keywords[keyword];
-  if (!entries) throw new Error(`Keyword not found: "${keyword}"`);
+  if (!entries) throw new Error(`Keyword not found: "${keyword}". Use: lens index add "${keyword}" <note_id>`);
 
   const enriched = entries.map(id => ({ id, title: resolveTitle(id) }));
 
@@ -141,7 +141,7 @@ function indexAdd(keyword: string | undefined, noteId: string | undefined, opts:
     throw new Error(`Only notes can be indexed, got ${prefix}`);
   }
   const obj = readObject(noteId);
-  if (!obj) throw new Error(`Object not found: ${noteId}`);
+  if (!obj) throw new Error(`Object not found: ${noteId}. Use \`lens search\` to find the correct ID.`);
   if (obj.data.type !== "note") throw new Error(`Only notes can be indexed, got ${obj.data.type}`);
 
   const index = load();
@@ -181,12 +181,12 @@ function indexRemove(keyword: string | undefined, noteId: string | undefined, op
   keyword = keyword.trim();
   const index = load();
   const entries = index.keywords[keyword];
-  if (!entries) throw new Error(`Keyword not found: "${keyword}"`);
+  if (!entries) throw new Error(`Keyword not found: "${keyword}". Use \`lens index\` to list all keywords.`);
 
   if (noteId) {
     // Remove single entry
     const idx = entries.indexOf(noteId);
-    if (idx === -1) throw new Error(`Note "${noteId}" not found under keyword "${keyword}"`);
+    if (idx === -1) throw new Error(`Note "${noteId}" not found under keyword "${keyword}". Use \`lens index "${keyword}"\` to see entries.`);
 
     entries.splice(idx, 1);
     if (entries.length === 0) {

@@ -283,7 +283,7 @@ function writeUpdate(input: any): WriteResult {
   validateId(id, "update.id");
 
   const existing = readObject(id);
-  if (!existing) throw new Error(`update: "${id}" not found`);
+  if (!existing) throw new Error(`update: "${id}" not found. Use \`lens search\` to find the correct ID.`);
 
   const data = { ...existing.data };
   const now = new Date().toISOString();
@@ -346,7 +346,7 @@ function writeDelete(input: any): WriteResult {
   validateId(id, "delete.id");
 
   const existing = readObject(id);
-  if (!existing) throw new Error(`delete: "${id}" not found`);
+  if (!existing) throw new Error(`delete: "${id}" not found. Use \`lens search\` to find the correct ID.`);
 
   const db = getDb();
 

@@ -9,7 +9,7 @@ export async function showObject(id: string, opts: CommandOptions) {
   ensureInitialized();
 
   const result = readObject(id);
-  if (!result) throw new Error(`Object not found: ${id}`);
+  if (!result) throw new Error(`Object not found: ${id}. Use \`lens search\` to find the correct ID.`);
 
   const { data, content } = result;
 

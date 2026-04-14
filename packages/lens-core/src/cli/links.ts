@@ -30,7 +30,7 @@ export async function showLinks(id: string, opts: CommandOptions) {
 
   // Verify object exists
   const obj = readObject(id);
-  if (!obj) throw new Error(`Object not found: ${id}`);
+  if (!obj) throw new Error(`Object not found: ${id}. Use \`lens search\` to find the correct ID.`);
 
   const rawForward = getForwardLinks(id);
   const rawBackward = getBacklinks(id);
