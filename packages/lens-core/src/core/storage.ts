@@ -347,7 +347,6 @@ function extractLinks(obj: LensObject): { to: string; rel: string }[] {
 
   if (obj.type === "note" || obj.type === "task") {
     const n = obj as Note | Task;
-    if (n.source) result.push({ to: n.source, rel: "source" });
     if (n.links) {
       for (const link of n.links) {
         result.push({ to: link.to, rel: link.rel });

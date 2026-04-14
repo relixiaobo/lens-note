@@ -41,11 +41,16 @@ export async function showDigest(args: string[], opts: CommandOptions) {
   const rest = recentNotes.filter(n => n.links.length > 0 && !withContradicts.includes(n));
 
   if (opts.json) {
+    const compactLinks = (links: NoteLink[]) => {
+      const rels: Record<string, number> = {};
+      for (const l of links) rels[l.rel] = (rels[l.rel] || 0) + 1;
+      return { count: links.length, rels };
+    };
     console.log(JSON.stringify({
       period: period || `${days}d`,
       total: recentNotes.length,
-      tensions: withContradicts.map(n => ({ id: n.id, title: n.title, forward_links: n.links })),
-      connected: rest.map(n => ({ id: n.id, title: n.title, forward_links: n.links })),
+      tensions: withContradicts.map(n => ({ id: n.id, title: n.title, links: compactLinks(n.links) })),
+      connected: rest.map(n => ({ id: n.id, title: n.title, links: compactLinks(n.links) })),
       seeds: noLinks.map(n => ({ id: n.id, title: n.title })),
     }, null, 2));
     return;

@@ -46,7 +46,12 @@ export async function searchObjects(query: string, opts: CommandOptions) {
     return;
   }
 
-  const results = searchIndex(query);
+  let results = searchIndex(query);
+  const totalCount = results.length;
+
+  // --limit: cap results
+  const limit = opts.limit ? parseInt(String(opts.limit)) : undefined;
+  if (limit !== undefined) results = results.slice(0, limit);
 
   if (opts.json) {
     // Enrich each result with type-specific key fields
@@ -61,7 +66,7 @@ export async function searchObjects(query: string, opts: CommandOptions) {
           return {
             ...base,
             title: obj.title,
-            forward_links: obj.links || [],
+            links: (obj.links || []).length,
           };
         case "source":
           return { ...base, title: obj.title, source_type: obj.source_type, word_count: obj.word_count };
@@ -72,13 +77,15 @@ export async function searchObjects(query: string, opts: CommandOptions) {
       }
     });
 
-    console.log(JSON.stringify({ query, count: enriched.length, results: enriched }, null, 2));
+    const result: Record<string, any> = { query, total: totalCount, count: enriched.length, results: enriched };
+    if (limit !== undefined) result.limit = limit;
+    console.log(JSON.stringify(result, null, 2));
   } else {
     if (results.length === 0) {
       console.log(`No results for "${query}"`);
       return;
     }
-    console.log(`Found ${results.length} result(s) for "${query}":\n`);
+    console.log(`Found ${results.length} result(s) for "${query}"${totalCount !== results.length ? ` (of ${totalCount})` : ""}:\n`);
     for (const r of results) {
       console.log(`  ${r.id} (${r.type})`);
       console.log(`    ${r.title}`);

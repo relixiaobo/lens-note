@@ -60,23 +60,35 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     items = items.filter((item) => (item.created_at || "") > cutoff);
   }
 
+  const totalCount = items.length;
+
+  // Pagination (works for all queries, not just orphans)
+  const limit = flags.limit ? parseInt(String(flags.limit)) : undefined;
+  const offset = flags.offset ? parseInt(String(flags.offset)) : 0;
+  if (offset > 0) items = items.slice(offset);
+  if (limit !== undefined) items = items.slice(0, limit);
+
   if (opts.json) {
     const summaries = items.map(item => {
       const base: Record<string, any> = { id: item.id, title: item.title };
-      if (item.links?.length) base.forward_links = item.links;
+      if (item.links?.length) base.links = item.links.length;
       if (item.source) base.source = item.source;
       if (item.source_type) base.source_type = item.source_type;
       if (item.word_count) base.word_count = item.word_count;
       if (item.url) base.url = item.url;
+      if (item.status) base.status = item.status;
       return base;
     });
-    console.log(JSON.stringify({ type: typeName, count: summaries.length, items: summaries }, null, 2));
+    const result: Record<string, any> = { type: typeName, total: totalCount, count: summaries.length, items: summaries };
+    if (offset > 0) result.offset = offset;
+    if (limit !== undefined) result.limit = limit;
+    console.log(JSON.stringify(result, null, 2));
   } else {
     if (items.length === 0) {
       console.log(`No ${typeName} found.`);
       return;
     }
-    console.log(`${items.length} ${typeName}:\n`);
+    console.log(`${items.length} ${typeName}${totalCount !== items.length ? ` (of ${totalCount})` : ""}:\n`);
     for (const item of items) {
       const title = item.title || "(untitled)";
       const linkCount = item.links?.length || 0;

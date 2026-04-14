@@ -359,9 +359,16 @@ function writeDelete(input: any): WriteResult {
   for (const { from_id, rel } of inbound) {
     if (!byRef.has(from_id)) byRef.set(from_id, { rels: [], clearSource: false });
     const entry = byRef.get(from_id)!;
-    if (rel === "source") entry.clearSource = true;
-    else entry.rels.push(rel);
+    entry.rels.push(rel);
   }
+
+  // Also find objects whose `source` field references the deleted object
+  const sourceRefs = db.prepare("SELECT id, data FROM objects WHERE json_extract(data, '$.source') = ?").all(id) as { id: string }[];
+  for (const { id: refId } of sourceRefs) {
+    if (!byRef.has(refId)) byRef.set(refId, { rels: [], clearSource: false });
+    byRef.get(refId)!.clearSource = true;
+  }
+
   for (const [from_id, { rels, clearSource }] of byRef) {
     cleanReferringObject(from_id, id, rels, clearSource);
   }

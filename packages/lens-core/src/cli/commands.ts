@@ -215,8 +215,8 @@ function toArgv(req: RequestEnvelope): string[] {
       if (key === "json") continue; // handled separately
       if (value === true) {
         argv.push(`--${key}`);
-      } else if (typeof value === "string") {
-        argv.push(`--${key}`, value);
+      } else if (typeof value === "string" || typeof value === "number") {
+        argv.push(`--${key}`, String(value));
       }
     }
   }
