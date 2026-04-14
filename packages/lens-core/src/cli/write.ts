@@ -488,6 +488,10 @@ function getReferencedIndices(item: any): number[] {
 }
 
 function executeWrite(parsed: any, opts: CommandOptions) {
+  // LLMs sometimes wrap batch arrays as {"type":"batch","items":[...]} — unwrap it
+  if (parsed && !Array.isArray(parsed) && parsed.type === "batch" && Array.isArray(parsed.items)) {
+    parsed = parsed.items;
+  }
   const isBatch = Array.isArray(parsed);
   const items = isBatch ? parsed : [parsed];
   if (items.length === 0) throw new Error("Empty array.");
