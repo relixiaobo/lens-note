@@ -289,7 +289,12 @@ function writeUpdate(input: any): WriteResult {
   const now = new Date().toISOString();
   data.updated_at = now;
 
-  // Set scalar fields
+  // Support top-level title for convenience (mirrors top-level body)
+  if (input.title !== undefined) {
+    data.title = String(input.title);
+  }
+
+  // Set scalar fields via set.{field}
   if (input.set) {
     for (const [key, value] of Object.entries(input.set)) {
       if (key === "id" || key === "type" || key === "created_at") continue;
@@ -593,8 +598,20 @@ export async function handleWrite(args: string[], opts: CommandOptions) {
   try {
     parsed = JSON.parse(rawInput);
   } catch (e) {
-    const detail = e instanceof SyntaxError ? `: ${e.message}` : "";
-    throw new Error(`Invalid JSON input${detail}`);
+    // Fallback: try NDJSON (newline-delimited JSON) — agents sometimes write
+    // multiple objects separated by newlines instead of wrapping in an array.
+    const lines = rawInput.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+    if (lines.length > 1) {
+      try {
+        parsed = lines.map(l => JSON.parse(l));
+      } catch {
+        // Not NDJSON either — fall through to original error
+      }
+    }
+    if (parsed === undefined) {
+      const detail = e instanceof SyntaxError ? `: ${e.message}` : "";
+      throw new Error(`Invalid JSON input${detail}`);
+    }
   }
 
   executeWrite(parsed, opts);
