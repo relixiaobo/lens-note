@@ -343,10 +343,22 @@ function writeDelete(input: any): WriteResult {
   const existing = readObject(id);
   if (!existing) throw new Error(`delete: "${id}" not found`);
 
+  const db = getDb();
+
+  // Clean up YAML frontmatter in all notes/tasks that link to this object.
+  // Must happen before file deletion so SQLite inbound link data is still queryable.
+  const inbound = db.prepare("SELECT from_id, rel FROM links WHERE to_id = ?").all(id) as { from_id: string; rel: string }[];
+  for (const { from_id, rel } of inbound) {
+    if (rel === "source") {
+      clearSourceField(from_id, id);
+    } else {
+      removeLinkFromExisting(from_id, rel, id);
+    }
+  }
+
   // Remove the file and re-index
   try { unlinkSync(objectPath(id)); } catch {}
 
-  const db = getDb();
   db.prepare("DELETE FROM objects WHERE id = ?").run(id);
   db.prepare("DELETE FROM search_index WHERE id = ?").run(id);
   db.prepare("DELETE FROM links WHERE from_id = ? OR to_id = ?").run(id, id);
@@ -393,6 +405,20 @@ function removeLinkFromExisting(id: string, rel: string, targetId: string): void
     data.links = data.links.filter((l: NoteLink) => !(l.to === targetId && l.rel === rel));
     data.updated_at = new Date().toISOString();
   }
+
+  const obj = { ...data, id } as any;
+  saveObject(obj, existing.content);
+}
+
+function clearSourceField(id: string, deletedSourceId: string): void {
+  const existing = readObject(id);
+  if (!existing) return;
+
+  const data = { ...existing.data };
+  if (data.source !== deletedSourceId) return;
+
+  delete data.source;
+  data.updated_at = new Date().toISOString();
 
   const obj = { ...data, id } as any;
   saveObject(obj, existing.content);

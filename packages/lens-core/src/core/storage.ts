@@ -287,7 +287,48 @@ export function rebuildAllIndex() {
     }
   })();
 
+  // Remove zombie links: links pointing to deleted objects that remain in YAML frontmatter.
+  // This handles notes created before the writeDelete cleanup fix was in place.
+  pruneDeadLinks();
+
   return count;
+}
+
+/** Remove links to non-existent objects from YAML frontmatter and SQLite cache. */
+function pruneDeadLinks(): void {
+  const db = getDb();
+  const existsStmt = db.prepare("SELECT 1 FROM objects WHERE id = ?");
+
+  for (const type of ["note", "task"] as ObjectType[]) {
+    for (const id of listObjects(type)) {
+      const result = readObject(id);
+      if (!result) continue;
+      const data = { ...result.data };
+      let changed = false;
+
+      // Filter dead entries from links[] array
+      if (Array.isArray(data.links) && data.links.length > 0) {
+        const validLinks = data.links.filter((l: any) => !!(existsStmt.get(l.to) as any));
+        if (validLinks.length !== data.links.length) {
+          data.links = validLinks;
+          changed = true;
+        }
+      }
+
+      // Clear dead source reference
+      if (data.source && !(existsStmt.get(data.source) as any)) {
+        delete data.source;
+        changed = true;
+      }
+
+      if (changed) {
+        data.updated_at = new Date().toISOString();
+        const obj = { ...data, id, type } as unknown as LensObject;
+        writeObject(obj, result.content.trim()); // Fix YAML on disk
+        indexObject(obj, result.content.trim()); // Sync SQLite with cleaned data
+      }
+    }
+  }
 }
 
 // ============================================================
