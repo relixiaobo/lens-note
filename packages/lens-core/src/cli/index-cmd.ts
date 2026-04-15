@@ -117,18 +117,28 @@ function indexShow(keyword: string, opts: CommandOptions): void {
   const { keywords } = load();
   const entries = keywords[keyword];
 
-  const enriched = (entries || []).map(id => ({ id, title: resolveTitle(id) }));
-
-  if (opts.json) {
-    console.log(JSON.stringify({ keyword, entries: enriched }, null, 2));
-  } else {
-    if (enriched.length === 0) {
-      console.log(`No entries for "${keyword}". Use: lens index add "${keyword}" <note_id>`);
-      return;
+  if (entries) {
+    const enriched = entries.map(id => ({ id, title: resolveTitle(id) }));
+    if (opts.json) {
+      console.log(JSON.stringify({ keyword, entries: enriched }, null, 2));
+    } else {
+      console.log(`${keyword}:`);
+      for (const e of enriched) {
+        console.log(`  → ${e.id}  ${e.title}`);
+      }
     }
-    console.log(`${keyword}:`);
-    for (const e of enriched) {
-      console.log(`  → ${e.id}  ${e.title}`);
+    return;
+  }
+
+  // Keyword not found — return all available keywords so the agent can pick
+  const allKeywords = Object.keys(keywords);
+  if (opts.json) {
+    console.log(JSON.stringify({ keyword, entries: [], available_keywords: allKeywords }, null, 2));
+  } else {
+    if (allKeywords.length === 0) {
+      console.log(`No entries for "${keyword}". No keywords exist yet. Use: lens index add "${keyword}" <note_id>`);
+    } else {
+      console.log(`No entries for "${keyword}". Available keywords: ${allKeywords.join(", ")}`);
     }
   }
 }
