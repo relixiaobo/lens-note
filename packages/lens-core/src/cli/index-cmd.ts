@@ -116,13 +116,16 @@ function indexShow(keyword: string, opts: CommandOptions): void {
   keyword = keyword.trim();
   const { keywords } = load();
   const entries = keywords[keyword];
-  if (!entries) throw new Error(`Keyword not found: "${keyword}". Use: lens index add "${keyword}" <note_id>`);
 
-  const enriched = entries.map(id => ({ id, title: resolveTitle(id) }));
+  const enriched = (entries || []).map(id => ({ id, title: resolveTitle(id) }));
 
   if (opts.json) {
     console.log(JSON.stringify({ keyword, entries: enriched }, null, 2));
   } else {
+    if (enriched.length === 0) {
+      console.log(`No entries for "${keyword}". Use: lens index add "${keyword}" <note_id>`);
+      return;
+    }
     console.log(`${keyword}:`);
     for (const e of enriched) {
       console.log(`  → ${e.id}  ${e.title}`);

@@ -171,11 +171,12 @@ describe("lens index (Schlagwortregister)", () => {
     assert.match(out.error.message, /Keyword not found/);
   });
 
-  it("errors on showing non-existent keyword", () => {
+  it("returns empty entries for non-existent keyword", () => {
     const { exitCode, stdout } = lens("index", "NoSuchKW", "--json");
-    assert.equal(exitCode, 1);
+    assert.equal(exitCode, 0);
     const out = JSON.parse(stdout);
-    assert.match(out.error.message, /Keyword not found/);
+    assert.equal(out.keyword, "NoSuchKW");
+    assert.deepEqual(out.entries, []);
   });
 
   it("errors on too many positional args", () => {
