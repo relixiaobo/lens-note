@@ -57,7 +57,7 @@ grep -rn 'ObjectType\|NoteLink\|LinkRel\|TaskStatus\|SourceType\|LensObject' \
 ```
 
 Downstream references (this repo):
-- `README.md` — Commands, Data Model
+- `README.md` — Commands, Data Model, Write API, JSON Output, Agent Mode
 - `docs/product-vision.md` — Data Model table
 
 Downstream references (other repos):

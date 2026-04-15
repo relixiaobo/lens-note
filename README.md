@@ -13,40 +13,101 @@ lens init
 
 Requires Node.js >= 20.
 
+## Quick Start
+
+```bash
+# Write a note
+printf '%s' '{"command":"write","input":{"type":"note","title":"Simple tools beat complex frameworks","body":"Composability > features."}}' | lens --stdin
+
+# Search
+printf '%s' '{"command":"search","positional":["simple tools"]}' | lens --stdin
+
+# Show a note with links
+printf '%s' '{"command":"show","positional":["note_01ABC..."]}' | lens --stdin
+
+# Link two notes
+printf '%s' '{"command":"write","input":{"type":"link","from":"note_A","rel":"supports","to":"note_B","reason":"both argue for minimalism"}}' | lens --stdin
+```
+
 ## Commands
 
-```bash
-lens search "query" --json            # Find knowledge (Unicode/CJK-aware)
-lens search "query" --resolve --json  # Resolve title → ID
-lens show <id> --json                 # Read one object with body + forward/backward links
-lens links <id> --json                # Show all relationships (forward + backward)
-lens write --file <path> --json       # Write note/source/task/link/unlink/update/delete/batch
-lens list notes --orphans --json      # List orphan notes (+ --limit/--offset)
-lens list notes --since 7d --json     # List notes from last 7 days
-lens fetch <url> [--save] --json      # Extract web content as markdown
-lens similar <id> --json              # Find near-duplicate notes
-lens similar --all --json             # Scan all notes, group duplicates
-lens context "query" --json           # Assemble full context pack (notes with bodies)
-lens digest [week|month|year] --json  # Recent insights summary
-lens index --json                     # List keyword entry points (Schlagwortregister)
-lens index add "<kw>" <id> --json     # Register entry point (max 3 per keyword)
-lens status --json                    # Stats + graph health
-lens tasks [--all|--done] --json      # List tasks
-```
-
-All commands support `--stdin` mode — content bypasses the shell entirely:
+### Search & Read
 
 ```bash
-printf '%s' '{"command":"write","input":{"type":"note","title":"...","body":"..."}}' | lens --stdin
+lens search "<query>" --json              # Full-text search (Unicode/CJK-aware)
+lens search "<query>" --resolve --json    # Resolve title → ID (exact match first)
+lens search "<query>" --expand --json     # Search with full bodies + links (for synthesis)
+lens search "<query>" --limit 5 --json    # Cap results
+lens show <id> [id2...] --json            # Show object(s) with body + links (batch supported)
+lens links <id> --json                    # All relationships (forward + backward)
+lens links <id> --rel related --json      # Filter by rel type
+lens links <id> --direction forward --json # Only outgoing links
 ```
 
-## Why lens
+### Browse
 
-- **Infrastructure, not an app.** Like Git outlasts every IDE, lens outlasts every agent.
-- **Any agent, any model.** Claude Code, Codex, Gemini, Cursor — anything that runs bash.
-- **File-as-truth.** Markdown files are the source of truth. SQLite is a derived cache. Git tracks history.
-- **Links are the only structure.** No folders, no tags, no categories. Structure emerges from connections.
-- **The Collision Method.** Knowledge grows through collision, not collection. Built on [Luhmann's Zettelkasten, Karpathy's LLM Wiki, and Li Jigang's viewfinders](docs/theoretical-foundations.md).
+```bash
+lens list notes --json                    # List all notes
+lens list notes --orphans --json          # Unlinked notes (+ --limit/--offset)
+lens list notes --since 7d --json         # Time filter (7d/2w/1m/1y)
+lens list notes --min-links 10 --json     # Hub notes by link count
+lens list notes --max-links 0 --json      # Isolated notes
+lens list sources --source-type book --json # Filter by source type
+lens list tasks --status open --json      # Tasks by status (open/done)
+```
+
+### Write
+
+```bash
+lens write --file <path> --json           # Write from JSON file
+printf '%s' '{"command":"write","input":{...}}' | lens --stdin  # Write via stdin
+```
+
+See [Write API](#write-api) below for all write types.
+
+### Analyze
+
+```bash
+lens similar <id> --json                  # Find near-duplicate notes (+ --threshold)
+lens similar --all --json                 # Scan all notes, group duplicates
+lens digest [week|month|year] --json      # Recent insights grouped by type
+lens lint --json                          # Graph quality checks with offender IDs
+lens lint --summary --json                # Stats + graph health + user context
+```
+
+### Index (Schlagwortregister)
+
+```bash
+lens index --json                         # List all keyword entry points
+lens index "<keyword>" --json             # Show entries for a keyword
+lens index add "<keyword>" <id> --json    # Register entry point (max 3 per keyword)
+lens index remove "<keyword>" [id] --json # Remove keyword or single entry
+```
+
+### Other
+
+```bash
+lens fetch <url> [--save] --json          # Extract web content (--save creates source)
+lens config list --json                   # Show all config
+lens config set context.role "PM" --json  # Set user context
+lens rebuild-index --json                 # Rebuild SQLite cache from files
+```
+
+## JSON Output
+
+All `--json` output uses a stable envelope:
+
+```json
+{"ok": true, "data": {"query": "...", "results": [...]}}
+```
+
+```json
+{"ok": false, "error": {"code": "command_error", "message": "..."}, "hint": "..."}
+```
+
+Always check `ok` first. On success, read `data`. On failure, read `error.code` and `error.message`.
+
+Error codes: `command_error`, `deprecated_command`, `unknown_command`, `ambiguous_match`, `no_match`, `partial_failure` (batch), `invalid_request`.
 
 ## Data Model
 
@@ -74,7 +135,78 @@ updated_at: '2026-04-13T02:50:14.932Z'
 Evidence and reasoning in markdown body.
 ```
 
-**Links**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related`, `indexes` (MOC → child). Each carries a `reason`.
+**Link types**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related` (requires `reason`), `indexes` (MOC → child).
+
+**IDs**: `<prefix>_<ULID>` — 26 uppercase characters. Never truncate.
+
+## Write API
+
+Pass JSON via `--stdin` (recommended) or `--file`. The `type` field routes:
+
+```
+note      Create a note (title + body + links)
+source    Create a source (title + url + source_type)
+task      Create a task (title + status)
+link      Add link between objects (from + rel + to + reason)
+unlink    Remove a link
+retype    Change link type atomically (old_rel → new_rel)
+merge     Merge two notes (redirects links, appends body, rewrites [[ID]] refs)
+update    Modify existing object (set fields, add links, replace body)
+delete    Remove object and clean up references
+```
+
+**Batch writes**: pass an array. Use `$0`, `$1` to reference earlier items' IDs:
+
+```json
+[
+  {"type": "note", "title": "First insight", "body": "..."},
+  {"type": "note", "title": "Second insight", "links": [{"to": "$0", "rel": "supports", "reason": "builds on first"}]}
+]
+```
+
+**Links are idempotent.** Writing the same link twice returns `"unchanged"`. `contradicts` links are automatically bidirectional.
+
+## Agent Mode (--stdin)
+
+All commands work via structured JSON input — content never touches the shell:
+
+```bash
+printf '%s' '{"command":"<cmd>", "positional":[], "flags":{}, "input":{}}' | lens --stdin
+```
+
+Always returns JSON. No `--json` flag needed.
+
+```bash
+# Search
+printf '%s' '{"command":"search","positional":["distributed systems"]}' | lens --stdin
+
+# Show (batch)
+printf '%s' '{"command":"show","positional":["note_01A","note_01B"]}' | lens --stdin
+
+# Write
+printf '%s' '{"command":"write","input":{"type":"note","title":"...","body":"..."}}' | lens --stdin
+
+# Fetch + save
+printf '%s' '{"command":"fetch","positional":["https://..."],"flags":{"save":true}}' | lens --stdin
+
+# Links with filters
+printf '%s' '{"command":"links","positional":["note_01A"],"flags":{"rel":"related","direction":"forward"}}' | lens --stdin
+```
+
+## Storage
+
+```
+~/.lens/
+  notes/       Markdown files (note_*.md)
+  sources/     Markdown files (src_*.md)
+  tasks/       Markdown files (task_*.md)
+  raw/         Original files (HTML, etc.)
+  index.sqlite SQLite cache (derived, rebuilable)
+  config.yaml  User configuration
+  .git/        Version history
+```
+
+Markdown files are the source of truth. SQLite is a derived index. Git tracks history automatically.
 
 ## Use with Agents
 
@@ -86,6 +218,14 @@ Evidence and reasoning in markdown body.
 | **Cursor** | Copy SKILL.md to `.cursor/skills/lens/` |
 
 The skill file teaches the agent the full API, methodology, and when to use each mode (capture, compile, query, curate, task).
+
+## Why lens
+
+- **Infrastructure, not an app.** Like Git outlasts every IDE, lens outlasts every agent.
+- **Any agent, any model.** Claude Code, Codex, Gemini, Cursor — anything that runs bash.
+- **File-as-truth.** Markdown files are the source of truth. SQLite is a derived cache. Git tracks history.
+- **Links are the only structure.** No folders, no tags, no categories. Structure emerges from connections.
+- **The Collision Method.** Knowledge grows through collision, not collection. Built on [Luhmann's Zettelkasten, Karpathy's LLM Wiki, and Li Jigang's viewfinders](docs/theoretical-foundations.md).
 
 ## License
 
