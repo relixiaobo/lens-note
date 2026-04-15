@@ -47,10 +47,19 @@ export async function showStatus(opts: CommandOptions) {
   const linkTypes: Record<string, number> = {};
   let crossSourceLinks = 0;
 
+  // Build note→source map: prefer explicit `source` field, fall back to links to source objects
   const noteSourceMap = new Map<string, string>();
   for (const id of noteIds) {
     const obj = readObject(id);
-    if (obj) noteSourceMap.set(id, obj.data.source || "");
+    if (!obj) continue;
+    if (obj.data.source) {
+      noteSourceMap.set(id, obj.data.source);
+    } else {
+      // Infer source from forward links to source objects
+      const fwdAll = getForwardLinks(id);
+      const srcLink = fwdAll.find(l => l.to_id.startsWith("src_"));
+      if (srcLink) noteSourceMap.set(id, srcLink.to_id);
+    }
   }
 
   for (const id of noteIds) {

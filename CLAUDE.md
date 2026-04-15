@@ -4,7 +4,7 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — it stores, queries, and links. Any agent can use it. No API keys, no LLM dependencies.
 
-**Status**: v1.7.2. 3 types (Source, Note, Task). --stdin agent mode. Git version tracking. `indexes` rel + `[[ID]]` body refs.
+**Status**: v1.7.3. 3 types (Source, Note, Task). --stdin agent mode. Git version tracking. `indexes` rel + `[[ID]]` body refs.
 
 **Methodology**: The Collision Method — Spark → Collide → Crystallize. Knowledge grows through collision, not collection.
 
