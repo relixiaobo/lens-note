@@ -372,6 +372,57 @@ describe("tool redesign v2", () => {
     });
   });
 
+  // ── lint --audit ──────────────────────────────────────────
+
+  describe("lint --audit", () => {
+    it("returns full offenders for related_dominance", () => {
+      const { stdout } = lensStdin({ command: "lint", flags: { audit: "related_dominance" } });
+      const result = JSON.parse(stdout).data;
+      assert.equal(result.check, "related_dominance");
+      assert.ok(result.total_links >= 0);
+      assert.equal(result.count, result.offenders.length);
+      if (result.offenders.length > 0) {
+        const o = result.offenders[0];
+        assert.ok("from" in o && "to" in o && "from_title" in o && "to_title" in o && "rel" in o);
+      }
+    });
+
+    it("returns offenders for duplicate_links with keep/remove", () => {
+      // Create a duplicate pair
+      write({ type: "link", from: noteC, to: noteA, rel: "supports", reason: "test dup" });
+      // noteC already has a related link to noteA from setup
+
+      const { stdout } = lensStdin({ command: "lint", flags: { audit: "duplicate_links" } });
+      const result = JSON.parse(stdout).data;
+      assert.equal(result.check, "duplicate_links");
+      if (result.offenders.length > 0) {
+        const o = result.offenders[0];
+        assert.ok("keep" in o && "remove" in o);
+      }
+
+      // Cleanup
+      write({ type: "unlink", from: noteC, to: noteA, rel: "supports" });
+    });
+
+    it("supports --limit and --offset", () => {
+      const { stdout: full } = lensStdin({ command: "lint", flags: { audit: "related_dominance" } });
+      const fullResult = JSON.parse(full).data;
+
+      if (fullResult.total_links >= 2) {
+        const { stdout: limited } = lensStdin({ command: "lint", flags: { audit: "related_dominance", limit: 1 } });
+        const limitResult = JSON.parse(limited).data;
+        assert.equal(limitResult.count, 1);
+        assert.equal(limitResult.limit, 1);
+        assert.equal(limitResult.total_links, fullResult.total_links);
+      }
+    });
+
+    it("rejects unknown check name", () => {
+      const { exitCode } = lensStdin({ command: "lint", flags: { audit: "nonexistent" } });
+      assert.notEqual(exitCode, 0);
+    });
+  });
+
   // ── deprecated commands ───────────────────────────────────
 
   describe("deprecated commands", () => {
