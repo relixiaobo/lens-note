@@ -442,6 +442,40 @@ export function findByTitle(title: string): { id: string; type: string; title: s
   ).all(title) as any[];
 }
 
+/**
+ * Resolve an ID-or-title string to a valid object ID.
+ *
+ * If the input looks like a valid ID (prefix_ULID), returns it directly (after verifying it exists).
+ * Otherwise, treats it as a title: tries exact title match, then FTS5 search.
+ *
+ * Returns: { id } on unique match, { error, candidates? } on failure.
+ */
+export function resolveIdOrTitle(input: string): { id: string } | { error: string; candidates?: { id: string; title: string }[] } {
+  // 1. Valid ID format? Try direct lookup
+  if (/^(src|note|task)_[A-Z0-9]{26}$/.test(input)) {
+    const obj = getObjectFromCache(input);
+    if (obj) return { id: input };
+    const prefix = input.split("_")[0];
+    return { error: `No ${prefix} with ID ${input}. It may have been deleted. Use 'lens search' to find by title.` };
+  }
+
+  // 2. Exact title match (case-insensitive)
+  const titleMatches = findByTitle(input);
+  if (titleMatches.length === 1) return { id: titleMatches[0].id };
+  if (titleMatches.length > 1) {
+    return { error: `Multiple objects match title "${input}".`, candidates: titleMatches.map(t => ({ id: t.id, title: t.title })) };
+  }
+
+  // 3. FTS5 search fallback
+  const ftsResults = searchIndex(input);
+  if (ftsResults.length === 1) return { id: ftsResults[0].id };
+  if (ftsResults.length > 1) {
+    return { error: `Multiple objects match "${input}".`, candidates: ftsResults.slice(0, 5).map(r => ({ id: r.id, title: r.title })) };
+  }
+
+  return { error: `No results for "${input}". Use 'lens search' to explore, or 'lens index' for entry points.` };
+}
+
 // ============================================================
 // Similarity (character trigrams + Dice coefficient)
 // ============================================================

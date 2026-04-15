@@ -2,21 +2,25 @@
  * lens show <id> — Show any lens object with links.
  */
 
-import { readObject, getBacklinks, ensureInitialized, extractBodyRefs, resolveBodyRefs } from "../core/storage";
+import { readObject, getBacklinks, ensureInitialized, extractBodyRefs, resolveBodyRefs, resolveIdOrTitle } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
-export async function showObject(id: string, opts: CommandOptions) {
+export async function showObject(input: string, opts: CommandOptions) {
   ensureInitialized();
 
-  const result = readObject(id);
-  if (!result) {
-    const prefix = id.split("_")[0];
-    const validPrefixes = ["note", "src", "task"];
-    const hint = !validPrefixes.includes(prefix)
-      ? `Invalid ID prefix "${prefix}". Valid prefixes: note_, src_, task_. Use 'lens search' to find by title.`
-      : `No ${prefix} with this ID. It may have been deleted. Use 'lens search' to find by title, or 'lens list ${prefix === "src" ? "sources" : prefix + "s"}' to browse.`;
-    throw new Error(`Object not found: ${id}. ${hint}`);
+  // Accept ID or title — auto-resolve
+  const resolved = resolveIdOrTitle(input);
+  if ("error" in resolved) {
+    if (opts.json && resolved.candidates) {
+      console.log(JSON.stringify({ error: { code: "ambiguous_match", message: resolved.error, candidates: resolved.candidates } }));
+      return;
+    }
+    throw new Error(resolved.error);
   }
+
+  const id = resolved.id;
+  const result = readObject(id);
+  if (!result) throw new Error(`Object not found: ${id}.`);
 
   const { data, content } = result;
 

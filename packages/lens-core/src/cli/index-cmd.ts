@@ -130,8 +130,32 @@ function indexShow(keyword: string, opts: CommandOptions): void {
     return;
   }
 
-  // Keyword not found — return all available keywords so the agent can pick
+  // Keyword not found — try fuzzy matching (case-insensitive substring)
   const allKeywords = Object.keys(keywords);
+  const query = keyword.toLowerCase();
+  const fuzzyMatches = allKeywords.filter(kw => kw.toLowerCase().includes(query) || query.includes(kw.toLowerCase()));
+
+  if (fuzzyMatches.length > 0) {
+    // Fuzzy matched — return matching keywords with their entries
+    const matched: Record<string, { id: string; title: string }[]> = {};
+    for (const kw of fuzzyMatches) {
+      matched[kw] = keywords[kw].map(id => ({ id, title: resolveTitle(id) }));
+    }
+    if (opts.json) {
+      console.log(JSON.stringify({ keyword, exact_match: false, matched_keywords: matched }, null, 2));
+    } else {
+      console.log(`No exact match for "${keyword}", but found related keywords:\n`);
+      for (const kw of fuzzyMatches) {
+        console.log(`  ${kw}:`);
+        for (const id of keywords[kw]) {
+          console.log(`    → ${id}  ${resolveTitle(id)}`);
+        }
+      }
+    }
+    return;
+  }
+
+  // No fuzzy match either — return all available keywords
   if (opts.json) {
     console.log(JSON.stringify({ keyword, entries: [], available_keywords: allKeywords }, null, 2));
   } else {

@@ -5,7 +5,7 @@
  * Titles are resolved so the LLM doesn't need follow-up show calls.
  */
 
-import { getForwardLinks, getBacklinks, readObject, ensureInitialized } from "../core/storage";
+import { getForwardLinks, getBacklinks, readObject, ensureInitialized, resolveIdOrTitle } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
 interface LabeledLink {
@@ -23,18 +23,24 @@ function resolveLink(linkId: string): { type?: string; title: string } {
   return { type: data.type, title: typeof title === "string" ? title : linkId };
 }
 
-export async function showLinks(id: string, opts: CommandOptions) {
+export async function showLinks(input: string, opts: CommandOptions) {
   ensureInitialized();
 
-  if (!id) throw new Error("Usage: lens links <id>");
+  if (!input) throw new Error("Usage: lens links <id>");
 
-  // Verify object exists
-  const obj = readObject(id);
-  if (!obj) {
-    const prefix = id.split("_")[0];
-    const hint = `Use 'lens search' to find by title, or 'lens list ${prefix === "src" ? "sources" : prefix + "s"}' to browse.`;
-    throw new Error(`Object not found: ${id}. ${hint}`);
+  // Accept ID or title — auto-resolve
+  const resolved = resolveIdOrTitle(input);
+  if ("error" in resolved) {
+    if (opts.json && resolved.candidates) {
+      console.log(JSON.stringify({ error: { code: "ambiguous_match", message: resolved.error, candidates: resolved.candidates } }));
+      return;
+    }
+    throw new Error(resolved.error);
   }
+
+  const id = resolved.id;
+  const obj = readObject(id);
+  if (!obj) throw new Error(`Object not found: ${id}.`);
 
   const rawForward = getForwardLinks(id);
   const rawBackward = getBacklinks(id);

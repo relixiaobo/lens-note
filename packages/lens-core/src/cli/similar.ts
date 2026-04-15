@@ -6,10 +6,10 @@
  * near-duplicate detection. Works for all scripts (Latin, CJK, Arabic, etc).
  */
 
-import { readObject, findSimilarNotes, findAllSimilarGroups, ensureInitialized } from "../core/storage";
+import { readObject, findSimilarNotes, findAllSimilarGroups, ensureInitialized, resolveIdOrTitle } from "../core/storage";
 import type { CommandOptions } from "./commands";
 
-export async function showSimilar(id: string | undefined, opts: CommandOptions) {
+export async function showSimilar(input: string | undefined, opts: CommandOptions) {
   ensureInitialized();
 
   const threshold = opts.threshold ? parseFloat(String(opts.threshold)) : 0.3;
@@ -17,7 +17,7 @@ export async function showSimilar(id: string | undefined, opts: CommandOptions) 
     throw new Error("--threshold must be a number between 0 and 1");
   }
 
-  if (id && opts.all) {
+  if (input && opts.all) {
     throw new Error("Cannot use both <id> and --all. Use one or the other.");
   }
 
@@ -49,10 +49,21 @@ export async function showSimilar(id: string | undefined, opts: CommandOptions) 
     return;
   }
 
-  // Single-note mode — id is guaranteed defined here (--all returned above)
-  if (!id) throw new Error("Usage: lens similar <id> [--threshold 0.3]  or  lens similar --all");
+  // Single-note mode — accept ID or title
+  if (!input) throw new Error("Usage: lens similar <id|title> [--threshold 0.3]  or  lens similar --all");
+
+  const resolved = resolveIdOrTitle(input);
+  if ("error" in resolved) {
+    if (opts.json && resolved.candidates) {
+      console.log(JSON.stringify({ error: { code: "ambiguous_match", message: resolved.error, candidates: resolved.candidates } }));
+      return;
+    }
+    throw new Error(resolved.error);
+  }
+
+  const id = resolved.id;
   const target = readObject(id);
-  if (!target) throw new Error(`Object not found: ${id}. Use 'lens search' to find by title, or 'lens list notes' to browse.`);
+  if (!target) throw new Error(`Object not found: ${id}.`);
   if (target.data.type !== "note") throw new Error(`similar only works with notes, got ${target.data.type}. Use 'lens list notes' to find a note ID.`);
 
   const results = findSimilarNotes(id, threshold);

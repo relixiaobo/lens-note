@@ -140,7 +140,7 @@ Errors: {"error": {"code": "...", "message": "..."}}
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.7.7");
+  console.log("lens v1.7.8");
   process.exit(0);
 }
 
