@@ -123,6 +123,10 @@ export async function runLint(args: string[], opts: CommandOptions) {
 
   // ── 4. Missing reasons ────────────────────────────────────
   // Check note files via the objects table (data column has JSON frontmatter)
+  // Structural rels (indexes) are exempt — their meaning is self-explanatory.
+  // Semantic rels (supports, contradicts, refines, related) benefit from reasons.
+  const STRUCTURAL_RELS = new Set(["indexes"]);
+
   const allLinkedObjects = db.prepare(
     "SELECT id, data FROM objects WHERE type IN ('note', 'task')"
   ).all() as { id: string; data: string }[];
@@ -135,6 +139,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
       const parsed = JSON.parse(obj.data);
       if (!Array.isArray(parsed.links)) continue;
       for (const link of parsed.links) {
+        if (STRUCTURAL_RELS.has(link.rel)) continue;
         if (!link.reason || !link.reason.trim()) {
           missingReasonCount++;
           if (missingReasonSamples.length < 10) {
@@ -173,6 +178,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
       const parsed = JSON.parse(obj.data);
       if (!Array.isArray(parsed.links)) continue;
       for (const link of parsed.links) {
+        if (STRUCTURAL_RELS.has(link.rel)) continue;
         if (!link.reason) continue; // missing_reasons catches these
         const reason = link.reason.trim();
         if (reason.length < VAGUE_REASON_MIN_LENGTH || VAGUE_REASON_PATTERNS.test(reason)) {
