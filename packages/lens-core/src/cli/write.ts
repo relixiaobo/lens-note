@@ -19,6 +19,7 @@ import { saveObject, readObject, ensureInitialized, getDb } from "../core/storag
 import { objectPath, paths } from "../core/paths";
 import { join } from "path";
 import { parseCliArgs, type CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 // ============================================================
 // Validation
@@ -346,7 +347,7 @@ function writeUpdate(input: any): WriteResult {
   // Set scalar fields via set.{field}
   if (input.set) {
     for (const [key, value] of Object.entries(input.set)) {
-      if (key === "id" || key === "type" || key === "created_at") continue;
+      if (key === "id" || key === "type" || key === "created_at" || key === "body") continue; // body goes to markdown content, not frontmatter
       if (key === "status") {
         if (data.type !== "task") throw new Error(`update: status can only be set on tasks, not ${data.type}`);
         if (!VALID_STATUSES.has(value as TaskStatus)) throw new Error(`update: status "${value}" is invalid. Valid: ${[...VALID_STATUSES].join(", ")}`);
@@ -391,12 +392,181 @@ function writeUpdate(input: any): WriteResult {
     }
   }
 
-  // Update body if provided
-  const body = input.body !== undefined ? input.body : existing.content;
+  // Update body if provided (top-level body OR set.body — both write to markdown content, not frontmatter)
+  const body = input.body !== undefined ? input.body : (input.set?.body !== undefined ? String(input.set.body) : existing.content);
 
   const obj = { ...data, id } as any;
   saveObject(obj, body);
   return { id, type: data.type, action: "updated", object: { ...obj, body } };
+}
+
+function writeRetype(input: any): WriteResult {
+  const { from, to, old_rel, new_rel, reason } = input;
+  if (!from) throw new Error("retype: 'from' is required");
+  if (!to) throw new Error("retype: 'to' is required");
+  if (!old_rel) throw new Error("retype: 'old_rel' is required");
+  if (!new_rel) throw new Error("retype: 'new_rel' is required");
+  if (!VALID_RELS.has(old_rel)) throw new Error(`retype: old_rel "${old_rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
+  if (!VALID_RELS.has(new_rel)) throw new Error(`retype: new_rel "${new_rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
+  if (from === to) throw new Error("retype: 'from' and 'to' must be different");
+  if (new_rel === "related") {
+    validateLinkReason("related", reason, "retype");
+  }
+
+  // Validate IDs and link existence BEFORE checking same-rel shortcut
+  validateId(from, "retype.from");
+  validateId(to, "retype.to");
+
+  const fromObj = readObject(from);
+  const existingLinks: NoteLink[] = fromObj?.data.links || [];
+  if (!existingLinks.some((l: NoteLink) => l.to === to && l.rel === old_rel)) {
+    throw new Error(`retype: link ${from} -[${old_rel}]-> ${to} not found. Use \`lens links ${from}\` to see existing links.`);
+  }
+
+  // Same rel — only reason update
+  if (old_rel === new_rel) {
+    if (reason !== undefined) {
+      updateLinkReason(from, old_rel as LinkRel, to, reason);
+      // Sync reverse contradicts reason if applicable
+      if (old_rel === "contradicts") {
+        updateLinkReason(to, "contradicts" as LinkRel, from, reason);
+      }
+      return { type: "retype", action: "updated", object: { from, to, old_rel, new_rel, reason } };
+    }
+    return { type: "retype", action: "unchanged", object: { from, to, old_rel, new_rel } };
+  }
+
+  // Remove old link
+  removeLinkFromExisting(from, old_rel, to);
+  if (old_rel === "contradicts") {
+    removeLinkFromExisting(to, "contradicts", from);
+  }
+
+  // Add new link
+  addLinkToExisting(from, new_rel as LinkRel, to, reason);
+  if (new_rel === "contradicts") {
+    addLinkToExisting(to, "contradicts", from, reason);
+  }
+
+  return { type: "retype", action: "retyped", object: { from, to, old_rel, new_rel, reason } };
+}
+
+function writeMerge(input: any): WriteResult {
+  const { from, into } = input;
+  if (!from) throw new Error("merge: 'from' is required");
+  if (!into) throw new Error("merge: 'into' is required");
+  if (from === into) throw new Error("merge: 'from' and 'into' must be different");
+
+  // Idempotent: if from already deleted (previous merge), return unchanged
+  const fromObj = readObject(from);
+  if (!fromObj) {
+    return { type: "merge", action: "unchanged", object: { from, into }, message: `${from} not found (already merged?)` };
+  }
+
+  validateId(into, "merge.into");
+  const intoObj = readObject(into);
+  if (!intoObj) throw new Error(`merge: "${into}" not found.`);
+
+  // Type restriction: only notes can be merged
+  if (fromObj.data.type !== "note") throw new Error(`merge: 'from' must be a note, got ${fromObj.data.type}`);
+  if (intoObj.data.type !== "note") throw new Error(`merge: 'into' must be a note, got ${intoObj.data.type}`);
+
+  const db = getDb();
+  const intoData = { ...intoObj.data };
+  const intoLinks: NoteLink[] = [...(intoData.links || [])];
+
+  // --- Step 1: Redirect inbound links (third-party notes linking to `from`) ---
+  const inbound = db.prepare("SELECT from_id, rel FROM links WHERE to_id = ?").all(from) as { from_id: string; rel: string }[];
+  for (const { from_id, rel } of inbound) {
+    if (from_id === into) continue; // skip self-link case
+    if (from_id === from) continue; // skip self-reference
+
+    // Read the referring note, change link target from→into
+    const refObj = readObject(from_id);
+    if (!refObj) continue;
+
+    const refData = { ...refObj.data };
+    const refLinks: NoteLink[] = refData.links || [];
+
+    // Find the link to `from`
+    const linkIdx = refLinks.findIndex((l: NoteLink) => l.to === from && l.rel === rel);
+    if (linkIdx < 0) continue;
+
+    // Dedupe check: does this note already link to `into` with same rel?
+    const duplicate = refLinks.some((l: NoteLink) => l.to === into && l.rel === rel);
+    if (duplicate) {
+      // Existing wins — just remove the link to `from`
+      refLinks.splice(linkIdx, 1);
+    } else {
+      // Redirect: change target from→into
+      refLinks[linkIdx] = { ...refLinks[linkIdx], to: into };
+    }
+
+    refData.links = refLinks;
+    refData.updated_at = new Date().toISOString();
+    saveObject({ ...refData, id: from_id } as any, refObj.content);
+  }
+
+  // --- Step 2: Carry forward links from `from` to `into` ---
+  const fromLinks: NoteLink[] = fromObj.data.links || [];
+  for (const link of fromLinks) {
+    // Skip self-link (from linking to into, which would become into→into)
+    if (link.to === into) continue;
+    // Skip if from links to itself
+    if (link.to === from) continue;
+
+    // Dedupe: (to, rel) key — existing into link wins
+    if (!intoLinks.some((l: NoteLink) => l.to === link.to && l.rel === link.rel)) {
+      intoLinks.push(link);
+    }
+  }
+
+  intoData.links = intoLinks;
+  intoData.updated_at = new Date().toISOString();
+
+  // --- Step 3: Append body ---
+  const fromRefPattern = new RegExp(`\\[\\[${from}\\]\\]`, "g");
+  // Rewrite [[from]] → [[into]] in into's own existing body first
+  let intoBody = intoObj.content.replace(fromRefPattern, `[[${into}]]`);
+  const fromBody = fromObj.content.trim();
+  if (fromBody) {
+    // Rewrite [[from]] → [[into]] in the appended body
+    const rewrittenBody = fromBody.replace(fromRefPattern, `[[${into}]]`);
+    // Only add separator when into already has content
+    if (intoBody.trim()) {
+      intoBody = intoBody.trimEnd() + "\n\n---\n\n" + rewrittenBody;
+    } else {
+      intoBody = rewrittenBody;
+    }
+  }
+
+  // Save into with merged data
+  saveObject({ ...intoData, id: into } as any, intoBody);
+
+  // --- Step 4: Rewrite [[from]] → [[into]] across all other notes ---
+  const allObjects = db.prepare("SELECT id, body FROM objects WHERE body LIKE ?").all(`%[[${from}]]%`) as { id: string; body: string }[];
+  for (const { id: objId } of allObjects) {
+    if (objId === from || objId === into) continue;
+    const obj = readObject(objId);
+    if (!obj) continue;
+    const newContent = obj.content.replace(new RegExp(`\\[\\[${from}\\]\\]`, "g"), `[[${into}]]`);
+    if (newContent !== obj.content) {
+      saveObject(obj.data as any, newContent);
+    }
+  }
+
+  // --- Step 5: Delete `from` ---
+  // Remove file
+  try { unlinkSync(objectPath(from)); } catch {}
+  const rawPath = join(paths.raw, `${from}.html`);
+  try { unlinkSync(rawPath); } catch {}
+
+  // Clean SQLite
+  db.prepare("DELETE FROM objects WHERE id = ?").run(from);
+  db.prepare("DELETE FROM search_index WHERE id = ?").run(from);
+  db.prepare("DELETE FROM links WHERE from_id = ? OR to_id = ?").run(from, from);
+
+  return { type: "merge", action: "merged", id: into, object: { from, into, links_carried: fromLinks.length, body_appended: !!fromBody } };
 }
 
 function writeDelete(input: any): WriteResult {
@@ -581,7 +751,7 @@ function executeWrite(parsed: any, opts: CommandOptions) {
     }
 
     try {
-      if (!item.type) throw new Error(`"type" field is required. Valid: note, source, task, link, unlink, update, delete`);
+      if (!item.type) throw new Error(`"type" field is required. Valid: note, source, task, link, unlink, update, delete, retype, merge`);
       checkForSecrets(item);
 
       let result: WriteResult;
@@ -593,7 +763,9 @@ function executeWrite(parsed: any, opts: CommandOptions) {
         case "unlink": result = writeUnlink(item); break;
         case "update": result = writeUpdate(item); break;
         case "delete": result = writeDelete(item); break;
-        default: throw new Error(`Unknown type "${type}". Valid: note, source, task, link, unlink, update, delete`);
+        case "retype": result = writeRetype(item); break;
+        case "merge": result = writeMerge(item); break;
+        default: throw new Error(`Unknown type "${type}". Valid: note, source, task, link, unlink, update, delete, retype, merge`);
       }
 
       if (result.id) batchIds.set(`$${i}`, result.id);
@@ -605,10 +777,6 @@ function executeWrite(parsed: any, opts: CommandOptions) {
       const message = err instanceof Error ? err.message : String(err);
       results.push({ index: i, type, action: "error", message });
     }
-  }
-
-  if (isBatch && failedIndices.size > 0) {
-    process.exitCode = 1;
   }
 
   if (opts.json) {
@@ -625,7 +793,18 @@ function executeWrite(parsed: any, opts: CommandOptions) {
           return base;
         }) }
       : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}), ...(results[0].hint ? { hint: results[0].hint } : {}), ...(results[0].suggested_rel ? { suggested_rel: results[0].suggested_rel } : {}) };
-    console.log(JSON.stringify(output, null, 2));
+
+    if (isBatch && failedIndices.size > 0) {
+      // Partial failure: ok=false with data so consumer can inspect individual results
+      process.exitCode = 1;
+      console.log(JSON.stringify({
+        ok: false,
+        error: { code: "partial_failure", message: `${failedIndices.size} of ${items.length} item(s) failed` },
+        data: output,
+      }, null, 2));
+    } else {
+      respondSuccess(output);
+    }
   } else {
     for (const r of results) {
       if (r.action === "error") {

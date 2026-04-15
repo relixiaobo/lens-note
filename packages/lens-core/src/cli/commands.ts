@@ -46,9 +46,14 @@ async function initCommand(args: string[], opts: CommandOptions) {
   await initLens(opts);
 }
 
-async function statusCommand(args: string[], opts: CommandOptions) {
-  const { showStatus } = await import("./status");
-  await showStatus(opts);
+async function statusCommand(_args: string[], opts: CommandOptions) {
+  const { respondDeprecation } = await import("./response");
+  if (opts.json) {
+    respondDeprecation("status", "lint --summary", "Use: lens lint --summary --json");
+  } else {
+    console.error("Error: status is deprecated. Use: lens lint --summary --json");
+    process.exitCode = 1;
+  }
 }
 
 async function noteCommand(args: string[], opts: CommandOptions) {
@@ -76,12 +81,16 @@ async function linksCommand(args: string[], opts: CommandOptions) {
 
 async function showCommand(args: string[], opts: CommandOptions) {
   const { positional } = parseCliArgs(args);
-  const id = positional[0];
-  if (!id) {
-    throw new Error("Usage: lens show <id>");
+  if (positional.length === 0) {
+    throw new Error("Usage: lens show <id> [id2] [id3]");
   }
-  const { showObject } = await import("./show");
-  await showObject(id, opts);
+  if (positional.length === 1) {
+    const { showObject } = await import("./show");
+    await showObject(positional[0], opts);
+  } else {
+    const { readObjects } = await import("./show");
+    await readObjects(positional, opts);
+  }
 }
 
 async function searchCommand(args: string[], opts: CommandOptions) {
@@ -104,14 +113,14 @@ async function ingestCommand(args: string[], opts: CommandOptions) {
   await ingestSource(target, opts);
 }
 
-async function contextCommand(args: string[], opts: CommandOptions) {
-  const { positional } = parseCliArgs(args);
-  const query = positional.join(" ");
-  if (!query) {
-    throw new Error('Usage: lens context "<query>"');
+async function contextCommand(_args: string[], opts: CommandOptions) {
+  const { respondDeprecation } = await import("./response");
+  if (opts.json) {
+    respondDeprecation("context", "search --expand", 'Use: lens search "<query>" --expand --json');
+  } else {
+    console.error('Error: context is deprecated. Use: lens search "<query>" --expand --json');
+    process.exitCode = 1;
   }
-  const { assembleContext } = await import("./context");
-  await assembleContext(query, { ...opts, json: true });
 }
 
 async function digestCommand(args: string[], opts: CommandOptions) {
@@ -145,9 +154,14 @@ async function rebuildIndexCommand(args: string[], opts: CommandOptions) {
   await rebuildIndex(opts);
 }
 
-async function tasksCommand(args: string[], opts: CommandOptions) {
-  const { listTasks } = await import("./tasks");
-  await listTasks(args, opts);
+async function tasksCommand(_args: string[], opts: CommandOptions) {
+  const { respondDeprecation } = await import("./response");
+  if (opts.json) {
+    respondDeprecation("tasks", "list tasks", "Use: lens list tasks --status open --json");
+  } else {
+    console.error("Error: tasks is deprecated. Use: lens list tasks --status open --json");
+    process.exitCode = 1;
+  }
 }
 
 async function similarCommand(args: string[], opts: CommandOptions) {
@@ -253,22 +267,28 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
       return searchObjects(query, opts);
     }
     case "show": {
-      const id = req.positional?.[0];
-      if (!id) throw new Error('show: "positional" with object ID is required');
-      const { showObject } = await import("./show");
-      return showObject(id, opts);
+      const ids = req.positional || [];
+      if (ids.length === 0) throw new Error('show: "positional" with object ID(s) is required');
+      if (ids.length === 1) {
+        const { showObject } = await import("./show");
+        return showObject(ids[0], opts);
+      }
+      const { readObjects } = await import("./show");
+      return readObjects(ids, opts);
     }
     case "status": {
-      const { showStatus } = await import("./status");
-      return showStatus(opts);
+      const { respondDeprecation } = await import("./response");
+      respondDeprecation("status", "lint --summary", 'Use: {"command":"lint","flags":{"summary":true}}');
+      return;
     }
     case "write": {
       const { handleWriteInput } = await import("./write");
       return handleWriteInput(req.input, opts);
     }
     case "tasks": {
-      const { listTasks } = await import("./tasks");
-      return listTasks(toArgv(req), opts);
+      const { respondDeprecation } = await import("./response");
+      respondDeprecation("tasks", "list tasks", 'Use: {"command":"list","positional":["tasks"],"flags":{"status":"open"}}');
+      return;
     }
     case "note": {
       const title = (req.positional || []).join(" ");
@@ -295,10 +315,9 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
       return showSimilar(id, opts);
     }
     case "context": {
-      const query = (req.positional || []).join(" ");
-      if (!query) throw new Error('context: "positional" with query text is required');
-      const { assembleContext } = await import("./context");
-      return assembleContext(query, { ...opts, json: true });
+      const { respondDeprecation } = await import("./response");
+      respondDeprecation("context", "search --expand", 'Use: {"command":"search","positional":["<query>"],"flags":{"expand":true}}');
+      return;
     }
     case "lint": {
       const { runLint } = await import("./lint");

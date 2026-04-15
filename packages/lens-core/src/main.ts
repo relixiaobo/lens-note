@@ -14,7 +14,7 @@ const command = args[0];
 // Used by AI agents. Content never touches the shell parser.
 if (command === "--stdin") {
   if (process.stdin.isTTY) {
-    console.log(JSON.stringify({ error: { code: "no_input", message: "No piped input. Usage: printf '%s' '{\"command\":\"...\"}' | lens --stdin" } }));
+    console.log(JSON.stringify({ ok: false, error: { code: "no_input", message: "No piped input. Usage: printf '%s' '{\"command\":\"...\"}' | lens --stdin" } }));
     process.exit(1);
   }
 
@@ -22,12 +22,12 @@ if (command === "--stdin") {
   try {
     raw = readFileSync(0, "utf-8").trim();
   } catch {
-    console.log(JSON.stringify({ error: { code: "empty_stdin", message: "Expected JSON request on stdin" } }));
+    console.log(JSON.stringify({ ok: false, error: { code: "empty_stdin", message: "Expected JSON request on stdin" } }));
     process.exit(1);
   }
 
   if (!raw) {
-    console.log(JSON.stringify({ error: { code: "empty_stdin", message: "Expected JSON request on stdin" } }));
+    console.log(JSON.stringify({ ok: false, error: { code: "empty_stdin", message: "Expected JSON request on stdin" } }));
     process.exit(1);
   }
 
@@ -39,7 +39,7 @@ if (command === "--stdin") {
     }
     req = parsed as RequestEnvelope;
   } catch (e: any) {
-    console.log(JSON.stringify({ error: { code: "invalid_request", message: e.message } }));
+    console.log(JSON.stringify({ ok: false, error: { code: "invalid_request", message: e.message } }));
     process.exit(1);
   }
 
@@ -47,7 +47,7 @@ if (command === "--stdin") {
     await dispatchRequest(req);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.log(JSON.stringify({ error: { code: "command_error", message, command: req.command } }, null, 2));
+    console.log(JSON.stringify({ ok: false, error: { code: "command_error", message }, command: req.command }, null, 2));
     process.exit(1);
   }
   process.exit(process.exitCode || 0);
@@ -75,7 +75,7 @@ Agent mode (recommended for programmatic use):
     printf '%s' '{"command":"write","input":{"type":"note","title":"My insight","body":"..."}}' | lens --stdin
     printf '%s' '{"command":"write","input":{"type":"link","from":"note_A","rel":"supports","to":"note_B","reason":"..."}}' | lens --stdin
     printf '%s' '{"command":"fetch","positional":["https://..."],"flags":{"save":true}}' | lens --stdin
-    printf '%s' '{"command":"status"}' | lens --stdin
+    printf '%s' '{"command":"lint","flags":{"summary":true}}' | lens --stdin
 
   Write input types:
     {"type":"note",   "title":"...", "body":"...", "links":[{"to":"ID","rel":"supports","reason":"..."}]}
@@ -89,21 +89,25 @@ Agent mode (recommended for programmatic use):
 
 Shell mode:
   Search & Read:
-    search "<query>" --json          Full-text search (CJK-aware, + --limit N)
-    search "<query>" --resolve --json  Resolve title → ID (exact match first)
-    show <id|title> --json             Full object with body + forward/backward links
-    links <id|title> --json            All relationships (forward + backward)
-    context "<query>" --json         Context pack with full note bodies
-    list notes|sources --json        Browse by type (+ --orphans, --since 7d, --limit N, --offset N)
-    tasks [--all|--done] --json      List tasks (default: open)
-    similar <id|title> --json          Near-duplicates (+ --threshold 0.0-1.0)
-    similar --all --json             Scan all notes, group duplicates
-    digest [week|month|year] --json  Recent insights (+ --days N)
-    status --json                    Stats + graph health + user context
-    lint --json                      Graph quality checks with offender IDs
+    search "<query>" --json              Full-text search (CJK-aware, + --limit N)
+    search "<query>" --resolve --json    Resolve title → ID (exact match first)
+    search "<query>" --expand --json     Search with full bodies + links
+    show <id> [id2...] --json              Show object(s) with body + links (batch supported)
+    links <id> --json                    All relationships (forward + backward)
+    links <id> --rel related --json      Filter by relationship type
+    links <id> --direction forward --json  Only outgoing links
+    list notes --orphans --json          Orphan notes (+ --since, --limit, --offset)
+    list notes --min-links 10 --json     Hub notes by link count
+    list sources --source-type book --json  Filter by source type
+    list tasks --status open --json      Tasks by status
+    similar <id> --json                  Near-duplicates (+ --threshold 0.0-1.0)
+    similar --all --json                 Scan all notes, group duplicates
+    digest [week|month|year] --json      Recent insights (+ --days N)
+    lint --json                          Graph quality checks with offender IDs
+    lint --summary --json                Stats + graph health + user context
 
   Write:
-    write --file <path> --json       Write note/source/task/link/unlink/update/delete/batch
+    write --file <path> --json       Write note/source/task/link/unlink/update/delete/retype/merge/batch
     fetch <url> [--save] --json      Extract web content (--save creates source)
     note "<title>" --json            Quick note (no body/links)
     ingest <url|file> --json         Save source (fetch --save alias, auto-detects .md files)
@@ -135,13 +139,14 @@ Options:
   --help, -h     Show this help
   --version, -v  Show version
 
-Errors: {"error": {"code": "...", "message": "..."}}
+Success: {"ok": true, "data": {...}}
+Errors:  {"ok": false, "error": {"code": "...", "message": "..."}}
 `);
   process.exit(0);
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.8.0");
+  console.log("lens v1.10.0");
   process.exit(0);
 }
 
@@ -153,7 +158,7 @@ const handler = commands[command];
 if (!handler) {
   const available = Object.keys(commands).join(", ");
   if (jsonFlag) {
-    console.log(JSON.stringify({ error: { code: "unknown_command", message: `Unknown command: ${command}`, hint: `Available commands: ${available}` } }));
+    console.log(JSON.stringify({ ok: false, error: { code: "unknown_command", message: `Unknown command: ${command}` }, hint: `Available commands: ${available}` }));
   } else {
     console.error(`Unknown command: ${command}`);
     console.error(`Available: ${available}`);
@@ -167,7 +172,7 @@ try {
 } catch (err: unknown) {
   const message = err instanceof Error ? err.message : String(err);
   if (jsonFlag) {
-    console.log(JSON.stringify({ error: { code: "command_error", message, command } }, null, 2));
+    console.log(JSON.stringify({ ok: false, error: { code: "command_error", message }, command }, null, 2));
   } else {
     console.error(`Error: ${message}`);
   }

@@ -7,6 +7,7 @@
 import { generateId, type Note } from "../core/types";
 import { saveObject, ensureInitialized } from "../core/storage";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export async function createNote(title: string, opts: CommandOptions) {
   ensureInitialized();
@@ -25,7 +26,7 @@ export async function createNote(title: string, opts: CommandOptions) {
   saveObject(note, "");
 
   if (opts.json) {
-    console.log(JSON.stringify({ ...note, action: "created" }));
+    respondSuccess({ ...note, action: "created" });
   } else {
     console.log(`Created note: ${id}`);
     console.log(`  "${title.length > 80 ? title.substring(0, 77) + "..." : title}"`);

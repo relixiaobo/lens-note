@@ -8,6 +8,7 @@
 
 import { readObject, findSimilarNotes, findAllSimilarGroups, ensureInitialized, resolveIdOrTitle } from "../core/storage";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export async function showSimilar(input: string | undefined, opts: CommandOptions) {
   ensureInitialized();
@@ -26,7 +27,7 @@ export async function showSimilar(input: string | undefined, opts: CommandOption
     const result = findAllSimilarGroups(threshold);
 
     if (opts.json) {
-      console.log(JSON.stringify(result, null, 2));
+      respondSuccess(result);
     } else {
       if (result.count === 0) {
         console.log(`No similar groups found (threshold: ${threshold})`);
@@ -55,7 +56,8 @@ export async function showSimilar(input: string | undefined, opts: CommandOption
   const resolved = resolveIdOrTitle(input);
   if ("error" in resolved) {
     if (opts.json && resolved.candidates) {
-      console.log(JSON.stringify({ error: { code: "ambiguous_match", message: resolved.error, candidates: resolved.candidates } }));
+      const { respondError } = await import("./response");
+      respondError("ambiguous_match", resolved.error, undefined, { candidates: resolved.candidates });
       return;
     }
     throw new Error(resolved.error);
@@ -69,7 +71,7 @@ export async function showSimilar(input: string | undefined, opts: CommandOption
   const results = findSimilarNotes(id, threshold);
 
   if (opts.json) {
-    console.log(JSON.stringify({ id, count: results.length, results }, null, 2));
+    respondSuccess({ id, count: results.length, results });
   } else {
     if (results.length === 0) {
       console.log(`No similar notes found (threshold: ${threshold})`);

@@ -12,6 +12,7 @@ import { addFeed, listFeeds, removeFeed } from "../feeds/feed-store";
 import { checkAllFeeds } from "../feeds/feed-checker";
 import { ensureInitialized } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export async function handleFeed(sub: string, args: string[], opts: CommandOptions) {
   ensureInitialized();
@@ -80,7 +81,7 @@ async function feedAdd(url: string, opts: CommandOptions) {
   const feed = addFeed(feedUrl, feedTitle);
 
   if (opts.json) {
-    console.log(JSON.stringify(feed, null, 2));
+    respondSuccess(feed);
   } else {
     console.log(`Subscribed: ${feed.id}`);
     console.log(`  URL: ${feedUrl}`);
@@ -99,12 +100,12 @@ async function feedImport(filePath: string, opts: CommandOptions) {
   const { added, skipped } = await importOpml(xml);
 
   if (opts.json) {
-    console.log(JSON.stringify({
+    respondSuccess({
       imported: added.length,
       skipped: skipped.length,
       feeds: added.map((f) => ({ id: f.id, title: f.title, url: f.url })),
       skipped_titles: skipped,
-    }, null, 2));
+    });
   } else {
     console.log(`Imported ${added.length} feed(s) from OPML:`);
     for (const f of added) {
@@ -124,7 +125,7 @@ async function feedList(opts: CommandOptions) {
   const feeds = listFeeds();
 
   if (opts.json) {
-    console.log(JSON.stringify({ count: feeds.length, feeds }, null, 2));
+    respondSuccess({ count: feeds.length, feeds });
   } else {
     if (feeds.length === 0) {
       console.log("No feeds subscribed. Use: lens feed add <rss-url>");
@@ -154,7 +155,7 @@ async function feedCheck(opts: CommandOptions) {
 
   if (allNew.length === 0) {
     if (opts.json) {
-      console.log(JSON.stringify({ new_articles: 0, errors, results: [] }));
+      respondSuccess({ new_articles: 0, errors, results: [] });
     } else {
       log("\nNo new articles found across all feeds.");
       if (errors.length) log(`(${errors.length} feed(s) had errors)`);
@@ -164,9 +165,7 @@ async function feedCheck(opts: CommandOptions) {
 
   if (dryRun) {
     if (opts.json) {
-      console.log(
-        JSON.stringify({ dry_run: true, new_articles: allNew.length, articles: allNew }, null, 2)
-      );
+      respondSuccess({ dry_run: true, new_articles: allNew.length, articles: allNew });
     } else {
       log(`\n${allNew.length} new article(s) found (dry run, not ingesting):\n`);
       for (const a of allNew) {
@@ -181,9 +180,7 @@ async function feedCheck(opts: CommandOptions) {
   // No auto-ingest — just report new articles.
   // Agents should call `lens fetch <url> --save` for each article they want to compile.
   if (opts.json) {
-    console.log(
-      JSON.stringify({ new_articles: allNew.length, articles: allNew }, null, 2)
-    );
+    respondSuccess({ new_articles: allNew.length, articles: allNew });
   } else {
     log(`\n${allNew.length} new article(s) found:\n`);
     for (const a of allNew) {
@@ -207,7 +204,7 @@ async function feedRemove(idOrUrl: string, opts: CommandOptions) {
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ removed: removed.id, url: removed.url }));
+    respondSuccess({ removed: removed.id, url: removed.url });
   } else {
     console.log(`Removed feed: ${removed.id}`);
     console.log(`  URL: ${removed.url}`);

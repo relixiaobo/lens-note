@@ -11,6 +11,7 @@ import { generateId, type Source, type SourceType } from "../core/types";
 import { saveObject, ensureInitialized } from "../core/storage";
 import { paths } from "../core/paths";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export async function ingestSource(target: string, opts: CommandOptions) {
   const isUrl = target.startsWith("http://") || target.startsWith("https://");
@@ -49,7 +50,7 @@ export async function ingestSource(target: string, opts: CommandOptions) {
     saveObject(source, result.markdown);
 
     if (opts.json) {
-      console.log(JSON.stringify({ id: sourceId, type: "source", action: "created", title: result.title, word_count: result.wordCount }, null, 2));
+      respondSuccess({ id: sourceId, type: "source", action: "created", title: result.title, word_count: result.wordCount });
     } else {
       console.log(`Source saved: ${sourceId} — "${result.title}" (${result.wordCount} words)`);
     }

@@ -9,6 +9,7 @@ import { paths } from "../core/paths";
 import { listObjects, readObject, getForwardLinks, getBacklinks } from "../core/storage";
 import { readConfig } from "./config";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 function fileSize(path: string): number {
   return existsSync(path) ? statSync(path).size : 0;
@@ -19,7 +20,7 @@ export async function showStatus(opts: CommandOptions) {
 
   if (!initialized) {
     if (opts.json) {
-      console.log(JSON.stringify({ initialized: false }));
+      respondSuccess({ initialized: false });
     } else {
       console.log("lens is not initialized. Run: lens init");
     }
@@ -99,7 +100,7 @@ export async function showStatus(opts: CommandOptions) {
   if (config.context) status.context = config.context;
 
   if (opts.json) {
-    console.log(JSON.stringify(status, null, 2));
+    respondSuccess(status);
   } else {
     const check = (ok: boolean) => ok ? "OK" : "!!";
     console.log(`lens status`);

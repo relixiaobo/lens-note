@@ -16,6 +16,7 @@ import { execFileSync } from "child_process";
 import { paths } from "../core/paths";
 import { readObject, ensureInitialized } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 // ============================================================
 // Storage
@@ -95,7 +96,7 @@ function indexList(opts: CommandOptions): void {
     for (const kw of keys) {
       enriched[kw] = keywords[kw].map(id => ({ id, title: resolveTitle(id) }));
     }
-    console.log(JSON.stringify({ count: keys.length, keywords: enriched }, null, 2));
+    respondSuccess({ count: keys.length, keywords: enriched });
   } else {
     if (keys.length === 0) {
       console.log("No keyword entries. Use: lens index add \"<keyword>\" <note_id>");
@@ -120,7 +121,7 @@ function indexShow(keyword: string, opts: CommandOptions): void {
   if (entries) {
     const enriched = entries.map(id => ({ id, title: resolveTitle(id) }));
     if (opts.json) {
-      console.log(JSON.stringify({ keyword, entries: enriched }, null, 2));
+      respondSuccess({ keyword, entries: enriched });
     } else {
       console.log(`${keyword}:`);
       for (const e of enriched) {
@@ -144,7 +145,7 @@ function indexShow(keyword: string, opts: CommandOptions): void {
       matched[kw] = keywords[kw].map(id => ({ id, title: resolveTitle(id) }));
     }
     if (opts.json) {
-      console.log(JSON.stringify({ keyword, exact_match: false, matched_keywords: matched }, null, 2));
+      respondSuccess({ keyword, exact_match: false, matched_keywords: matched });
     } else {
       console.log(`No exact match for "${keyword}", but found related keywords:\n`);
       for (const kw of fuzzyMatches) {
@@ -159,7 +160,7 @@ function indexShow(keyword: string, opts: CommandOptions): void {
 
   // No fuzzy match either — return all available keywords
   if (opts.json) {
-    console.log(JSON.stringify({ keyword, entries: [], available_keywords: allKeywords }, null, 2));
+    respondSuccess({ keyword, entries: [], available_keywords: allKeywords });
   } else {
     if (allKeywords.length === 0) {
       console.log(`No entries for "${keyword}". No keywords exist yet. Use: lens index add "${keyword}" <note_id>`);
@@ -189,7 +190,7 @@ function indexAdd(keyword: string | undefined, noteId: string | undefined, opts:
   // Idempotent check
   if (entries.includes(noteId)) {
     if (opts.json) {
-      console.log(JSON.stringify({ action: "already_exists", keyword, id: noteId }));
+      respondSuccess({ action: "already_exists", keyword, id: noteId });
     } else {
       console.log(`Already registered: "${noteId}" under "${keyword}"`);
     }
@@ -208,7 +209,7 @@ function indexAdd(keyword: string | undefined, noteId: string | undefined, opts:
 
   const title = (obj.data as any).title || "(untitled)";
   if (opts.json) {
-    console.log(JSON.stringify({ action: "added", keyword, id: noteId, title, entry_count: entries.length }));
+    respondSuccess({ action: "added", keyword, id: noteId, title, entry_count: entries.length });
   } else {
     console.log(`Added "${noteId}" to keyword "${keyword}" (${entries.length}/${MAX_ENTRIES_PER_KEYWORD} entries)`);
   }
@@ -237,7 +238,7 @@ function indexRemove(keyword: string | undefined, noteId: string | undefined, op
     gitCommitIndex(`lens: index remove "${keyword}" ${noteId}`);
 
     if (opts.json) {
-      console.log(JSON.stringify({ action: "removed_entry", keyword, id: noteId }));
+      respondSuccess({ action: "removed_entry", keyword, id: noteId });
     } else {
       console.log(`Removed "${noteId}" from keyword "${keyword}"`);
     }
@@ -249,7 +250,7 @@ function indexRemove(keyword: string | undefined, noteId: string | undefined, op
     gitCommitIndex(`lens: index remove "${keyword}"`);
 
     if (opts.json) {
-      console.log(JSON.stringify({ action: "removed", keyword, removed_entries: removed }));
+      respondSuccess({ action: "removed", keyword, removed_entries: removed });
     } else {
       console.log(`Removed keyword "${keyword}" (was ${removed.length} entry/entries)`);
     }

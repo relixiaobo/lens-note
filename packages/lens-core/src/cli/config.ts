@@ -20,6 +20,7 @@ import yaml from "js-yaml";
 import { paths } from "../core/paths";
 import { ensureInitialized } from "../core/storage";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export interface LensConfig {
   context?: {
@@ -76,7 +77,7 @@ export async function handleConfig(args: string[], opts: CommandOptions) {
   if (!action || action === "list") {
     const config = readConfig();
     if (opts.json) {
-      console.log(JSON.stringify(config, null, 2));
+      respondSuccess(config);
     } else {
       const content = yaml.dump(config, { lineWidth: -1, noRefs: true });
       console.log(content.trim() || "(empty config)");
@@ -94,7 +95,7 @@ export async function handleConfig(args: string[], opts: CommandOptions) {
       if (value === undefined) {
         result.available_keys = ["context.role", "context.audience", "context.language", "context.style"];
       }
-      console.log(JSON.stringify(result));
+      respondSuccess(result);
     } else {
       console.log(value !== undefined ? String(value) : "(not set)");
     }
@@ -109,7 +110,7 @@ export async function handleConfig(args: string[], opts: CommandOptions) {
     setNestedValue(config, key, value);
     writeConfig(config);
     if (opts.json) {
-      console.log(JSON.stringify({ key, value, action: "set" }));
+      respondSuccess({ key, value, action: "set" });
     } else {
       console.log(`${key} = ${value}`);
     }

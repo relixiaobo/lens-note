@@ -27,6 +27,7 @@ describe("JSON parse error messages", () => {
       const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
       assert.equal(exitCode, 1);
       const out = JSON.parse(stdout);
+      assert.equal(out.ok, false);
       assert.match(out.error.message, /Invalid JSON input: /);
       assert.match(out.error.message, /position/i);
     } finally {
@@ -41,6 +42,7 @@ describe("JSON parse error messages", () => {
       const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
       assert.equal(exitCode, 1);
       const out = JSON.parse(stdout);
+      assert.equal(out.ok, false);
       assert.match(out.error.message, /Invalid JSON input: /);
       assert.match(out.error.message, /position/i);
     } finally {
@@ -55,6 +57,7 @@ describe("JSON parse error messages", () => {
       const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
       assert.equal(exitCode, 1);
       const out = JSON.parse(stdout);
+      assert.equal(out.ok, false);
       assert.match(out.error.message, /Invalid JSON input: /);
     } finally {
       unlinkSync(tmpFile);
@@ -78,7 +81,7 @@ describe("batch write link results", () => {
     try {
       const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
       assert.equal(exitCode, 0);
-      const out = JSON.parse(stdout);
+      const out = JSON.parse(stdout).data;
 
       assert.equal(out.results.length, 3);
       assert.ok(out.results[0].id);
@@ -106,7 +109,7 @@ describe("batch write link results", () => {
     let noteA: string, noteB: string;
     try {
       const { stdout } = lens("write", "--file", tmpFile1, "--json");
-      const out = JSON.parse(stdout);
+      const out = JSON.parse(stdout).data;
       noteA = out.results[0].id;
       noteB = out.results[1].id;
     } finally {
@@ -118,7 +121,7 @@ describe("batch write link results", () => {
     writeFileSync(tmpFile2, JSON.stringify(batch2));
     try {
       const { stdout } = lens("write", "--file", tmpFile2, "--json");
-      const out = JSON.parse(stdout);
+      const out = JSON.parse(stdout).data;
 
       const unlinkResult = out.results[0];
       assert.equal(unlinkResult.type, "unlink");
@@ -139,7 +142,7 @@ describe("batch write link results", () => {
     writeFileSync(tmpFile, JSON.stringify(batch));
     try {
       const { stdout } = lens("write", "--file", tmpFile, "--json");
-      const out = JSON.parse(stdout);
+      const out = JSON.parse(stdout).data;
 
       const result = out.results[0];
       assert.equal(result.type, "note");
@@ -176,6 +179,7 @@ describe("secret detection", () => {
         const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
         assert.equal(exitCode, 1);
         const out = JSON.parse(stdout);
+        assert.equal(out.ok, false);
         assert.match(out.error.message, /API key or secret/);
       } finally {
         unlinkSync(tmpFile);
@@ -190,7 +194,7 @@ describe("secret detection", () => {
     try {
       const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
       assert.equal(exitCode, 0);
-      const out = JSON.parse(stdout);
+      const out = JSON.parse(stdout).data;
       assert.equal(out.action, "created");
     } finally {
       unlinkSync(tmpFile);
@@ -208,7 +212,10 @@ describe("secret detection", () => {
     try {
       const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
       assert.equal(exitCode, 1);
-      const out = JSON.parse(stdout);
+      const parsed = JSON.parse(stdout);
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.error.code, "partial_failure");
+      const out = parsed.data;
 
       assert.equal(out.results[0].action, "created");
       assert.equal(out.results[1].action, "error");

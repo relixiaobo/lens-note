@@ -1,9 +1,94 @@
 /**
- * lens show <id> — Show any lens object with links.
+ * lens show <id> [id2...] — Show any lens object(s) with links.
+ * Supports batch mode: multiple IDs return {count, items} array.
  */
 
 import { readObject, getBacklinks, ensureInitialized, extractBodyRefs, resolveBodyRefs, resolveIdOrTitle } from "../core/storage";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
+
+/** Read multiple objects at once. Returns array of results. */
+export async function readObjects(inputs: string[], opts: CommandOptions) {
+  ensureInitialized();
+
+  if (inputs.length === 1) {
+    return showObject(inputs[0], opts);
+  }
+
+  // Batch mode: resolve and read each, collect results
+  const results: any[] = [];
+  const errors: any[] = [];
+
+  for (const input of inputs) {
+    const resolved = resolveIdOrTitle(input);
+    if ("error" in resolved) {
+      errors.push({ input, error: resolved.error });
+      continue;
+    }
+    const result = readObject(resolved.id);
+    if (!result) {
+      errors.push({ input, error: `Object not found: ${resolved.id}` });
+      continue;
+    }
+    results.push(buildJsonOutput(resolved.id, result));
+  }
+
+  if (opts.json) {
+    const output: Record<string, any> = { count: results.length, items: results };
+    if (errors.length > 0) output.errors = errors;
+    respondSuccess(output);
+  } else {
+    for (const input of inputs) {
+      await showObject(input, opts);
+    }
+  }
+}
+
+/** Build JSON output for a single object (shared by single and batch modes). */
+function buildJsonOutput(id: string, result: { data: any; content: string }) {
+  const { data, content } = result;
+
+  const enrichLink = (linkId: string) => {
+    const linked = readObject(linkId);
+    return linked ? (linked.data.title || "").substring(0, 120) : "";
+  };
+
+  const forwardLinks = (data.links || []).map((l: any) => ({
+    id: l.to,
+    rel: l.rel,
+    ...(l.reason ? { reason: l.reason } : {}),
+    title: enrichLink(l.to),
+  }));
+
+  const backwardLinks = getBacklinks(id).map(l => ({
+    id: l.from_id,
+    rel: l.rel,
+    title: enrichLink(l.from_id),
+  }));
+
+  const output: Record<string, any> = {
+    id: data.id,
+    type: data.type,
+    title: data.title,
+  };
+  if (data.status) output.status = data.status;
+  if (data.source) output.source = data.source;
+  if (data.source_type) output.source_type = data.source_type;
+  if (data.url) output.url = data.url;
+  if (data.author) output.author = data.author;
+  if (data.word_count) output.word_count = data.word_count;
+  if (data.created_at) output.created_at = data.created_at;
+  if (data.updated_at) output.updated_at = data.updated_at;
+
+  const bodyText = content.trim();
+  output.body = bodyText;
+  const bodyRefs = extractBodyRefs(bodyText);
+  if (bodyRefs.length > 0) output.body_refs = bodyRefs;
+  output.forward_links = forwardLinks;
+  output.backward_links = backwardLinks;
+
+  return output;
+}
 
 export async function showObject(input: string, opts: CommandOptions) {
   ensureInitialized();
@@ -12,7 +97,8 @@ export async function showObject(input: string, opts: CommandOptions) {
   const resolved = resolveIdOrTitle(input);
   if ("error" in resolved) {
     if (opts.json && resolved.candidates) {
-      console.log(JSON.stringify({ error: { code: "ambiguous_match", message: resolved.error, candidates: resolved.candidates } }));
+      const { respondError } = await import("./response");
+      respondError("ambiguous_match", resolved.error, undefined, { candidates: resolved.candidates });
       return;
     }
     throw new Error(resolved.error);
@@ -25,49 +111,7 @@ export async function showObject(input: string, opts: CommandOptions) {
   const { data, content } = result;
 
   if (opts.json) {
-    const enrichLink = (linkId: string) => {
-      const linked = readObject(linkId);
-      return linked ? (linked.data.title || "").substring(0, 120) : "";
-    };
-
-    // Forward links from note's own links array (preserves reason)
-    const forwardLinks = (data.links || []).map((l: any) => ({
-      id: l.to,
-      rel: l.rel,
-      ...(l.reason ? { reason: l.reason } : {}),
-      title: enrichLink(l.to),
-    }));
-
-    // Backward links from SQLite cache
-    const backwardLinks = getBacklinks(id).map(l => ({
-      id: l.from_id,
-      rel: l.rel,
-      title: enrichLink(l.from_id),
-    }));
-
-    // Explicit field selection — no ...data spread
-    const output: Record<string, any> = {
-      id: data.id,
-      type: data.type,
-      title: data.title,
-    };
-    if (data.status) output.status = data.status;
-    if (data.source) output.source = data.source;
-    if (data.source_type) output.source_type = data.source_type;
-    if (data.url) output.url = data.url;
-    if (data.author) output.author = data.author;
-    if (data.word_count) output.word_count = data.word_count;
-    if (data.created_at) output.created_at = data.created_at;
-    if (data.updated_at) output.updated_at = data.updated_at;
-
-    const bodyText = content.trim();
-    output.body = bodyText;
-    const bodyRefs = extractBodyRefs(bodyText);
-    if (bodyRefs.length > 0) output.body_refs = bodyRefs;
-    output.forward_links = forwardLinks;
-    output.backward_links = backwardLinks;
-
-    console.log(JSON.stringify(output, null, 2));
+    respondSuccess(buildJsonOutput(id, result));
   } else {
     // Human-readable display
     const title = data.title || "(untitled)";

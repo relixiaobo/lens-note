@@ -7,6 +7,7 @@
 import { ensureInitialized, listObjects, readObject } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
 import type { Note, NoteLink } from "../core/types";
+import { respondSuccess } from "./response";
 
 export async function showDigest(args: string[], opts: CommandOptions) {
   ensureInitialized();
@@ -58,7 +59,7 @@ export async function showDigest(args: string[], opts: CommandOptions) {
         ? "No notes exist yet."
         : `No notes in the last ${days} day(s). Try a wider range: 'lens digest week' or 'lens digest month'.`;
     }
-    console.log(JSON.stringify(result, null, 2));
+    respondSuccess(result);
     return;
   }
 

@@ -9,6 +9,7 @@ import { join } from "path";
 import { paths } from "../core/paths";
 import { readObject, ensureInitialized } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export async function listTasks(args: string[], opts: CommandOptions) {
   ensureInitialized();
@@ -61,7 +62,7 @@ export async function listTasks(args: string[], opts: CommandOptions) {
         ? `No completed tasks. ${totalOpen} task(s) still open — use 'lens tasks' to see them.`
         : `No open tasks. ${totalDone} completed task(s) — use 'lens tasks --done' to see them.`;
     }
-    console.log(JSON.stringify(result, null, 2));
+    respondSuccess(result);
   } else {
     if (items.length === 0) {
       console.log(showDone ? "No completed tasks." : showAll ? "No tasks." : "No open tasks.");

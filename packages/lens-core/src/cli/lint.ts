@@ -11,7 +11,8 @@
  */
 
 import { getDb, ensureInitialized } from "../core/storage";
-import type { CommandOptions } from "./commands";
+import { parseCliArgs, type CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 interface LintOffender {
   id: string;
@@ -33,6 +34,15 @@ const RELATED_THRESHOLD = 50; // percent
 
 export async function runLint(args: string[], opts: CommandOptions) {
   ensureInitialized();
+
+  const { flags } = parseCliArgs(args);
+
+  // --summary: quick stats + user context (replaces `status` command)
+  if (flags.summary || opts.summary) {
+    const { showStatus } = await import("./status");
+    return showStatus(opts);
+  }
+
   const db = getDb();
   const checks: LintCheck[] = [];
 
@@ -198,7 +208,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
   const failures = checks.filter(c => c.status === "fail").length;
 
   if (opts.json) {
-    console.log(JSON.stringify({
+    respondSuccess({
       checks,
       summary: {
         total_checks: checks.length,
@@ -209,7 +219,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
       ...(failures > 0 ? {
         hint: "Use offender IDs to fix issues: `lens show <id>`, `lens links <id>`, or `lens write --file` for batch updates.",
       } : {}),
-    }, null, 2));
+    });
   } else {
     const icon = (s: string) => s === "ok" ? "✓" : s === "warn" ? "⚠" : "✗";
     console.log("lens lint\n");

@@ -4,8 +4,10 @@
  * JSON output includes type-specific fields so LLMs don't need follow-up show calls.
  */
 
-import { searchIndex, getObjectFromCache, ensureInitialized, resolveIdOrTitle } from "../core/storage";
+import { searchIndex, getObjectFromCache, listObjects, ensureInitialized, resolveIdOrTitle, extractBodyRefs } from "../core/storage";
+import type { Note } from "../core/types";
 import type { CommandOptions } from "./commands";
+import { respondSuccess, respondError } from "./response";
 
 export async function searchObjects(query: string, opts: CommandOptions) {
   ensureInitialized();
@@ -16,13 +18,18 @@ export async function searchObjects(query: string, opts: CommandOptions) {
     if ("id" in resolved) {
       const obj = getObjectFromCache(resolved.id);
       const title = obj ? (obj.obj as any).title : resolved.id;
-      console.log(JSON.stringify({ id: resolved.id, title }));
+      respondSuccess({ id: resolved.id, title });
     } else if (resolved.candidates) {
-      console.log(JSON.stringify({ error: { code: "ambiguous_match", candidates: resolved.candidates } }));
+      respondError("ambiguous_match", resolved.error || "Multiple matches", "Narrow your query or use an exact ID.", { candidates: resolved.candidates });
     } else {
-      console.log(JSON.stringify({ error: { code: "no_match", message: resolved.error, hint: "Try a broader query with 'lens search' (without --resolve), or check 'lens index' for keyword entry points." } }));
+      respondError("no_match", resolved.error || "No match found", "Try a broader query with 'lens search' (without --resolve), or check 'lens index' for keyword entry points.");
     }
     return;
+  }
+
+  // --expand: delegate to expanded search (replaces `context` command)
+  if (opts.expand) {
+    return searchExpanded(query, opts);
   }
 
   let results = searchIndex(query);
@@ -59,7 +66,7 @@ export async function searchObjects(query: string, opts: CommandOptions) {
 
     const result: Record<string, any> = { query, total: totalCount, count: enriched.length, results: enriched };
     if (limit !== undefined) result.limit = limit;
-    console.log(JSON.stringify(result, null, 2));
+    respondSuccess(result);
   } else {
     if (results.length === 0) {
       console.log(`No results for "${query}"`);
@@ -73,4 +80,48 @@ export async function searchObjects(query: string, opts: CommandOptions) {
       console.log();
     }
   }
+}
+
+/**
+ * search --expand: return search results with full bodies and links.
+ * Replaces the `context` command. Same output format for compatibility.
+ */
+async function searchExpanded(query: string, opts: CommandOptions) {
+  const results = searchIndex(query);
+  const noteMap = new Map<string, any>();
+
+  for (const r of results) {
+    if (noteMap.has(r.id)) continue;
+    const cached = getObjectFromCache(r.id);
+    if (!cached || cached.obj.type !== "note") continue;
+
+    const note = cached.obj as Note;
+    const bodyText = cached.body?.trim() || "";
+    const bodyRefs = extractBodyRefs(bodyText);
+    noteMap.set(note.id, {
+      id: note.id,
+      title: note.title,
+      source: note.source,
+      forward_links: note.links || [],
+      body: bodyText,
+      ...(bodyRefs.length > 0 ? { body_refs: bodyRefs } : {}),
+    });
+  }
+
+  const notes = Array.from(noteMap.values());
+  const pack: Record<string, any> = {
+    query,
+    timestamp: new Date().toISOString(),
+    notes,
+    total_results: notes.length,
+  };
+
+  if (notes.length === 0) {
+    pack.total_notes = listObjects("note").length;
+    pack.hint = pack.total_notes === 0
+      ? "No notes exist yet. Create notes with 'lens write'."
+      : "No notes matched this query. Try different keywords, or use 'lens search' to explore, or 'lens index' for entry points.";
+  }
+
+  respondSuccess(pack);
 }

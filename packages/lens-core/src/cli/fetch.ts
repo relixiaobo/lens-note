@@ -11,6 +11,7 @@ import { generateId, type Source } from "../core/types";
 import { saveObject, ensureInitialized, getDb } from "../core/storage";
 import { paths } from "../core/paths";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export async function fetchUrl(url: string, opts: CommandOptions) {
   ensureInitialized();
@@ -58,14 +59,14 @@ export async function fetchUrl(url: string, opts: CommandOptions) {
   if (opts.json) {
     // Sanitize markdown for JSON output (replace all control chars except \n and \t)
     const cleanMarkdown = result.markdown.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, " ");
-    console.log(JSON.stringify({
+    respondSuccess({
       title: result.title,
       author: result.author || null,
       url,
       word_count: result.wordCount,
       markdown: cleanMarkdown,
       ...(sourceId ? { source_id: sourceId } : {}),
-    }, null, 2));
+    });
   } else {
     if (sourceId) {
       console.log(`Source saved: ${sourceId} — "${result.title}" (${result.wordCount} words)`);

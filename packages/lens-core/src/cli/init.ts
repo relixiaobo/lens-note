@@ -8,12 +8,13 @@ import { execFileSync } from "child_process";
 import { paths, objectDirs } from "../core/paths";
 import { getDb, closeDb } from "../core/storage";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export async function initLens(opts: CommandOptions) {
   if (existsSync(paths.config)) {
     const msg = "lens is already initialized at " + paths.root;
     if (opts.json) {
-      console.log(JSON.stringify({ status: "already_initialized", path: paths.root }));
+      respondSuccess({ status: "already_initialized", path: paths.root });
     } else {
       console.log(msg);
     }
@@ -61,7 +62,7 @@ export async function initLens(opts: CommandOptions) {
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ status: "initialized", path: paths.root }));
+    respondSuccess({ status: "initialized", path: paths.root });
   } else {
     console.log(`Initialized lens at ${paths.root}`);
     console.log(`\nCreated:`);

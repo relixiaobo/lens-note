@@ -14,12 +14,12 @@ after(() => cleanup());
 
 function write(input: object) {
   const { stdout } = lensStdin({ command: "write", input });
-  return JSON.parse(stdout);
+  return JSON.parse(stdout).data;
 }
 
 function show(id: string) {
   const { stdout } = lensStdin({ command: "show", positional: [id], flags: { json: true } });
-  return JSON.parse(stdout);
+  return JSON.parse(stdout).data;
 }
 
 describe("body reference extraction", () => {
@@ -110,7 +110,7 @@ describe("body reference extraction", () => {
     assert.equal(shown.body_refs, undefined, "should not have body_refs when none found");
   });
 
-  it("extracts refs in context output", () => {
+  it("extracts refs in search --expand output", () => {
     const a = write({ type: "note", title: "Context Target", body: "important content" });
     const b = write({
       type: "note",
@@ -118,12 +118,12 @@ describe("body reference extraction", () => {
       body: `Refers to [[${a.id}]] here.`,
     });
 
-    const { stdout } = lensStdin({ command: "context", positional: ["Context Source"], flags: { json: true } });
-    const ctx = JSON.parse(stdout);
+    const { stdout } = lensStdin({ command: "search", positional: ["Context Source"], flags: { expand: true } });
+    const ctx = JSON.parse(stdout).data;
     const found = ctx.notes.find((n: any) => n.id === b.id);
-    assert.ok(found, "should find the note in context");
+    assert.ok(found, "should find the note in search --expand");
     // Body stays raw
-    assert.ok(found.body.includes(`[[${a.id}]]`), "context body should contain raw [[ID]]");
+    assert.ok(found.body.includes(`[[${a.id}]]`), "expanded body should contain raw [[ID]]");
     // body_refs provides title
     assert.ok(Array.isArray(found.body_refs));
     assert.equal(found.body_refs[0].title, "Context Target");

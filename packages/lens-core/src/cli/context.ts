@@ -7,6 +7,7 @@
 import { searchIndex, getObjectFromCache, listObjects, ensureInitialized, extractBodyRefs } from "../core/storage";
 import type { Note } from "../core/types";
 import type { CommandOptions } from "./commands";
+import { respondSuccess } from "./response";
 
 export async function assembleContext(query: string, opts: CommandOptions) {
   ensureInitialized();
@@ -47,5 +48,5 @@ export async function assembleContext(query: string, opts: CommandOptions) {
       : "No notes matched this query. Try different keywords, or use 'lens search' to explore, or 'lens index' for entry points.";
   }
 
-  console.log(JSON.stringify(pack, null, 2));
+  respondSuccess(pack);
 }

@@ -2,9 +2,10 @@
  * lens list <type> [--since] — Browse objects by type.
  */
 
-import { listObjects, readObject, getOrphanNotes, ensureInitialized } from "../core/storage";
+import { listObjects, readObject, getOrphanNotes, getForwardLinks, getBacklinks, ensureInitialized } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
 import type { ObjectType } from "../core/types";
+import { respondSuccess } from "./response";
 
 const TYPE_MAP: Record<string, ObjectType> = {
   notes: "note", note: "note",
@@ -31,7 +32,7 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     const offset = flags.offset ? parseInt(String(flags.offset)) : undefined;
     const orphans = getOrphanNotes(limit, offset);
     if (opts.json) {
-      console.log(JSON.stringify({ type: "notes", filter: "orphans", count: orphans.length, items: orphans }, null, 2));
+      respondSuccess({ type: "notes", filter: "orphans", count: orphans.length, items: orphans });
     } else {
       if (orphans.length === 0) { console.log("No orphan notes."); return; }
       console.log(`${orphans.length} orphan notes:\n`);
@@ -60,6 +61,37 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     items = items.filter((item) => (item.created_at || "") > cutoff);
   }
 
+  // --min-links / --max-links: filter by total link count (forward + backward)
+  const minLinks = flags["min-links"] !== undefined ? parseInt(String(flags["min-links"])) : undefined;
+  const maxLinks = flags["max-links"] !== undefined ? parseInt(String(flags["max-links"])) : undefined;
+  if (minLinks !== undefined && (!Number.isInteger(minLinks) || minLinks < 0)) throw new Error("--min-links must be a non-negative integer");
+  if (maxLinks !== undefined && (!Number.isInteger(maxLinks) || maxLinks < 0)) throw new Error("--max-links must be a non-negative integer");
+  if (minLinks !== undefined || maxLinks !== undefined) {
+    items = items.filter((item) => {
+      const fwd = getForwardLinks(item.id).length;
+      const bwd = getBacklinks(item.id).length;
+      const total = fwd + bwd;
+      if (minLinks !== undefined && total < minLinks) return false;
+      if (maxLinks !== undefined && total > maxLinks) return false;
+      return true;
+    });
+  }
+
+  // --source-type: filter sources by source_type
+  if (flags["source-type"]) {
+    if (objType !== "source") throw new Error("--source-type only works with sources");
+    const st = String(flags["source-type"]);
+    items = items.filter((item) => item.source_type === st);
+  }
+
+  // --status: filter tasks by status
+  if (flags.status) {
+    if (objType !== "task") throw new Error("--status only works with tasks");
+    const st = String(flags.status);
+    if (st !== "open" && st !== "done") throw new Error(`--status "${st}" is invalid. Valid: open, done`);
+    items = items.filter((item) => item.status === st);
+  }
+
   const totalCount = items.length;
 
   // Pagination (works for all queries, not just orphans)
@@ -84,7 +116,7 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     const result: Record<string, any> = { type: typeName, total: totalCount, count: summaries.length, items: summaries };
     if (offset > 0) result.offset = offset;
     if (limit !== undefined) result.limit = limit;
-    console.log(JSON.stringify(result, null, 2));
+    respondSuccess(result);
   } else {
     if (items.length === 0) {
       console.log(`No ${typeName} found.`);
