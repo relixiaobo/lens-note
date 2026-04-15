@@ -103,7 +103,8 @@ Shell mode:
     similar <id> --json                  Near-duplicates (+ --threshold 0.0-1.0)
     similar --all --json                 Scan all notes, group duplicates
     digest [week|month|year] --json      Recent insights (+ --days N)
-    lint --json                          Graph quality checks with offender IDs
+    lint --json                          Graph quality checks (9 checks) with offender IDs
+    lint --check --json                  Same + exit code 1 on failures (for CI)
     lint --summary --json                Stats + graph health + user context
 
   Write:
@@ -146,7 +147,7 @@ Errors:  {"ok": false, "error": {"code": "...", "message": "..."}}
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.10.0");
+  console.log("lens v1.11.0");
   process.exit(0);
 }
 

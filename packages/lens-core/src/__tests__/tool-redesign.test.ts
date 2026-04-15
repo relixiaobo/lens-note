@@ -298,6 +298,36 @@ describe("tool redesign v2", () => {
     });
   });
 
+  // ── lint checks ───────────────────────────────────────────
+
+  describe("lint checks", () => {
+    it("runs all 9 checks", () => {
+      const { stdout } = lensStdin({ command: "lint" });
+      const result = JSON.parse(stdout).data;
+      assert.equal(result.summary.total_checks, 9);
+      const names = result.checks.map((c: any) => c.name);
+      assert.ok(names.includes("vague_reasons"));
+      assert.ok(names.includes("thin_notes"));
+      assert.ok(names.includes("superseded_alive"));
+    });
+
+    it("detects thin notes", () => {
+      // noteC was created with no body
+      const { stdout } = lensStdin({ command: "lint" });
+      const result = JSON.parse(stdout).data;
+      const thin = result.checks.find((c: any) => c.name === "thin_notes");
+      assert.ok(thin.value > 0, "should detect notes with short/empty bodies");
+    });
+
+    it("--check exits 1 when failures exist", () => {
+      const { stdout, exitCode } = lensStdin({ command: "lint", flags: { check: true } });
+      const result = JSON.parse(stdout).data;
+      // Test graph has contradicts_count=0 which is a failure
+      assert.ok(result.summary.failures > 0);
+      assert.equal(exitCode, 1);
+    });
+  });
+
   // ── deprecated commands ───────────────────────────────────
 
   describe("deprecated commands", () => {

@@ -6,8 +6,13 @@
  *   contradicts_count  — number of contradicts links (0 = problem)
  *   super_connectors   — notes with > 30 inbound links
  *   missing_reasons    — links without a reason field
+ *   vague_reasons      — links with generic/trivial reasons
  *   duplicate_links    — same from→to pair with multiple rels
  *   dead_links         — links pointing to non-existent objects
+ *   thin_notes         — notes with empty or very short bodies
+ *   superseded_alive   — notes marked superseded but still referenced
+ *
+ * --check: exit code 1 if any failures exist (for CI/automation)
  */
 
 import { getDb, ensureInitialized } from "../core/storage";
@@ -31,6 +36,9 @@ interface LintCheck {
 
 const SUPER_CONNECTOR_THRESHOLD = 30;
 const RELATED_THRESHOLD = 50; // percent
+const THIN_BODY_THRESHOLD = 20; // characters
+const VAGUE_REASON_MIN_LENGTH = 5;
+const VAGUE_REASON_PATTERNS = /^(related|related to|supports|contradicts|refines|see also|similar|同上|相关|参见|参考|类似)\s*\.?$/i;
 
 export async function runLint(args: string[], opts: CommandOptions) {
   ensureInitialized();
@@ -156,7 +164,42 @@ export async function runLint(args: string[], opts: CommandOptions) {
     ...(missingReasonSamples.length > 0 ? { offenders: missingReasonSamples } : {}),
   });
 
-  // ── 5. Duplicate links ────────────────────────────────────
+  // ── 5. Vague reasons ──────────────────────────────────────
+  let vagueReasonCount = 0;
+  const vagueReasonSamples: LintOffender[] = [];
+
+  for (const obj of allLinkedObjects) {
+    try {
+      const parsed = JSON.parse(obj.data);
+      if (!Array.isArray(parsed.links)) continue;
+      for (const link of parsed.links) {
+        if (!link.reason) continue; // missing_reasons catches these
+        const reason = link.reason.trim();
+        if (reason.length < VAGUE_REASON_MIN_LENGTH || VAGUE_REASON_PATTERNS.test(reason)) {
+          vagueReasonCount++;
+          if (vagueReasonSamples.length < 10) {
+            vagueReasonSamples.push({
+              id: obj.id,
+              title: parsed.title,
+              detail: `${link.rel} → ${link.to}: "${reason}"`,
+            });
+          }
+        }
+      }
+    } catch { /* parse errors handled by missing_reasons */ }
+  }
+
+  checks.push({
+    name: "vague_reasons",
+    status: vagueReasonCount > 10 ? "warn" : "ok",
+    value: vagueReasonCount,
+    message: vagueReasonCount > 0
+      ? `${vagueReasonCount} links with vague reasons (< ${VAGUE_REASON_MIN_LENGTH} chars or generic phrases). Reasons should explain HOW, not just restate the rel.`
+      : "All link reasons are specific.",
+    ...(vagueReasonSamples.length > 0 ? { offenders: vagueReasonSamples } : {}),
+  });
+
+  // ── 6. Duplicate links ────────────────────────────────────
   const dupes = db.prepare(`
     SELECT from_id, to_id, GROUP_CONCAT(rel) as rels, COUNT(*) as cnt
     FROM links
@@ -179,7 +222,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
     } : {}),
   });
 
-  // ── 6. Dead links ─────────────────────────────────────────
+  // ── 7. Dead links ─────────────────────────────────────────
   const deadLinks = db.prepare(`
     SELECT l.from_id, l.to_id, l.rel
     FROM links l
@@ -200,6 +243,77 @@ export async function runLint(args: string[], opts: CommandOptions) {
         detail: `${d.rel} → ${d.to_id} (target missing)`,
       })),
     } : {}),
+  });
+
+  // ── 8. Thin notes ─────────────────────────────────────────
+  const allNotes = db.prepare(
+    "SELECT id, data, body FROM objects WHERE type = 'note'"
+  ).all() as { id: string; data: string; body: string }[];
+
+  const thinNotes: LintOffender[] = [];
+  for (const obj of allNotes) {
+    const body = (obj.body || "").trim();
+    if (body.length < THIN_BODY_THRESHOLD) {
+      try {
+        const parsed = JSON.parse(obj.data);
+        thinNotes.push({
+          id: obj.id,
+          title: parsed.title,
+          detail: body.length === 0 ? "empty body" : `${body.length} chars`,
+        });
+      } catch {
+        thinNotes.push({ id: obj.id, detail: "empty body" });
+      }
+    }
+  }
+
+  checks.push({
+    name: "thin_notes",
+    status: thinNotes.length > allNotes.length * 0.3 ? "warn" : "ok",
+    value: thinNotes.length,
+    message: thinNotes.length > 0
+      ? `${thinNotes.length} notes with body < ${THIN_BODY_THRESHOLD} chars. Notes without evidence or reasoning are harder to collide with later.`
+      : "All notes have substantive bodies.",
+    ...(thinNotes.length > 0 ? { offenders: thinNotes.slice(0, 10) } : {}),
+  });
+
+  // ── 9. Superseded alive ──────────────────────────────────
+  const SUPERSEDED_PATTERNS = /superseded|已被替代|已过时|outdated|deprecated|replaced by/i;
+  const supersededAlive: LintOffender[] = [];
+
+  for (const obj of allNotes) {
+    const body = (obj.body || "").trim();
+    if (!SUPERSEDED_PATTERNS.test(body)) continue;
+
+    // This note is marked as superseded — check if it still has inbound links
+    const inbound = db.prepare(
+      "SELECT from_id, rel FROM links WHERE to_id = ? AND from_id LIKE 'note_%'"
+    ).all(obj.id) as { from_id: string; rel: string }[];
+
+    // Inbound links that treat this note as current (not just referencing it)
+    const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines");
+    if (activeInbound.length > 0) {
+      try {
+        const parsed = JSON.parse(obj.data);
+        supersededAlive.push({
+          id: obj.id,
+          title: parsed.title,
+          detail: `${activeInbound.length} active inbound link(s) (${activeInbound.map(l => `${l.rel} ← ${l.from_id}`).slice(0, 3).join(", ")})`,
+        });
+      } catch {
+        supersededAlive.push({ id: obj.id, detail: `${activeInbound.length} active inbound link(s)` });
+      }
+    }
+  }
+
+  checks.push({
+    name: "superseded_alive",
+    status: supersededAlive.length > 0 ? "warn" : "ok",
+    value: supersededAlive.length,
+    message: supersededAlive.length > 0
+      ? `${supersededAlive.length} notes marked superseded but still actively referenced. Redirect inbound links to the replacement note.`
+      : "No superseded notes with stale references.",
+    ...(supersededAlive.length > 0 ? { offenders: supersededAlive } : {}),
   });
 
   // ── Summary ───────────────────────────────────────────────
@@ -234,5 +348,12 @@ export async function runLint(args: string[], opts: CommandOptions) {
     }
     console.log();
     console.log(`  ${passed}/${checks.length} passed, ${warnings} warnings, ${failures} failures`);
+  }
+
+  // --check: exit with non-zero if any failures (for CI/automation)
+  if (flags.check || opts.check) {
+    if (failures > 0) {
+      process.exitCode = 1;
+    }
   }
 }
