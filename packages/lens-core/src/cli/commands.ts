@@ -164,6 +164,11 @@ async function indexCommand(args: string[], opts: CommandOptions) {
   await handleIndex(sub, args.slice(1), opts);
 }
 
+async function lintCommand(args: string[], opts: CommandOptions) {
+  const { runLint } = await import("./lint");
+  await runLint(args, opts);
+}
+
 async function configCommand(args: string[], opts: CommandOptions) {
   const { handleConfig } = await import("./config");
   await handleConfig(args, opts);
@@ -186,6 +191,7 @@ export const commands: Record<string, CommandHandler> = {
   tasks: tasksCommand,
   similar: similarCommand,
   index: indexCommand,
+  lint: lintCommand,
   config: configCommand,
   "rebuild-index": rebuildIndexCommand,
 };
@@ -293,6 +299,10 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
       if (!query) throw new Error('context: "positional" with query text is required');
       const { assembleContext } = await import("./context");
       return assembleContext(query, { ...opts, json: true });
+    }
+    case "lint": {
+      const { runLint } = await import("./lint");
+      return runLint(toArgv(req), opts);
     }
     case "config": {
       const { handleConfigInput } = await import("./config");

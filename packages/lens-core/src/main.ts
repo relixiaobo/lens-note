@@ -100,6 +100,7 @@ Shell mode:
     similar --all --json             Scan all notes, group duplicates
     digest [week|month|year] --json  Recent insights (+ --days N)
     status --json                    Stats + graph health + user context
+    lint --json                      Graph quality checks with offender IDs
 
   Write:
     write --file <path> --json       Write note/source/task/link/unlink/update/delete/batch
@@ -140,7 +141,7 @@ Errors: {"error": {"code": "...", "message": "..."}}
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.7.9");
+  console.log("lens v1.8.0");
   process.exit(0);
 }
 

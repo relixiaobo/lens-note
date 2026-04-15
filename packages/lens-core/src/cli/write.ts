@@ -28,6 +28,30 @@ const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "rela
 const VALID_SOURCE_TYPES = new Set<SourceType>(["book", "paper", "report", "video", "podcast", "course", "web_article", "newsletter", "social_post", "conversation", "manual_note", "note_batch", "markdown", "plain_text"]);
 const VALID_STATUSES = new Set<TaskStatus>(["open", "done"]);
 
+function validateLinkReason(rel: string, reason: string | undefined, context: string): void {
+  if (rel === "related" && (!reason || !reason.trim())) {
+    throw new Error(
+      `${context}: rel "related" requires a reason explaining HOW they're related. ` +
+      `If you can describe the relationship, consider a more precise rel: ` +
+      `supports (A strengthens B), refines (A is more specific than B), or contradicts (A opposes B).`
+    );
+  }
+}
+
+const RELATED_HINT = 'Consider a more precise rel: supports (A strengthens B), refines (A is more specific than B), contradicts (A opposes B). "related" should be last resort.';
+
+/** Pattern-match reason text to suggest a more precise rel. Returns null if no strong signal. */
+function suggestRel(reason: string | undefined): "supports" | "refines" | "contradicts" | null {
+  if (!reason) return null;
+  // contradicts — explicit opposition indicators only
+  if (/对立|相反|相悖|反驳|(?:两个|不同)视角|opposes?|contradicts?|conflicts? with/i.test(reason)) return "contradicts";
+  // refines — A is more concrete/specific than B
+  if (/具体实现|具体化|细化|更精确|正式版本|工程实现|延伸应用|核心提炼|具体应用|具体方法|implementat|concret|specific.*version/i.test(reason)) return "refines";
+  // supports — A strengthens/validates B
+  if (/支持|支撑|强化|补充|佐证|验证|论证|印证|提供了.*基础|理论基础|呼应|证实|互补|互为|相互印证|前置条件|strengthen|evidence|validates?|reinforc/i.test(reason)) return "supports";
+  return null;
+}
+
 function validateId(id: string, label: string): void {
   if (!id || typeof id !== "string") throw new Error(`${label}: ID is required`);
   if (!readObject(id)) throw new Error(`${label}: "${id}" not found. Use \`lens search\` to find the correct ID.`);
@@ -77,6 +101,8 @@ interface WriteResult {
   type: string;
   action: string;
   message?: string;
+  hint?: string;
+  suggested_rel?: string;
   object?: Record<string, any>;
 }
 
@@ -94,11 +120,15 @@ function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
   // Build links array
   const links: NoteLink[] = [];
   if (input.links) {
+    if (!Array.isArray(input.links)) throw new Error("note.links must be an array of {to, rel, reason?}");
     for (const link of input.links) {
       if (!link.to || !link.rel) throw new Error("note.links: each link needs 'to' and 'rel'");
       if (!VALID_RELS.has(link.rel)) throw new Error(`note.links: rel "${link.rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
+      validateLinkReason(link.rel, link.reason, "note.links");
+      const resolvedTo = resolveRef(link.to);
+      validateId(resolvedTo, "note.links.to");
       links.push({
-        to: resolveRef(link.to),
+        to: resolvedTo,
         rel: link.rel,
         ...(link.reason ? { reason: link.reason } : {}),
       });
@@ -109,7 +139,9 @@ function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
   for (const rel of ["supports", "contradicts", "refines"] as const) {
     if (input[rel]) {
       for (const to of input[rel]) {
-        links.push({ to: resolveRef(to), rel });
+        const resolvedTo = resolveRef(to);
+        validateId(resolvedTo, `note.${rel}`);
+        links.push({ to: resolvedTo, rel });
       }
     }
   }
@@ -133,7 +165,8 @@ function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
 
   const body = input.body || "";
   saveObject(note, body);
-  return { id, type: "note", action: "created", object: { ...note, body } };
+  const hasRelated = links.some(l => l.rel === "related");
+  return { id, type: "note", action: "created", object: { ...note, body }, ...(hasRelated ? { hint: RELATED_HINT } : {}) };
 }
 
 function writeSource(input: any): WriteResult {
@@ -183,11 +216,15 @@ function writeTask(input: any, batchIds?: Map<string, string>): WriteResult {
   // Build links array (same logic as notes)
   const links: NoteLink[] = [];
   if (input.links) {
+    if (!Array.isArray(input.links)) throw new Error("task.links must be an array of {to, rel, reason?}");
     for (const link of input.links) {
       if (!link.to || !link.rel) throw new Error("task.links: each link needs 'to' and 'rel'");
       if (!VALID_RELS.has(link.rel)) throw new Error(`task.links: rel "${link.rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
+      validateLinkReason(link.rel, link.reason, "task.links");
+      const resolvedTo = resolveRef(link.to);
+      validateId(resolvedTo, "task.links.to");
       links.push({
-        to: resolveRef(link.to),
+        to: resolvedTo,
         rel: link.rel,
         ...(link.reason ? { reason: link.reason } : {}),
       });
@@ -225,24 +262,35 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
 
   if (!from) throw new Error("link: 'from' is required");
   if (!to) throw new Error("link: 'to' is required");
+  if (from.startsWith("$")) throw new Error(`link: unresolved batch reference "${from}". Batch refs ($0, $1...) only work inside array batches.`);
+  if (to.startsWith("$")) throw new Error(`link: unresolved batch reference "${to}". Batch refs ($0, $1...) only work inside array batches.`);
   if (!rel) throw new Error("link: 'rel' is required");
   if (!VALID_RELS.has(rel)) throw new Error(`link: rel "${rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
   if (from === to) throw new Error("link: 'from' and 'to' must be different");
+  validateLinkReason(rel, reason, "link");
 
-  if (!from.startsWith("$")) validateId(from, "link.from");
-  if (!to.startsWith("$")) validateId(to, "link.to");
+  validateId(from, "link.from");
+  validateId(to, "link.to");
 
   // Idempotency: check existing links before creating
   const fromObj = readObject(from);
   const existingLinks: NoteLink[] = fromObj?.data.links || [];
   const existing = existingLinks.find((l: NoteLink) => l.to === to && l.rel === rel);
 
+  // Advisory feedback for "related" links
+  const relatedExtra: Record<string, any> = {};
+  if (rel === "related") {
+    relatedExtra.hint = RELATED_HINT;
+    const suggested = suggestRel(reason);
+    if (suggested) relatedExtra.suggested_rel = suggested;
+  }
+
   if (existing) {
     const sameReason = (existing.reason || undefined) === (reason || undefined);
 
     if (!sameReason) {
       updateLinkReason(from, rel, to, reason);
-      return { type: "link", action: "updated", object: { from, rel, to, reason } };
+      return { type: "link", action: "updated", object: { from, rel, to, reason }, ...relatedExtra };
     }
 
     // Same link, same reason — check for contradicts repair
@@ -255,14 +303,14 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
       }
     }
 
-    return { type: "link", action: "unchanged", object: { from, rel, to, reason } };
+    return { type: "link", action: "unchanged", object: { from, rel, to, reason }, ...relatedExtra };
   }
 
   // New link
   addLinkToExisting(from, rel, to, reason);
   if (rel === "contradicts") addLinkToExisting(to, "contradicts", from, reason);
 
-  return { type: "link", action: "created", object: { from, rel, to, reason } };
+  return { type: "link", action: "created", object: { from, rel, to, reason }, ...relatedExtra };
 }
 
 function writeUnlink(input: any): WriteResult {
@@ -307,8 +355,18 @@ function writeUpdate(input: any): WriteResult {
     }
   }
 
-  // Add links
+  // Add links — validate ALL first, then persist (atomic)
   if (input.add?.links) {
+    if (!Array.isArray(input.add.links)) throw new Error("update.add.links must be an array of {to, rel, reason?}");
+    // Validation pass
+    for (const newLink of input.add.links) {
+      if (!newLink.to || !newLink.rel) throw new Error("update.add.links: each link needs 'to' and 'rel'");
+      if (!VALID_RELS.has(newLink.rel)) throw new Error(`update.add.links: rel "${newLink.rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
+      if (newLink.to === id) throw new Error("update.add.links: cannot link to self");
+      validateLinkReason(newLink.rel, newLink.reason, "update.add.links");
+      validateId(newLink.to, "update.add.links.to");
+    }
+    // Persist pass (only after all validation succeeds)
     const links: NoteLink[] = data.links || [];
     for (const newLink of input.add.links) {
       if (!links.some((l: NoteLink) => l.to === newLink.to && l.rel === newLink.rel)) {
@@ -566,7 +624,7 @@ function executeWrite(parsed: any, opts: CommandOptions) {
           if (r.message) base.message = r.message;
           return base;
         }) }
-      : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}) };
+      : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}), ...(results[0].hint ? { hint: results[0].hint } : {}), ...(results[0].suggested_rel ? { suggested_rel: results[0].suggested_rel } : {}) };
     console.log(JSON.stringify(output, null, 2));
   } else {
     for (const r of results) {

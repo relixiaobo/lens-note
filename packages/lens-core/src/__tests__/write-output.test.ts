@@ -99,7 +99,7 @@ describe("batch write link results", () => {
   it("unlink result includes from, to, rel fields", () => {
     const batch1 = [
       { type: "note", title: "Test unlink output A", body: "a" },
-      { type: "note", title: "Test unlink output B", body: "b", links: [{ to: "$0", rel: "related" }] },
+      { type: "note", title: "Test unlink output B", body: "b", links: [{ to: "$0", rel: "related", reason: "test unlink relationship" }] },
     ];
     const tmpFile1 = join(tmpdir(), `lens-test-unlink1-${Date.now()}.json`);
     writeFileSync(tmpFile1, JSON.stringify(batch1));
