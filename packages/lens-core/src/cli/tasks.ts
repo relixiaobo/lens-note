@@ -25,13 +25,16 @@ export async function listTasks(args: string[], opts: CommandOptions) {
     files = [];
   }
 
+  // Single pass: read all tasks, count by status, filter for display
   const items: any[] = [];
+  let totalOpen = 0, totalDone = 0;
   for (const file of files) {
     const id = file.replace(".md", "");
     const obj = readObject(id);
     if (!obj) continue;
 
     const status = obj.data.status || "open";
+    if (status === "done") totalDone++; else totalOpen++;
 
     // Filter by status
     if (!showAll && !showDone && status !== "open") continue;
@@ -43,16 +46,6 @@ export async function listTasks(args: string[], opts: CommandOptions) {
       status,
       ...(obj.data.links?.length ? { links: obj.data.links.length } : {}),
     });
-  }
-
-  // Count all tasks by status for context
-  let totalOpen = 0, totalDone = 0;
-  for (const file of files) {
-    const id = file.replace(".md", "");
-    const obj = readObject(id);
-    if (!obj) continue;
-    if (obj.data.status === "done") totalDone++;
-    else totalOpen++;
   }
 
   if (opts.json) {

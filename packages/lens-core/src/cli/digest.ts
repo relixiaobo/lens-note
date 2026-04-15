@@ -36,7 +36,6 @@ export async function showDigest(args: string[], opts: CommandOptions) {
 
   // Group by link type
   const withContradicts = recentNotes.filter(n => n.links.some(l => l.rel === "contradicts"));
-  const withSupports = recentNotes.filter(n => n.links.some(l => l.rel === "supports"));
   const noLinks = recentNotes.filter(n => n.links.length === 0);
   const rest = recentNotes.filter(n => n.links.length > 0 && !withContradicts.includes(n));
 
@@ -82,7 +81,6 @@ export async function showDigest(args: string[], opts: CommandOptions) {
   if (rest.length > 0) {
     console.log(`\nConnected (${rest.length})`);
     for (const n of rest) {
-      const linkSummary = n.links.map(l => `${l.rel}→${l.to.substring(0, 15)}`).join(", ");
       console.log(`  → ${n.title}`);
     }
   }

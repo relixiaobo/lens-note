@@ -63,8 +63,10 @@ export async function listCommand(args: string[], opts: CommandOptions) {
   const totalCount = items.length;
 
   // Pagination (works for all queries, not just orphans)
-  const limit = flags.limit ? parseInt(String(flags.limit)) : undefined;
-  const offset = flags.offset ? parseInt(String(flags.offset)) : 0;
+  const limit = flags.limit !== undefined ? parseInt(String(flags.limit)) : undefined;
+  const offset = flags.offset !== undefined ? parseInt(String(flags.offset)) : 0;
+  if (limit !== undefined && (!Number.isInteger(limit) || limit < 0)) throw new Error("--limit must be a non-negative integer");
+  if (!Number.isInteger(offset) || offset < 0) throw new Error("--offset must be a non-negative integer");
   if (offset > 0) items = items.slice(offset);
   if (limit !== undefined) items = items.slice(0, limit);
 

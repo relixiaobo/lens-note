@@ -450,7 +450,10 @@ export function findByTitle(title: string): { id: string; type: string; title: s
  *
  * Returns: { id } on unique match, { error, candidates? } on failure.
  */
-export function resolveIdOrTitle(input: string): { id: string } | { error: string; candidates?: { id: string; title: string }[] } {
+export function resolveIdOrTitle(rawInput: string): { id: string } | { error: string; candidates?: { id: string; title: string }[] } {
+  const input = rawInput.trim();
+  if (!input) return { error: "Empty input. Provide an object ID or title." };
+
   // 1. Valid ID format? Try direct lookup
   if (/^(src|note|task)_[A-Z0-9]{26}$/.test(input)) {
     const obj = getObjectFromCache(input);

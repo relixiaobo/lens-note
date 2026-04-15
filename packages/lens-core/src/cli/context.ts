@@ -4,7 +4,7 @@
  * Searches for relevant Notes, returns structured JSON with titles, links, and body.
  */
 
-import { searchIndex, getObjectFromCache, readObject, listObjects, ensureInitialized, extractBodyRefs } from "../core/storage";
+import { searchIndex, getObjectFromCache, listObjects, ensureInitialized, extractBodyRefs } from "../core/storage";
 import type { Note } from "../core/types";
 import type { CommandOptions } from "./commands";
 

@@ -91,12 +91,12 @@ Shell mode:
   Search & Read:
     search "<query>" --json          Full-text search (CJK-aware, + --limit N)
     search "<query>" --resolve --json  Resolve title → ID (exact match first)
-    show <id> --json                 Full object with body + forward/backward links
-    links <id> --json                All relationships (forward + backward)
+    show <id|title> --json             Full object with body + forward/backward links
+    links <id|title> --json            All relationships (forward + backward)
     context "<query>" --json         Context pack with full note bodies
     list notes|sources --json        Browse by type (+ --orphans, --since 7d, --limit N, --offset N)
     tasks [--all|--done] --json      List tasks (default: open)
-    similar <id> --json              Near-duplicates (+ --threshold 0.0-1.0)
+    similar <id|title> --json          Near-duplicates (+ --threshold 0.0-1.0)
     similar --all --json             Scan all notes, group duplicates
     digest [week|month|year] --json  Recent insights (+ --days N)
     status --json                    Stats + graph health + user context
@@ -140,7 +140,7 @@ Errors: {"error": {"code": "...", "message": "..."}}
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.7.8");
+  console.log("lens v1.7.9");
   process.exit(0);
 }
 

@@ -133,7 +133,9 @@ function indexShow(keyword: string, opts: CommandOptions): void {
   // Keyword not found — try fuzzy matching (case-insensitive substring)
   const allKeywords = Object.keys(keywords);
   const query = keyword.toLowerCase();
-  const fuzzyMatches = allKeywords.filter(kw => kw.toLowerCase().includes(query) || query.includes(kw.toLowerCase()));
+  const fuzzyMatches = query.length > 0
+    ? allKeywords.filter(kw => kw.toLowerCase().includes(query) || query.includes(kw.toLowerCase()))
+    : [];
 
   if (fuzzyMatches.length > 0) {
     // Fuzzy matched — return matching keywords with their entries

@@ -201,7 +201,7 @@ export const commands: Record<string, CommandHandler> = {
 export interface RequestEnvelope {
   command: string;
   positional?: string[];
-  flags?: Record<string, string | boolean>;
+  flags?: Record<string, string | number | boolean>;
   input?: unknown;
 }
 
