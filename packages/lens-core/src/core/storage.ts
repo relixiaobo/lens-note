@@ -183,6 +183,19 @@ function hasCJK(text: string): boolean {
   return /[\u4e00-\u9fff\u3400-\u4dbf\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text);
 }
 
+// Common English stop words — filtered from search queries to reduce noise
+const STOP_WORDS = new Set([
+  "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did", "will", "would", "could",
+  "should", "may", "might", "shall", "can", "need", "must",
+  "in", "on", "at", "to", "for", "of", "with", "by", "from", "as",
+  "into", "about", "between", "through", "during", "before", "after",
+  "and", "or", "but", "not", "no", "nor", "so", "yet",
+  "it", "its", "this", "that", "these", "those", "what", "which", "who",
+  "how", "when", "where", "why", "all", "each", "every", "both",
+  "i", "me", "my", "we", "our", "you", "your", "he", "she", "they", "them",
+]);
+
 export function searchIndex(query: string): { id: string; type: string; title: string; snippet: string }[] {
   const db = getDb();
   const trimmed = query.trim();
@@ -193,23 +206,57 @@ export function searchIndex(query: string): { id: string; type: string; title: s
     return searchCJK(db, trimmed);
   }
 
-  // Latin queries: use FTS5 with porter stemming
-  const escaped = trimmed
+  // Latin queries: FTS5 with porter stemming + tiered relevance ranking
+  // Column weights: id=0, type=0, title=10, body=1 — title matches rank 10x higher
+  const BM25_WEIGHTS = "bm25(search_index, 0.0, 0.0, 10.0, 1.0)";
+
+  const words = trimmed
     .replace(/['"]/g, "")
     .split(/\s+/)
     .filter(Boolean)
-    .map((word) => `"${word}"`)
-    .join(" ");
+    .filter((w) => !STOP_WORDS.has(w.toLowerCase()));
 
-  if (!escaped) return [];
+  if (words.length === 0) return [];
+
+  const runFts = (matchExpr: string): any[] =>
+    db.prepare(`
+      SELECT id, type, title, snippet(search_index, 3, '**', '**', '...', 30) as snippet
+      FROM search_index WHERE search_index MATCH ? ORDER BY ${BM25_WEIGHTS} LIMIT 20
+    `).all(matchExpr);
 
   try {
-    return db
-      .prepare(`
-        SELECT id, type, title, snippet(search_index, 3, '**', '**', '...', 30) as snippet
-        FROM search_index WHERE search_index MATCH ? ORDER BY rank LIMIT 20
-      `)
-      .all(escaped) as any[];
+    if (words.length === 1) {
+      return runFts(`"${words[0]}"`);
+    }
+
+    // Multi-word: tiered search — phrase → AND → OR, deduplicated
+    const seen = new Set<string>();
+    const results: any[] = [];
+    const addResults = (rows: any[]) => {
+      for (const r of rows) {
+        if (!seen.has(r.id) && results.length < 20) {
+          seen.add(r.id);
+          results.push(r);
+        }
+      }
+    };
+
+    // Tier 1: exact phrase match (words adjacent in order) — highest relevance
+    try {
+      addResults(runFts(`"${words.join(" ")}"`));
+    } catch { /* phrase syntax may fail — skip */ }
+
+    // Tier 2: AND match (all words present, any position)
+    if (results.length < 20) {
+      addResults(runFts(words.map((w) => `"${w}"`).join(" ")));
+    }
+
+    // Tier 3: OR fallback (any word matches) — broadest, ranked by BM25
+    if (results.length < 5) {
+      addResults(runFts(words.map((w) => `"${w}"`).join(" OR ")));
+    }
+
+    return results;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("fts5") || msg.includes("syntax") || msg.includes("MATCH")) return [];
