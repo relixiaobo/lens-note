@@ -198,7 +198,13 @@ async function feedRemove(idOrUrl: string, opts: CommandOptions) {
   if (!idOrUrl) throw new Error("Usage: lens feed remove <id|url>");
 
   const removed = removeFeed(idOrUrl);
-  if (!removed) throw new Error(`Feed not found: ${idOrUrl}. Use \`lens feed list\` to see subscribed feeds.`);
+  if (!removed) {
+    const available = listFeeds().map(f => ({ id: f.id, url: f.url, title: f.title }));
+    const msg = available.length === 0
+      ? `Feed not found: ${idOrUrl}. No feeds are currently subscribed.`
+      : `Feed not found: ${idOrUrl}. Available feeds: ${available.map(f => f.id).join(", ")}`;
+    throw new Error(msg);
+  }
 
   if (opts.json) {
     console.log(JSON.stringify({ removed: removed.id, url: removed.url }));

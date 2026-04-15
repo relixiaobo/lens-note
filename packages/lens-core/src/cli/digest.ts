@@ -46,13 +46,20 @@ export async function showDigest(args: string[], opts: CommandOptions) {
       for (const l of links) rels[l.rel] = (rels[l.rel] || 0) + 1;
       return { count: links.length, rels };
     };
-    console.log(JSON.stringify({
+    const result: Record<string, any> = {
       period: period || `${days}d`,
       total: recentNotes.length,
       tensions: withContradicts.map(n => ({ id: n.id, title: n.title, links: compactLinks(n.links) })),
       connected: rest.map(n => ({ id: n.id, title: n.title, links: compactLinks(n.links) })),
       seeds: noLinks.map(n => ({ id: n.id, title: n.title })),
-    }, null, 2));
+    };
+    if (recentNotes.length === 0) {
+      result.total_notes = noteIds.length;
+      result.hint = noteIds.length === 0
+        ? "No notes exist yet."
+        : `No notes in the last ${days} day(s). Try a wider range: 'lens digest week' or 'lens digest month'.`;
+    }
+    console.log(JSON.stringify(result, null, 2));
     return;
   }
 

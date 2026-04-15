@@ -90,7 +90,11 @@ export async function handleConfig(args: string[], opts: CommandOptions) {
     const config = readConfig();
     const value = getNestedValue(config, key);
     if (opts.json) {
-      console.log(JSON.stringify({ key, value: value ?? null }));
+      const result: Record<string, any> = { key, value: value ?? null };
+      if (value === undefined) {
+        result.available_keys = ["context.role", "context.audience", "context.language", "context.style"];
+      }
+      console.log(JSON.stringify(result));
     } else {
       console.log(value !== undefined ? String(value) : "(not set)");
     }

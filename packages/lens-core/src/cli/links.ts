@@ -30,7 +30,11 @@ export async function showLinks(id: string, opts: CommandOptions) {
 
   // Verify object exists
   const obj = readObject(id);
-  if (!obj) throw new Error(`Object not found: ${id}. Use \`lens search\` to find the correct ID.`);
+  if (!obj) {
+    const prefix = id.split("_")[0];
+    const hint = `Use 'lens search' to find by title, or 'lens list ${prefix === "src" ? "sources" : prefix + "s"}' to browse.`;
+    throw new Error(`Object not found: ${id}. ${hint}`);
+  }
 
   const rawForward = getForwardLinks(id);
   const rawBackward = getBacklinks(id);

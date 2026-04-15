@@ -52,8 +52,8 @@ export async function showSimilar(id: string | undefined, opts: CommandOptions) 
   // Single-note mode — id is guaranteed defined here (--all returned above)
   if (!id) throw new Error("Usage: lens similar <id> [--threshold 0.3]  or  lens similar --all");
   const target = readObject(id);
-  if (!target) throw new Error(`Object not found: ${id}. Use \`lens search\` to find the correct ID.`);
-  if (target.data.type !== "note") throw new Error(`similar only works with notes, got ${target.data.type}`);
+  if (!target) throw new Error(`Object not found: ${id}. Use 'lens search' to find by title, or 'lens list notes' to browse.`);
+  if (target.data.type !== "note") throw new Error(`similar only works with notes, got ${target.data.type}. Use 'lens list notes' to find a note ID.`);
 
   const results = findSimilarNotes(id, threshold);
 

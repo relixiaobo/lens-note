@@ -4,7 +4,7 @@
  * Searches for relevant Notes, returns structured JSON with titles, links, and body.
  */
 
-import { searchIndex, getObjectFromCache, readObject, ensureInitialized, extractBodyRefs } from "../core/storage";
+import { searchIndex, getObjectFromCache, readObject, listObjects, ensureInitialized, extractBodyRefs } from "../core/storage";
 import type { Note } from "../core/types";
 import type { CommandOptions } from "./commands";
 
@@ -32,12 +32,20 @@ export async function assembleContext(query: string, opts: CommandOptions) {
     });
   }
 
-  const pack = {
+  const notes = Array.from(noteMap.values());
+  const pack: Record<string, any> = {
     query,
     timestamp: new Date().toISOString(),
-    notes: Array.from(noteMap.values()),
-    total_results: noteMap.size,
+    notes,
+    total_results: notes.length,
   };
+
+  if (notes.length === 0) {
+    pack.total_notes = listObjects("note").length;
+    pack.hint = pack.total_notes === 0
+      ? "No notes exist yet. Create notes with 'lens write'."
+      : "No notes matched this query. Try different keywords, or use 'lens search' to explore, or 'lens index' for entry points.";
+  }
 
   console.log(JSON.stringify(pack, null, 2));
 }

@@ -9,7 +9,14 @@ export async function showObject(id: string, opts: CommandOptions) {
   ensureInitialized();
 
   const result = readObject(id);
-  if (!result) throw new Error(`Object not found: ${id}. Use \`lens search\` to find the correct ID.`);
+  if (!result) {
+    const prefix = id.split("_")[0];
+    const validPrefixes = ["note", "src", "task"];
+    const hint = !validPrefixes.includes(prefix)
+      ? `Invalid ID prefix "${prefix}". Valid prefixes: note_, src_, task_. Use 'lens search' to find by title.`
+      : `No ${prefix} with this ID. It may have been deleted. Use 'lens search' to find by title, or 'lens list ${prefix === "src" ? "sources" : prefix + "s"}' to browse.`;
+    throw new Error(`Object not found: ${id}. ${hint}`);
+  }
 
   const { data, content } = result;
 

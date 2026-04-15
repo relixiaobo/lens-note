@@ -35,7 +35,7 @@ export async function searchObjects(query: string, opts: CommandOptions) {
     // 3. FTS5 ranked search — only resolve if single clear winner
     const ftsResults = searchIndex(query);
     if (ftsResults.length === 0) {
-      console.log(JSON.stringify({ error: { code: "no_match", message: `No results for "${query}"` } }));
+      console.log(JSON.stringify({ error: { code: "no_match", message: `No results for "${query}"`, hint: "Try a broader query with 'lens search' (without --resolve), or check 'lens index' for keyword entry points." } }));
       return;
     }
     if (ftsResults.length === 1) {

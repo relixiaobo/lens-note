@@ -45,13 +45,30 @@ export async function listTasks(args: string[], opts: CommandOptions) {
     });
   }
 
+  // Count all tasks by status for context
+  let totalOpen = 0, totalDone = 0;
+  for (const file of files) {
+    const id = file.replace(".md", "");
+    const obj = readObject(id);
+    if (!obj) continue;
+    if (obj.data.status === "done") totalDone++;
+    else totalOpen++;
+  }
+
   if (opts.json) {
-    console.log(JSON.stringify({
+    const result: Record<string, any> = {
       type: "tasks",
       filter: showAll ? "all" : showDone ? "done" : "open",
       count: items.length,
+      total: { open: totalOpen, done: totalDone },
       items,
-    }, null, 2));
+    };
+    if (items.length === 0 && (totalOpen + totalDone) > 0) {
+      result.hint = showDone
+        ? `No completed tasks. ${totalOpen} task(s) still open — use 'lens tasks' to see them.`
+        : `No open tasks. ${totalDone} completed task(s) — use 'lens tasks --done' to see them.`;
+    }
+    console.log(JSON.stringify(result, null, 2));
   } else {
     if (items.length === 0) {
       console.log(showDone ? "No completed tasks." : showAll ? "No tasks." : "No open tasks.");
