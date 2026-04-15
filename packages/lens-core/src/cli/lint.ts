@@ -39,6 +39,10 @@ const RELATED_THRESHOLD = 50; // percent
 const THIN_BODY_THRESHOLD = 20; // characters
 const VAGUE_REASON_MIN_LENGTH = 5;
 const VAGUE_REASON_PATTERNS = /^(related|related to|supports|contradicts|refines|see also|similar|同上|相关|参见|参考|类似)\s*\.?$/i;
+// For `supports` specifically: reasons that only join two topic nouns with Chinese conjunctions (与/和),
+// with no explanatory verb — pure topic proximity, not an evidential relationship.
+// A comma anywhere in the reason indicates a multi-clause sentence and is not flagged.
+const SUPPORTS_TOPIC_PROXIMITY_PATTERN = /^[^，,。；;！!？?\n]{4,70}[与和][^，,。；;！!？?\n]{3,50}$/;
 
 export async function runLint(args: string[], opts: CommandOptions) {
   ensureInitialized();
@@ -187,13 +191,16 @@ export async function runLint(args: string[], opts: CommandOptions) {
         if (STRUCTURAL_RELS.has(link.rel)) continue;
         if (!link.reason) continue; // missing_reasons catches these
         const reason = link.reason.trim();
-        if (reason.length < VAGUE_REASON_MIN_LENGTH || VAGUE_REASON_PATTERNS.test(reason)) {
+        const isTopicProximity = link.rel === "supports" && SUPPORTS_TOPIC_PROXIMITY_PATTERN.test(reason);
+        if (reason.length < VAGUE_REASON_MIN_LENGTH || VAGUE_REASON_PATTERNS.test(reason) || isTopicProximity) {
           vagueReasonCount++;
           if (vagueReasonSamples.length < 50) {
             vagueReasonSamples.push({
               id: obj.id,
               title: parsed.title,
-              detail: `${link.rel} → ${link.to}: "${reason}"`,
+              detail: isTopicProximity
+                ? `${link.rel} → ${link.to}: "${reason}" (topic label — reason should explain HOW this is evidence, not just that both topics overlap)`
+                : `${link.rel} → ${link.to}: "${reason}"`,
             });
           }
         }
@@ -520,10 +527,12 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
             if (STRUCTURAL_RELS.has(link.rel)) continue;
             if (!link.reason) continue;
             const reason = link.reason.trim();
-            if (reason.length < VAGUE_REASON_MIN_LENGTH || VAGUE_REASON_PATTERNS.test(reason)) {
+            const isTopicProximity = link.rel === "supports" && SUPPORTS_TOPIC_PROXIMITY_PATTERN.test(reason);
+            if (reason.length < VAGUE_REASON_MIN_LENGTH || VAGUE_REASON_PATTERNS.test(reason) || isTopicProximity) {
               offenders.push({
                 from: obj.id, from_title: parsed.title,
                 to: link.to, rel: link.rel, reason,
+                ...(isTopicProximity ? { hint: "topic label — explain HOW this is evidence, not just topic overlap" } : {}),
               });
             }
           }

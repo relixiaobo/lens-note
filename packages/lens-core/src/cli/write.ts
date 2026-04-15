@@ -104,6 +104,7 @@ interface WriteResult {
   message?: string;
   hint?: string;
   suggested_rel?: string;
+  advisory?: string;
   object?: Record<string, any>;
 }
 
@@ -311,7 +312,15 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   addLinkToExisting(from, rel, to, reason);
   if (rel === "contradicts") addLinkToExisting(to, "contradicts", from, reason);
 
-  return { type: "link", action: "created", object: { from, rel, to, reason }, ...relatedExtra };
+  // Advisory: warn if target is becoming a super_connector (> 30 inbound links)
+  const db = getDb();
+  const inboundCount = (db.prepare("SELECT COUNT(*) as cnt FROM links WHERE to_id = ?").get(to) as { cnt: number }).cnt;
+  const SUPER_CONNECTOR_THRESHOLD = 30;
+  const superConnectorWarning = inboundCount > SUPER_CONNECTOR_THRESHOLD
+    ? { advisory: `Target note now has ${inboundCount} inbound links (threshold: ${SUPER_CONNECTOR_THRESHOLD}). If many of these are "supports", verify each reason answers HOW, not just WHAT topics are shared.` }
+    : {};
+
+  return { type: "link", action: "created", object: { from, rel, to, reason }, ...relatedExtra, ...superConnectorWarning };
 }
 
 function writeUnlink(input: any): WriteResult {
@@ -799,7 +808,7 @@ function executeWrite(parsed: any, opts: CommandOptions) {
           if (r.message) base.message = r.message;
           return base;
         }) }
-      : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}), ...(results[0].hint ? { hint: results[0].hint } : {}), ...(results[0].suggested_rel ? { suggested_rel: results[0].suggested_rel } : {}) };
+      : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}), ...(results[0].hint ? { hint: results[0].hint } : {}), ...(results[0].suggested_rel ? { suggested_rel: results[0].suggested_rel } : {}), ...(results[0].advisory ? { advisory: results[0].advisory } : {}) };
 
     if (isBatch && failedIndices.size > 0) {
       // Partial failure: ok=false with data so consumer can inspect individual results
