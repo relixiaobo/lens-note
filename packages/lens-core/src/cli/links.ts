@@ -14,6 +14,7 @@ interface LabeledLink {
   rel: string;
   type?: string;
   title: string;
+  reason?: string;
 }
 
 function resolveLink(linkId: string): { type?: string; title: string } {
@@ -64,11 +65,19 @@ export async function showLinks(input: string, opts: CommandOptions) {
 
   if (showForward) {
     const rawForward = getForwardLinks(id);
+    // Read source object's links[] to get reasons
+    const sourceLinks: Record<string, string | undefined> = {};
+    if (obj.data.links) {
+      for (const l of obj.data.links) {
+        sourceLinks[`${l.to}:${l.rel}`] = l.reason;
+      }
+    }
     forward = rawForward
       .filter((l) => !relFilter || l.rel === relFilter)
       .map((l) => {
         const { type, title } = resolveLink(l.to_id);
-        return { id: l.to_id, rel: l.rel, type, title };
+        const reason = sourceLinks[`${l.to_id}:${l.rel}`];
+        return { id: l.to_id, rel: l.rel, type, title, ...(reason ? { reason } : {}) };
       });
   }
 
@@ -95,7 +104,8 @@ export async function showLinks(input: string, opts: CommandOptions) {
       console.log(`Forward (${forward.length}):`);
       for (const l of forward) {
         const typeTag = l.type ? ` (${l.type})` : "";
-        console.log(`  → [${l.rel}] ${l.title.substring(0, 70)}${typeTag}`);
+        const reasonTag = l.reason ? ` — ${l.reason}` : "";
+        console.log(`  → [${l.rel}] ${l.title.substring(0, 70)}${typeTag}${reasonTag}`);
       }
     }
 

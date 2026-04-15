@@ -142,7 +142,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
         if (STRUCTURAL_RELS.has(link.rel)) continue;
         if (!link.reason || !link.reason.trim()) {
           missingReasonCount++;
-          if (missingReasonSamples.length < 10) {
+          if (missingReasonSamples.length < 50) {
             missingReasonSamples.push({
               id: obj.id,
               title: parsed.title,
@@ -183,7 +183,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
         const reason = link.reason.trim();
         if (reason.length < VAGUE_REASON_MIN_LENGTH || VAGUE_REASON_PATTERNS.test(reason)) {
           vagueReasonCount++;
-          if (vagueReasonSamples.length < 10) {
+          if (vagueReasonSamples.length < 50) {
             vagueReasonSamples.push({
               id: obj.id,
               title: parsed.title,
@@ -213,18 +213,27 @@ export async function runLint(args: string[], opts: CommandOptions) {
     HAVING cnt > 1
   `).all() as { from_id: string; to_id: string; rels: string; cnt: number }[];
 
+  // Rel strength for suggesting which to keep in duplicate pairs
+  const REL_STRENGTH: Record<string, number> = { indexes: 4, contradicts: 4, refines: 3, supports: 2, related: 1 };
+
   checks.push({
     name: "duplicate_links",
     status: dupes.length > 0 ? "warn" : "ok",
     value: dupes.length,
     message: dupes.length > 0
-      ? `${dupes.length} note pairs with multiple rels (e.g., both related + supports). The weaker rel is usually redundant.`
+      ? `${dupes.length} note pairs with multiple rels. Keep the strongest, unlink the weaker (strength: indexes/contradicts > refines > supports > related).`
       : "No duplicate link pairs.",
     ...(dupes.length > 0 ? {
-      offenders: dupes.slice(0, 10).map(d => ({
-        id: d.from_id,
-        detail: `→ ${d.to_id} [${d.rels}]`,
-      })),
+      offenders: dupes.map(d => {
+        const rels = d.rels.split(",");
+        const sorted = [...rels].sort((a, b) => (REL_STRENGTH[b] || 0) - (REL_STRENGTH[a] || 0));
+        const keep = sorted[0];
+        const remove = sorted.slice(1).join(",");
+        return {
+          id: d.from_id,
+          detail: `→ ${d.to_id} [${d.rels}] — keep ${keep}, unlink ${remove}`,
+        };
+      }),
     } : {}),
   });
 
@@ -244,7 +253,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
       ? `${deadLinks.length} links point to non-existent objects. These should be removed.`
       : "All link targets exist.",
     ...(deadLinks.length > 0 ? {
-      offenders: deadLinks.slice(0, 10).map(d => ({
+      offenders: deadLinks.map(d => ({
         id: d.from_id,
         detail: `${d.rel} → ${d.to_id} (target missing)`,
       })),
@@ -280,7 +289,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
     message: thinNotes.length > 0
       ? `${thinNotes.length} notes with body < ${THIN_BODY_THRESHOLD} chars. Notes without evidence or reasoning are harder to collide with later.`
       : "All notes have substantive bodies.",
-    ...(thinNotes.length > 0 ? { offenders: thinNotes.slice(0, 10) } : {}),
+    ...(thinNotes.length > 0 ? { offenders: thinNotes } : {}),
   });
 
   // ── 9. Superseded alive ──────────────────────────────────

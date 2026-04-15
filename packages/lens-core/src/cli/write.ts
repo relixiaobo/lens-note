@@ -627,7 +627,10 @@ function resolveReference(ref: string, batchIds?: Map<string, string>): string {
   if (!ref) return ref;
   if (ref.startsWith("$") && batchIds) {
     const resolved = batchIds.get(ref);
-    if (!resolved) throw new Error(`Batch reference "${ref}" not resolved. Check array index.`);
+    if (!resolved) {
+      const idx = parseInt(ref.slice(1));
+      throw new Error(`Batch reference "${ref}" not resolved — item at index ${idx} has not been processed yet or failed. Use $N only to reference earlier items.`);
+    }
     return resolved;
   }
   return ref;
