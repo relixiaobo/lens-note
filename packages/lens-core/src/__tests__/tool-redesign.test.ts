@@ -90,6 +90,22 @@ describe("tool redesign v2", () => {
       assert.equal(result.action, "updated");
     });
 
+    it("preserves reason when not explicitly provided", () => {
+      // noteB → noteA currently has reason "new reason" from prior test
+      const result = write({ type: "retype", from: noteB, to: noteA, old_rel: "supports", new_rel: "refines" });
+      assert.equal(result.action, "retyped");
+      assert.equal(result.reason, "new reason");
+
+      // Verify persisted
+      const obj = show(noteB);
+      const link = obj.forward_links.find((l: any) => l.id === noteA && l.rel === "refines");
+      assert.ok(link, "refines link should exist");
+      assert.equal(link.reason, "new reason");
+
+      // Restore to supports for subsequent tests
+      write({ type: "retype", from: noteB, to: noteA, old_rel: "refines", new_rel: "supports" });
+    });
+
     it("rejects self-link", () => {
       const { exitCode } = lensStdin({ command: "write", input: { type: "retype", from: noteA, to: noteA, old_rel: "related", new_rel: "supports" } });
       assert.notEqual(exitCode, 0);

@@ -436,19 +436,23 @@ function writeRetype(input: any): WriteResult {
     return { type: "retype", action: "unchanged", object: { from, to, old_rel, new_rel } };
   }
 
+  // Inherit reason from old link if not explicitly provided
+  const effectiveReason = reason !== undefined ? reason
+    : existingLinks.find((l: NoteLink) => l.to === to && l.rel === old_rel)?.reason;
+
   // Remove old link
   removeLinkFromExisting(from, old_rel, to);
   if (old_rel === "contradicts") {
     removeLinkFromExisting(to, "contradicts", from);
   }
 
-  // Add new link
-  addLinkToExisting(from, new_rel as LinkRel, to, reason);
+  // Add new link (carries forward existing reason when none specified)
+  addLinkToExisting(from, new_rel as LinkRel, to, effectiveReason);
   if (new_rel === "contradicts") {
-    addLinkToExisting(to, "contradicts", from, reason);
+    addLinkToExisting(to, "contradicts", from, effectiveReason);
   }
 
-  return { type: "retype", action: "retyped", object: { from, to, old_rel, new_rel, reason } };
+  return { type: "retype", action: "retyped", object: { from, to, old_rel, new_rel, reason: effectiveReason } };
 }
 
 function writeMerge(input: any): WriteResult {
