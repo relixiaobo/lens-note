@@ -278,20 +278,21 @@ export async function runLint(args: string[], opts: CommandOptions) {
   });
 
   // ── 9. Superseded alive ──────────────────────────────────
-  const SUPERSEDED_PATTERNS = /superseded|已被替代|已过时|outdated|deprecated|replaced by/i;
+  // Matches self-referential markers, not mere mentions of the word "superseded"
+  const SUPERSEDED_PATTERNS = /^(\*{0,2}superseded\*{0,2}|~~superseded~~|已被替代|已过时)\b|superseded by|replaced by|deprecated[.:\s—–-]/im;
   const supersededAlive: LintOffender[] = [];
 
   for (const obj of allNotes) {
     const body = (obj.body || "").trim();
     if (!SUPERSEDED_PATTERNS.test(body)) continue;
 
-    // This note is marked as superseded — check if it still has inbound links
+    // This note is marked as superseded — check if it still has active inbound links
     const inbound = db.prepare(
-      "SELECT from_id, rel FROM links WHERE to_id = ? AND from_id LIKE 'note_%'"
+      "SELECT from_id, rel FROM links WHERE to_id = ?"
     ).all(obj.id) as { from_id: string; rel: string }[];
 
-    // Inbound links that treat this note as current (not just referencing it)
-    const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines");
+    // Active inbound: links that treat this note as current knowledge
+    const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "indexes");
     if (activeInbound.length > 0) {
       try {
         const parsed = JSON.parse(obj.data);

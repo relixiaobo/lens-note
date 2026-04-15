@@ -19,7 +19,7 @@ import { saveObject, readObject, ensureInitialized, getDb } from "../core/storag
 import { objectPath, paths } from "../core/paths";
 import { join } from "path";
 import { parseCliArgs, type CommandOptions } from "./commands";
-import { respondSuccess } from "./response";
+import { respondSuccess, respondError } from "./response";
 
 // ============================================================
 // Validation
@@ -796,12 +796,7 @@ function executeWrite(parsed: any, opts: CommandOptions) {
 
     if (isBatch && failedIndices.size > 0) {
       // Partial failure: ok=false with data so consumer can inspect individual results
-      process.exitCode = 1;
-      console.log(JSON.stringify({
-        ok: false,
-        error: { code: "partial_failure", message: `${failedIndices.size} of ${items.length} item(s) failed` },
-        data: output,
-      }, null, 2));
+      respondError("partial_failure", `${failedIndices.size} of ${items.length} item(s) failed`, undefined, { data: output });
     } else {
       respondSuccess(output);
     }

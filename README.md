@@ -85,10 +85,20 @@ lens index add "<keyword>" <id> --json    # Register entry point (max 3 per keyw
 lens index remove "<keyword>" [id] --json # Remove keyword or single entry
 ```
 
-### Other
+### Content
 
 ```bash
 lens fetch <url> [--save] --json          # Extract web content (--save creates source)
+lens ingest <url|file> --json             # Fetch + save (shortcut for fetch --save)
+lens feed add <rss-url> --json            # Subscribe to RSS feed
+lens feed list --json                     # List subscriptions
+lens feed check [--dry-run] --json        # Check for new articles
+lens feed remove <id|url> --json          # Unsubscribe
+```
+
+### Config & System
+
+```bash
 lens config list --json                   # Show all config
 lens config set context.role "PM" --json  # Set user context
 lens rebuild-index --json                 # Rebuild SQLite cache from files
@@ -108,7 +118,7 @@ All `--json` output uses a stable envelope:
 
 Always check `ok` first. On success, read `data`. On failure, read `error.code` and `error.message`.
 
-Error codes: `command_error`, `deprecated_command`, `unknown_command`, `ambiguous_match`, `no_match`, `partial_failure` (batch), `invalid_request`.
+Error codes: `command_error`, `deprecated_command`, `unknown_command`, `ambiguous_match`, `no_match`, `partial_failure` (batch), `invalid_request`, `empty_stdin`, `no_input`.
 
 ## Data Model
 
@@ -207,7 +217,7 @@ printf '%s' '{"command":"links","positional":["note_01A"],"flags":{"rel":"relate
   .git/        Version history
 ```
 
-Markdown files are the source of truth. SQLite is a derived index. Git tracks history automatically.
+Markdown files are the source of truth. SQLite is a derived index. Git tracks history when available (best-effort — lens works without Git).
 
 ## Use with Agents
 

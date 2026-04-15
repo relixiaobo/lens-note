@@ -319,6 +319,34 @@ describe("tool redesign v2", () => {
       assert.ok(thin.value > 0, "should detect notes with short/empty bodies");
     });
 
+    it("detects vague reasons", () => {
+      // Create a note with a vague reason
+      write({ type: "note", title: "Vague test A", body: "content" });
+      const vagueNote = write({ type: "note", title: "Vague test B", body: "content", links: [{ to: noteA, rel: "related", reason: "ok" }] });
+
+      const { stdout } = lensStdin({ command: "lint" });
+      const result = JSON.parse(stdout).data;
+      const vague = result.checks.find((c: any) => c.name === "vague_reasons");
+      assert.ok(vague.value > 0, "should detect vague reason 'ok'");
+
+      // Cleanup
+      write({ type: "unlink", from: vagueNote.id, to: noteA, rel: "related" });
+    });
+
+    it("detects superseded notes with active inbound links", () => {
+      const sup = write({ type: "note", title: "Superseded test", body: "Superseded by a newer note" });
+      write({ type: "link", from: noteA, to: sup.id, rel: "supports", reason: "test superseded" });
+
+      const { stdout } = lensStdin({ command: "lint" });
+      const result = JSON.parse(stdout).data;
+      const check = result.checks.find((c: any) => c.name === "superseded_alive");
+      assert.ok(check.value > 0, "should detect superseded note with active inbound link");
+
+      // Cleanup
+      write({ type: "unlink", from: noteA, to: sup.id, rel: "supports" });
+      write({ type: "delete", id: sup.id });
+    });
+
     it("--check exits 1 when failures exist", () => {
       const { stdout, exitCode } = lensStdin({ command: "lint", flags: { check: true } });
       const result = JSON.parse(stdout).data;
