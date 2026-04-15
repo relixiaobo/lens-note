@@ -104,6 +104,7 @@ Shell mode:
     similar --all --json                 Scan all notes, group duplicates
     digest [week|month|year] --json      Recent insights (+ --days N)
     lint --json                          Graph quality checks (9 checks) with offender IDs
+    lint --audit <check> --json          Full offender export with context for one check
     lint --check --json                  Same + exit code 1 on failures (for CI)
     lint --summary --json                Stats + graph health + user context
 
