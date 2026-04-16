@@ -53,6 +53,7 @@ lens list notes --since 7d --json         # Time filter (7d/2w/1m/1y)
 lens list notes --min-links 10 --json     # Hub notes by link count
 lens list notes --max-links 0 --json      # Isolated notes
 lens list sources --source-type book --json # Filter by source type
+lens list sources --inbox --json          # Sources awaiting agent processing
 lens list tasks --status open --json      # Tasks by status (open/done)
 ```
 

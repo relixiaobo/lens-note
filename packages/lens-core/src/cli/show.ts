@@ -80,6 +80,18 @@ function buildJsonOutput(id: string, result: { data: any; content: string }) {
   if (data.created_at) output.created_at = data.created_at;
   if (data.updated_at) output.updated_at = data.updated_at;
 
+  // Forward remaining custom frontmatter (e.g. inbox, annotations, raw_file).
+  // links handled separately as forward_links/backward_links below.
+  const HANDLED_FIELDS = new Set([
+    "id", "type", "title", "status", "source", "source_type",
+    "url", "author", "word_count", "created_at", "updated_at", "links",
+  ]);
+  for (const [key, value] of Object.entries(data)) {
+    if (!HANDLED_FIELDS.has(key) && value !== undefined) {
+      output[key] = value;
+    }
+  }
+
   const bodyText = content.trim();
   output.body = bodyText;
   const bodyRefs = extractBodyRefs(bodyText);

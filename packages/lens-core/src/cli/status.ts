@@ -40,6 +40,14 @@ export async function showStatus(opts: CommandOptions) {
     if (obj?.data.status === "done") tasksDone++;
     else tasksOpen++;
   }
+
+  // Inbox count (sources awaiting agent processing — set by lens-clipper)
+  let inboxCount = 0;
+  for (const id of sourceIds) {
+    const obj = readObject(id);
+    if (obj?.data.inbox === true) inboxCount++;
+  }
+
   const cacheSize = fileSize(paths.db) + fileSize(paths.db + "-wal") + fileSize(paths.db + "-shm");
 
   // Graph health metrics
@@ -86,6 +94,7 @@ export async function showStatus(opts: CommandOptions) {
     path: paths.root,
     notes: noteIds.length,
     sources: sourceIds.length,
+    inbox: inboxCount,
     tasks: { open: tasksOpen, done: tasksDone, total: taskIds.length },
     total,
     connectivity: {
@@ -106,7 +115,7 @@ export async function showStatus(opts: CommandOptions) {
     console.log(`lens status`);
     console.log(`  Path:     ${paths.root}`);
     console.log(`  Notes:    ${noteIds.length}`);
-    console.log(`  Sources:  ${sourceIds.length}`);
+    console.log(`  Sources:  ${sourceIds.length}${inboxCount > 0 ? ` (${inboxCount} in inbox)` : ""}`);
     console.log(`  Tasks:    ${taskIds.length} (${tasksOpen} open, ${tasksDone} done)`);
     console.log(`  Total:    ${total} objects`);
     console.log(`  Cache:    ${(cacheSize / 1024).toFixed(1)} KB`);

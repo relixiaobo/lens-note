@@ -100,6 +100,7 @@ Shell mode:
     list notes --min-links 10 --json     Hub notes by link count
     list notes --max-links 2 --json      Orphan-ish notes (disconnected theses)
     list sources --source-type book --json  Filter by source type
+    list sources --inbox --json          Sources awaiting agent processing (set by clippers)
     list tasks --status open --json      Tasks by status
     similar <id> --json                  Near-duplicates (+ --threshold 0.0-1.0)
     similar --all --json                 Scan all notes, group duplicates
@@ -150,7 +151,7 @@ Errors:  {"ok": false, "error": {"code": "...", "message": "..."}}
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.19.1");
+  console.log("lens v1.20.0");
   process.exit(0);
 }
 

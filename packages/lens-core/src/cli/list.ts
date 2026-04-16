@@ -84,6 +84,12 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     items = items.filter((item) => item.source_type === st);
   }
 
+  // --inbox: filter sources awaiting agent processing (set by lens-clipper, cleared by agent)
+  if (flags.inbox) {
+    if (objType !== "source") throw new Error("--inbox only works with sources");
+    items = items.filter((item) => item.inbox === true);
+  }
+
   // --status: filter tasks by status
   if (flags.status) {
     if (objType !== "task") throw new Error("--status only works with tasks");

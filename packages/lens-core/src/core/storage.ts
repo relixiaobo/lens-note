@@ -462,6 +462,15 @@ export function resolveIdOrTitle(rawInput: string): { id: string } | { error: st
     return { error: `No ${prefix} with ID ${input}. It may have been deleted. Use 'lens search' to find by title.` };
   }
 
+  // 1.5 URL match — find source by exact url field (enables bridge dedup by URL)
+  if (input.startsWith("http://") || input.startsWith("https://")) {
+    const db = getDb();
+    const row = db.prepare(
+      `SELECT id FROM objects WHERE json_extract(data, '$.type') = 'source' AND json_extract(data, '$.url') = ?`
+    ).get(input) as { id: string } | undefined;
+    if (row) return { id: row.id };
+  }
+
   // 2. Exact title match (case-insensitive)
   const titleMatches = findByTitle(input);
   if (titleMatches.length === 1) return { id: titleMatches[0].id };

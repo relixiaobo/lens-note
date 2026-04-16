@@ -196,6 +196,17 @@ function writeSource(input: any): WriteResult {
     ...(input.url ? { url: input.url } : {}),
   };
 
+  // Forward unknown fields (e.g. inbox, annotations, raw_file from lens-clipper).
+  // Frontmatter preserves whatever the caller writes.
+  const KNOWN_SOURCE_FIELDS = new Set([
+    "type", "title", "source_type", "author", "url", "word_count", "body",
+  ]);
+  for (const [key, value] of Object.entries(input)) {
+    if (!KNOWN_SOURCE_FIELDS.has(key) && value !== undefined) {
+      (source as any)[key] = value;
+    }
+  }
+
   saveObject(source, body);
   return { id, type: "source", action: "created", object: source };
 }
