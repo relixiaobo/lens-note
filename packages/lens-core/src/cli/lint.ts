@@ -34,7 +34,9 @@ interface LintCheck {
   offenders?: LintOffender[];
 }
 
-const SUPER_CONNECTOR_THRESHOLD = 30;
+export const SUPER_CONNECTOR_THRESHOLD = 30;
+// Write-time advisory fires at this inbound count (before lint threshold) so agents can self-correct.
+export const SUPER_CONNECTOR_SOFT_THRESHOLD = 20;
 const SUPPORTS_DENSITY_THRESHOLD = 0.1; // supports links per note (evidence backbone health)
 const THIN_BODY_THRESHOLD = 20; // characters
 const VAGUE_REASON_MIN_LENGTH = 5;

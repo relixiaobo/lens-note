@@ -20,6 +20,7 @@ import { objectPath, paths } from "../core/paths";
 import { join } from "path";
 import { parseCliArgs, type CommandOptions } from "./commands";
 import { respondSuccess, respondError } from "./response";
+import { SUPER_CONNECTOR_THRESHOLD, SUPER_CONNECTOR_SOFT_THRESHOLD } from "./lint";
 
 // ============================================================
 // Validation
@@ -104,7 +105,7 @@ interface WriteResult {
   message?: string;
   hint?: string;
   suggested_rel?: string;
-  advisory?: string;
+  advisory?: string | Record<string, any>;
   object?: Record<string, any>;
 }
 
@@ -312,15 +313,36 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   addLinkToExisting(from, rel, to, reason);
   if (rel === "contradicts") addLinkToExisting(to, "contradicts", from, reason);
 
-  // Advisory: warn if target is becoming a super_connector (> 30 inbound links)
+  // Advisory: signal when target is approaching or has exceeded the super_connector threshold.
+  // Soft threshold fires before lint's hard threshold so agents can react early. The advisory reports
+  // facts only (inbound count, rel breakdown, healthy-hub classification); how to respond is the
+  // caller's concern (see lens-note-plugin skill docs for chain-topology repair).
   const db = getDb();
   const inboundCount = (db.prepare("SELECT COUNT(*) as cnt FROM links WHERE to_id = ?").get(to) as { cnt: number }).cnt;
-  const SUPER_CONNECTOR_THRESHOLD = 30;
-  const superConnectorWarning = inboundCount > SUPER_CONNECTOR_THRESHOLD
-    ? { advisory: `Target note now has ${inboundCount} inbound links (threshold: ${SUPER_CONNECTOR_THRESHOLD}). If many of these are "supports", verify each reason answers HOW, not just WHAT topics are shared.` }
-    : {};
 
-  return { type: "link", action: "created", object: { from, rel, to, reason }, ...relatedExtra, ...superConnectorWarning };
+  if (inboundCount > SUPER_CONNECTOR_SOFT_THRESHOLD) {
+    const relBreakdown = db.prepare(
+      "SELECT rel, COUNT(*) as cnt FROM links WHERE to_id = ? GROUP BY rel ORDER BY cnt DESC"
+    ).all(to) as { rel: string; cnt: number }[];
+    const supportsCount = relBreakdown.find(r => r.rel === "supports")?.cnt ?? 0;
+    const indexesCount = relBreakdown.find(r => r.rel === "indexes")?.cnt ?? 0;
+    // Healthy hub: target is genuinely a structural index (indexes > 0 AND indexes >= supports).
+    // A node with 0 indexes but many supports/related/refines inbounds is NOT a healthy hub.
+    const isHealthyHub = indexesCount > 0 && indexesCount >= supportsCount;
+    const advisory: Record<string, any> = {
+      warning_code: "approaching_super_connector",
+      target_id: to,
+      target_inbound_count: inboundCount,
+      soft_threshold: SUPER_CONNECTOR_SOFT_THRESHOLD,
+      hard_threshold: SUPER_CONNECTOR_THRESHOLD,
+      rel_breakdown: Object.fromEntries(relBreakdown.map(r => [r.rel, r.cnt])),
+      is_healthy_hub: isHealthyHub,
+      message: `Target has ${inboundCount} inbound links (${supportsCount} supports, ${indexesCount} indexes).`,
+    };
+    return { type: "link", action: "created", object: { from, rel, to, reason }, ...relatedExtra, advisory };
+  }
+
+  return { type: "link", action: "created", object: { from, rel, to, reason }, ...relatedExtra };
 }
 
 function writeUnlink(input: any): WriteResult {
@@ -795,6 +817,25 @@ function executeWrite(parsed: any, opts: CommandOptions) {
     }
   }
 
+  // Collect super_connector advisories from link results for batch summary (deduplicated by target).
+  // Per-item batch results omit advisory (see output mapping below); they surface once in top-level warnings[].
+  const hubAdvisories = new Map<string, Record<string, any>>();
+  if (isBatch) {
+    for (const r of results) {
+      if (r.advisory && typeof r.advisory === "object" && (r.advisory as Record<string, any>).warning_code === "approaching_super_connector") {
+        const targetId = r.object?.to as string | undefined;
+        if (targetId) {
+          const existing = hubAdvisories.get(targetId);
+          const current = r.advisory as Record<string, any>;
+          if (!existing || current.target_inbound_count > existing.target_inbound_count) {
+            hubAdvisories.set(targetId, current);
+          }
+        }
+      }
+    }
+  }
+  const batchWarnings = [...hubAdvisories.values()];
+
   if (opts.json) {
     const output = isBatch
       ? { results: results.map(r => {
@@ -807,7 +848,9 @@ function executeWrite(parsed: any, opts: CommandOptions) {
           }
           if (r.message) base.message = r.message;
           return base;
-        }) }
+        }),
+        ...(batchWarnings.length > 0 ? { warnings: batchWarnings } : {}),
+      }
       : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}), ...(results[0].hint ? { hint: results[0].hint } : {}), ...(results[0].suggested_rel ? { suggested_rel: results[0].suggested_rel } : {}), ...(results[0].advisory ? { advisory: results[0].advisory } : {}) };
 
     if (isBatch && failedIndices.size > 0) {
