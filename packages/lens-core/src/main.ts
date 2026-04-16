@@ -98,6 +98,7 @@ Shell mode:
     links <id> --direction forward --json  Only outgoing links
     list notes --orphans --json          Orphan notes (+ --since, --limit, --offset)
     list notes --min-links 10 --json     Hub notes by link count
+    list notes --max-links 2 --json      Orphan-ish notes (disconnected theses)
     list sources --source-type book --json  Filter by source type
     list tasks --status open --json      Tasks by status
     similar <id> --json                  Near-duplicates (+ --threshold 0.0-1.0)
@@ -105,6 +106,7 @@ Shell mode:
     digest [week|month|year] --json      Recent insights (+ --days N)
     lint --json                          Graph quality checks (9 checks) with offender IDs
     lint --audit <check> --json          Full offender export with context for one check
+    lint --audit <check> --target <id>   Scope edge-shaped audits to one target (per-thesis audit)
     lint --check --json                  Same + exit code 1 on failures (for CI)
     lint --summary --json                Stats + graph health + user context
 
@@ -148,7 +150,7 @@ Errors:  {"ok": false, "error": {"code": "...", "message": "..."}}
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.19.0");
+  console.log("lens v1.19.1");
   process.exit(0);
 }
 

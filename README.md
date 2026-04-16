@@ -73,6 +73,7 @@ lens similar --all --json                 # Scan all notes, group duplicates
 lens digest [week|month|year] --json      # Recent insights grouped by type
 lens lint --json                          # Graph quality checks (9 checks) with offender IDs
 lens lint --audit <check> --json          # Full offender export with context for one check
+lens lint --audit <check> --target <id> --json  # Scope edge-shaped audits to one target node
 lens lint --check --json                  # Same + exit code 1 on failures (for CI)
 lens lint --summary --json                # Stats + graph health + user context
 ```
