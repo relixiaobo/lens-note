@@ -176,8 +176,9 @@ export async function runLint(args: string[], opts: CommandOptions) {
 
   checks.push({
     name: "missing_reasons",
-    status: missingReasonCount > 20 ? "warn" : "ok",
+    status: missingReasonCount > 5 ? "warn" : "ok",
     value: missingReasonCount,
+    threshold: 5,
     message: missingReasonCount > 0
       ? `${missingReasonCount} links without a reason field. Reasons help agents (and you) understand link intent.`
       : "All links have reasons.",

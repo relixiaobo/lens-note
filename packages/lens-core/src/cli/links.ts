@@ -87,7 +87,14 @@ export async function showLinks(input: string, opts: CommandOptions) {
       .filter((l) => !relFilter || l.rel === relFilter)
       .map((l) => {
         const { type, title } = resolveLink(l.from_id);
-        return { id: l.from_id, rel: l.rel, type, title };
+        // Reason is stored in the source note's links[] (frontmatter), not in the links table.
+        // Read the source to extract the matching link's reason.
+        const source = readObject(l.from_id);
+        const sourceLink = source?.data.links?.find(
+          (sl: any) => sl.to === id && sl.rel === l.rel
+        );
+        const reason = sourceLink?.reason;
+        return { id: l.from_id, rel: l.rel, type, title, ...(reason ? { reason } : {}) };
       });
   }
 
@@ -113,7 +120,8 @@ export async function showLinks(input: string, opts: CommandOptions) {
       console.log(`\nBackward (${backward.length}):`);
       for (const l of backward) {
         const typeTag = l.type ? ` (${l.type})` : "";
-        console.log(`  ← [${l.rel}] ${l.title.substring(0, 70)}${typeTag}`);
+        const reasonTag = l.reason ? ` — ${l.reason}` : "";
+        console.log(`  ← [${l.rel}] ${l.title.substring(0, 70)}${typeTag}${reasonTag}`);
       }
     }
 
