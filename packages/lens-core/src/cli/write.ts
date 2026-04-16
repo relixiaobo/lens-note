@@ -197,12 +197,15 @@ function writeSource(input: any): WriteResult {
   };
 
   // Forward unknown fields (e.g. inbox, annotations, raw_file from lens-clipper).
-  // Frontmatter preserves whatever the caller writes.
-  const KNOWN_SOURCE_FIELDS = new Set([
-    "type", "title", "source_type", "author", "url", "word_count", "body",
+  // RESERVED_SOURCE_FIELDS covers all lens-managed and already-consumed input fields.
+  // id / ingested_at / created_at are listed explicitly to prevent callers from spoofing
+  // identity or timestamps via stray input keys — those must come from lens alone.
+  const RESERVED_SOURCE_FIELDS = new Set([
+    "id", "type", "title", "source_type", "author", "url", "word_count", "body",
+    "ingested_at", "created_at",
   ]);
   for (const [key, value] of Object.entries(input)) {
-    if (!KNOWN_SOURCE_FIELDS.has(key) && value !== undefined) {
+    if (!RESERVED_SOURCE_FIELDS.has(key) && value !== undefined) {
       (source as any)[key] = value;
     }
   }

@@ -120,6 +120,7 @@ export async function listCommand(args: string[], opts: CommandOptions) {
       return base;
     });
     const result: Record<string, any> = { type: typeName, total: totalCount, count: summaries.length, items: summaries };
+    if (flags.inbox) result.filter = "inbox";
     if (offset > 0) result.offset = offset;
     if (limit !== undefined) result.limit = limit;
     respondSuccess(result);

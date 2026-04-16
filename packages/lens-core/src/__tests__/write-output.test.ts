@@ -157,7 +157,79 @@ describe("batch write link results", () => {
 });
 
 // ================================================================
-// 3. Secret detection rejects API keys
+// 3. writeSource custom field forwarding (v1.20.0) + reserved-field defense
+// ================================================================
+
+describe("writeSource custom field forwarding", () => {
+  it("round-trips arbitrary frontmatter fields (inbox, annotations)", () => {
+    const input = {
+      type: "source",
+      title: "Forward test",
+      url: "https://example.com/forward-test",
+      source_type: "web_article",
+      inbox: true,
+      annotations: [{ id: "ann_01TEST", quote: "highlighted", comment: "nice" }],
+      raw_file: "raw/custom.html",
+    };
+    const tmpFile = join(tmpdir(), `lens-test-fwd-${Date.now()}.json`);
+    writeFileSync(tmpFile, JSON.stringify(input));
+    let sourceId: string;
+    try {
+      const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
+      assert.equal(exitCode, 0);
+      const data = JSON.parse(stdout).data;
+      sourceId = data.id;
+      assert.equal(data.inbox, true);
+      assert.equal(data.annotations.length, 1);
+      assert.equal(data.raw_file, "raw/custom.html");
+
+      // Verify show --json also emits the custom fields (fix #2)
+      const { stdout: showOut } = lensStdin({ command: "show", positional: [sourceId], flags: { json: true } });
+      const shown = JSON.parse(showOut).data;
+      assert.equal(shown.inbox, true);
+      assert.equal(shown.annotations[0].id, "ann_01TEST");
+      assert.equal(shown.raw_file, "raw/custom.html");
+    } finally {
+      unlinkSync(tmpFile);
+      if (sourceId!) lensStdin({ command: "write", input: { type: "delete", id: sourceId } });
+    }
+  });
+
+  it("ignores caller-provided reserved fields (id, ingested_at, created_at)", () => {
+    // Regression: before v1.20.1, a caller could overwrite generated id via the forwarding loop,
+    // silently redirecting the write to an arbitrary Source file.
+    const input = {
+      type: "source",
+      title: "Reserved-field attack",
+      url: "https://example.com/attack",
+      source_type: "web_article",
+      id: "src_ATTACKER00000000000000000",
+      ingested_at: "1999-01-01T00:00:00.000Z",
+      created_at: "1999-01-01T00:00:00.000Z",
+      inbox: true,
+    };
+    const tmpFile = join(tmpdir(), `lens-test-reserved-${Date.now()}.json`);
+    writeFileSync(tmpFile, JSON.stringify(input));
+    let sourceId: string;
+    try {
+      const { stdout, exitCode } = lens("write", "--file", tmpFile, "--json");
+      assert.equal(exitCode, 0);
+      const data = JSON.parse(stdout).data;
+      sourceId = data.id;
+      assert.notEqual(data.id, "src_ATTACKER00000000000000000");
+      assert.match(data.id, /^src_[A-Z0-9]{26}$/);
+      assert.notEqual(data.ingested_at, "1999-01-01T00:00:00.000Z");
+      assert.notEqual(data.created_at, "1999-01-01T00:00:00.000Z");
+      assert.equal(data.inbox, true); // non-reserved field still forwards
+    } finally {
+      unlinkSync(tmpFile);
+      if (sourceId!) lensStdin({ command: "write", input: { type: "delete", id: sourceId } });
+    }
+  });
+});
+
+// ================================================================
+// 4. Secret detection rejects API keys
 // ================================================================
 
 describe("secret detection", () => {
