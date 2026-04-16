@@ -412,6 +412,9 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
   const db = getDb();
   const limit = flags.limit !== undefined ? parseInt(String(flags.limit)) : undefined;
   const offset = flags.offset !== undefined ? parseInt(String(flags.offset)) : 0;
+  // --target <id> scopes inbound-edge audits (missing_reasons, vague_reasons, supports_density)
+  // to links pointing AT the given node. Used for per-target audit of a single hub/thesis.
+  const targetFilter = flags.target ? String(flags.target) : undefined;
 
   // Structural rels exempt from reason checks (same as main lint)
   const STRUCTURAL_RELS = new Set(["indexes"]);
@@ -419,16 +422,28 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
   switch (checkName) {
     // ── supports_density: all supports links for evidence backbone review ──
     case "supports_density": {
-      const rows = db.prepare(`
-        SELECT l.from_id, l.to_id, l.rel,
-          json_extract(f.data, '$.title') as from_title,
-          json_extract(t.data, '$.title') as to_title
-        FROM links l
-        JOIN objects f ON f.id = l.from_id
-        JOIN objects t ON t.id = l.to_id
-        WHERE l.rel = 'supports'
-        ORDER BY l.from_id
-      `).all() as { from_id: string; to_id: string; rel: string; from_title: string; to_title: string }[];
+      const rows = (targetFilter
+        ? db.prepare(`
+            SELECT l.from_id, l.to_id, l.rel,
+              json_extract(f.data, '$.title') as from_title,
+              json_extract(t.data, '$.title') as to_title
+            FROM links l
+            JOIN objects f ON f.id = l.from_id
+            JOIN objects t ON t.id = l.to_id
+            WHERE l.rel = 'supports' AND l.to_id = ?
+            ORDER BY l.from_id
+          `).all(targetFilter)
+        : db.prepare(`
+            SELECT l.from_id, l.to_id, l.rel,
+              json_extract(f.data, '$.title') as from_title,
+              json_extract(t.data, '$.title') as to_title
+            FROM links l
+            JOIN objects f ON f.id = l.from_id
+            JOIN objects t ON t.id = l.to_id
+            WHERE l.rel = 'supports'
+            ORDER BY l.from_id
+          `).all()
+      ) as { from_id: string; to_id: string; rel: string; from_title: string; to_title: string }[];
 
       const reasonCache = new Map<string, Record<string, string>>();
       const enriched = rows.map(r => {
@@ -536,6 +551,7 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
           if (!Array.isArray(parsed.links)) continue;
           for (const link of parsed.links) {
             if (STRUCTURAL_RELS.has(link.rel)) continue;
+            if (targetFilter && link.to !== targetFilter) continue;
             if (!link.reason || !link.reason.trim()) {
               offenders.push({
                 from: obj.id, from_title: parsed.title,
@@ -583,6 +599,7 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
           if (!Array.isArray(parsed.links)) continue;
           for (const link of parsed.links) {
             if (STRUCTURAL_RELS.has(link.rel)) continue;
+            if (targetFilter && link.to !== targetFilter) continue;
             if (!link.reason) continue;
             const reason = link.reason.trim();
             const isTopicProximity = link.rel === "supports" && SUPPORTS_TOPIC_PROXIMITY_PATTERN.test(reason);
