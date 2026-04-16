@@ -148,7 +148,7 @@ Errors:  {"ok": false, "error": {"code": "...", "message": "..."}}
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.15.0");
+  console.log("lens v1.16.0");
   process.exit(0);
 }
 

@@ -2,7 +2,7 @@
  * lens lint — Deterministic graph quality checks with offender IDs.
  *
  * Checks:
- *   related_dominance  — related links as % of total (threshold: < 50%)
+ *   supports_density   — supports links per note (evidence backbone density, threshold: >= 0.1)
  *   contradicts_count  — number of contradicts links (0 = problem)
  *   super_connectors   — notes with > 30 inbound links
  *   missing_reasons    — links without a reason field
@@ -35,7 +35,7 @@ interface LintCheck {
 }
 
 const SUPER_CONNECTOR_THRESHOLD = 30;
-const RELATED_THRESHOLD = 50; // percent
+const SUPPORTS_DENSITY_THRESHOLD = 0.1; // supports links per note (evidence backbone health)
 const THIN_BODY_THRESHOLD = 20; // characters
 const VAGUE_REASON_MIN_LENGTH = 5;
 const VAGUE_REASON_PATTERNS = /^(related|related to|supports|contradicts|refines|see also|similar|同上|相关|参见|参考|类似)\s*\.?$/i;
@@ -64,23 +64,26 @@ export async function runLint(args: string[], opts: CommandOptions) {
   const db = getDb();
   const checks: LintCheck[] = [];
 
-  // ── 1. Related dominance ──────────────────────────────────
+  // ── 1. Supports density ───────────────────────────────────
   const relCounts = db.prepare(
     "SELECT rel, COUNT(*) as cnt FROM links GROUP BY rel"
   ).all() as { rel: string; cnt: number }[];
 
   const totalLinks = relCounts.reduce((s, r) => s + r.cnt, 0);
+  const supportsCount = relCounts.find(r => r.rel === "supports")?.cnt || 0;
   const relatedCount = relCounts.find(r => r.rel === "related")?.cnt || 0;
-  const relatedPct = totalLinks > 0 ? parseFloat((relatedCount / totalLinks * 100).toFixed(1)) : 0;
+
+  const noteCount = (db.prepare("SELECT COUNT(*) as cnt FROM objects WHERE type = 'note'").get() as { cnt: number }).cnt;
+  const supportsDensity = noteCount > 0 ? parseFloat((supportsCount / noteCount).toFixed(2)) : 0;
 
   checks.push({
-    name: "related_dominance",
-    status: relatedPct > RELATED_THRESHOLD ? "fail" : "ok",
-    value: relatedPct,
-    threshold: RELATED_THRESHOLD,
-    message: relatedPct > RELATED_THRESHOLD
-      ? `related is ${relatedPct}% of all links (threshold: < ${RELATED_THRESHOLD}%). ${relatedCount} related out of ${totalLinks} total.`
-      : `related is ${relatedPct}% of all links (${relatedCount}/${totalLinks}). OK.`,
+    name: "supports_density",
+    status: supportsDensity < SUPPORTS_DENSITY_THRESHOLD ? "warn" : "ok",
+    value: supportsDensity,
+    threshold: SUPPORTS_DENSITY_THRESHOLD,
+    message: supportsDensity < SUPPORTS_DENSITY_THRESHOLD
+      ? `supports density is ${supportsDensity} (${supportsCount} evidence links / ${noteCount} notes). Evidence backbone is thin — fewer than ${Math.round(SUPPORTS_DENSITY_THRESHOLD * 10)} supports per 10 notes.`
+      : `supports density is ${supportsDensity} (${supportsCount} supports / ${noteCount} notes, ${relatedCount} related). Evidence backbone is healthy.`,
   });
 
   // ── 2. Contradicts count ──────────────────────────────────
@@ -392,7 +395,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
 // ============================================================
 
 const VALID_AUDIT_CHECKS = new Set([
-  "related_dominance", "missing_reasons", "vague_reasons",
+  "supports_density", "related_dominance", "missing_reasons", "vague_reasons",
   "duplicate_links", "thin_notes", "superseded_alive",
 ]);
 
@@ -411,7 +414,59 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
   const STRUCTURAL_RELS = new Set(["indexes"]);
 
   switch (checkName) {
-    // ── related_dominance: all related links with context ──
+    // ── supports_density: all supports links for evidence backbone review ──
+    case "supports_density": {
+      const rows = db.prepare(`
+        SELECT l.from_id, l.to_id, l.rel,
+          json_extract(f.data, '$.title') as from_title,
+          json_extract(t.data, '$.title') as to_title
+        FROM links l
+        JOIN objects f ON f.id = l.from_id
+        JOIN objects t ON t.id = l.to_id
+        WHERE l.rel = 'supports'
+        ORDER BY l.from_id
+      `).all() as { from_id: string; to_id: string; rel: string; from_title: string; to_title: string }[];
+
+      const reasonCache = new Map<string, Record<string, string>>();
+      const enriched = rows.map(r => {
+        if (!reasonCache.has(r.from_id)) {
+          const obj = db.prepare("SELECT data FROM objects WHERE id = ?").get(r.from_id) as { data: string } | undefined;
+          const reasons: Record<string, string> = {};
+          if (obj) {
+            try {
+              const links = JSON.parse(obj.data).links || [];
+              for (const l of links) {
+                if (l.reason) reasons[`${l.to}:${l.rel}`] = l.reason;
+              }
+            } catch { /* ignore */ }
+          }
+          reasonCache.set(r.from_id, reasons);
+        }
+        const reason = reasonCache.get(r.from_id)?.[`${r.to_id}:${r.rel}`];
+        return {
+          from: r.from_id, from_title: r.from_title,
+          to: r.to_id, to_title: r.to_title,
+          rel: r.rel,
+          ...(reason ? { reason } : {}),
+        };
+      });
+
+      const total = enriched.length;
+      let items = enriched;
+      if (offset > 0) items = items.slice(offset);
+      if (limit !== undefined) items = items.slice(0, limit);
+
+      respondSuccess({
+        check: checkName, status: total > 0 ? "ok" : "warn",
+        value: total, total_links: total, count: items.length,
+        ...(offset > 0 ? { offset } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        offenders: items,
+      });
+      return;
+    }
+
+    // ── related_dominance: all related links with context (audit-only, useful for curation) ──
     case "related_dominance": {
       const rows = db.prepare(`
         SELECT l.from_id, l.to_id, l.rel,
@@ -455,8 +510,8 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
       if (limit !== undefined) items = items.slice(0, limit);
 
       respondSuccess({
-        check: checkName, status: total > 0 ? "fail" : "ok",
-        value: total, threshold: RELATED_THRESHOLD,
+        check: checkName, status: "ok",
+        value: total,
         total_links: total, count: items.length,
         ...(offset > 0 ? { offset } : {}),
         ...(limit !== undefined ? { limit } : {}),
