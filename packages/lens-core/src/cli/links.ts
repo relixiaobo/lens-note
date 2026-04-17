@@ -131,3 +131,4 @@ export async function showLinks(input: string, opts: CommandOptions) {
     }
   }
 }
+

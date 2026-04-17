@@ -164,6 +164,13 @@ async function tasksCommand(_args: string[], opts: CommandOptions) {
   }
 }
 
+async function mapCommand(args: string[], opts: CommandOptions) {
+  const { positional } = parseCliArgs(args);
+  const id = positional[0];
+  const { runMap } = await import("./map");
+  await runMap(id, opts);
+}
+
 async function discoverCommand(args: string[], opts: CommandOptions) {
   const { positional } = parseCliArgs(args);
   const id = positional[0];
@@ -222,6 +229,7 @@ export const commands: Record<string, CommandHandler> = {
   write: writeCommand,
   fetch: fetchCommand,
   tasks: tasksCommand,
+  map: mapCommand,
   discover: discoverCommand,
   similar: similarCommand,
   index: indexCommand,
@@ -329,6 +337,12 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
       if (!id) throw new Error('links: "positional" with object ID is required');
       const { showLinks } = await import("./links");
       return showLinks(id, opts);
+    }
+    case "map": {
+      const id = req.positional?.[0];
+      if (!id) throw new Error('map: "positional" with object ID or title is required');
+      const { runMap } = await import("./map");
+      return runMap(id, opts);
     }
     case "discover": {
       const id = req.positional?.[0];

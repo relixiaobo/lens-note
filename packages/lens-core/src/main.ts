@@ -93,9 +93,8 @@ Shell mode:
     search "<query>" --resolve --json    Resolve title → ID (exact match first)
     search "<query>" --expand --json     Search with full bodies + links
     show <id> [id2...] --json              Show object(s) with body + links (batch supported)
-    links <id> --json                    All relationships (forward + backward)
-    links <id> --rel related --json      Filter by relationship type
-    links <id> --direction forward --json  Only outgoing links
+    links <id> --json                    Precise connection list (+ --rel, --direction filters)
+    map <id> --json                      Cluster overview: subtopics, evidence, tensions, size
     list notes --orphans --json          Orphan notes (+ --since, --limit, --offset)
     list notes --min-links 10 --json     Hub notes by link count
     list notes --max-links 2 --json      Orphan-ish notes (disconnected theses)
@@ -158,7 +157,7 @@ Envelope (stable, schema_version: 1):
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.24.0");
+  console.log("lens v1.26.0");
   process.exit(0);
 }
 

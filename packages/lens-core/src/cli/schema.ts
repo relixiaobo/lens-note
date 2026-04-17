@@ -75,7 +75,7 @@ const COMMANDS: Record<string, CommandSpec> = {
   },
 
   links: {
-    description: "List all relationships (forward and backward) for an object.",
+    description: "Precise connection list with filtering. Use before retype/unlink operations.",
     readonly: true,
     positional: [{ name: "id_or_title", type: "string", description: "Object ID or title", required: true }],
     flags: {
@@ -86,6 +86,17 @@ const COMMANDS: Record<string, CommandSpec> = {
     examples: [
       { description: "All links", request: { command: "links", positional: ["note_01ABC..."] } },
       { description: "Only supports", request: { command: "links", positional: ["note_01ABC..."], flags: { rel: "supports" } } },
+    ],
+  },
+
+  map: {
+    description: "Structural overview of a note's cluster: subtopics, evidence, tensions, cluster size.",
+    readonly: true,
+    positional: [{ name: "id_or_title", type: "string", description: "Note ID or title", required: true }],
+    output: "{id, title, cluster_size, direct_links, subtopics?, evidence?, tensions?, continuations?, indexes?, indexed_by?, related?}",
+    examples: [
+      { description: "Cluster overview", request: { command: "map", positional: ["note_01ABC..."] } },
+      { description: "By title", request: { command: "map", positional: ["上下文管理三策略"] } },
     ],
   },
 
