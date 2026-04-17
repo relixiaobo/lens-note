@@ -101,9 +101,9 @@ test("readonly DB mode — whole tree immutable", async (t) => {
     assert.ok(body.data.count >= 2);
   });
 
-  await t.test("similar works under readonly", () => {
-    const res = env.lensStdin({ command: "similar", positional: [note1Id] });
-    assert.equal(res.exitCode, 0, `similar failed: ${res.stdout}`);
+  await t.test("discover works under readonly", () => {
+    const res = env.lensStdin({ command: "discover", positional: [note1Id], flags: { duplicates: true } });
+    assert.equal(res.exitCode, 0, `discover failed: ${res.stdout}`);
     const body = JSON.parse(res.stdout);
     assert.equal(body.ok, true);
   });

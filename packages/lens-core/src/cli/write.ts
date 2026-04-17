@@ -26,7 +26,7 @@ import { SUPER_CONNECTOR_THRESHOLD, SUPER_CONNECTOR_SOFT_THRESHOLD } from "./lin
 // Validation
 // ============================================================
 
-const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "related", "indexes"]);
+const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "related", "indexes", "continues"]);
 const VALID_SOURCE_TYPES = new Set<SourceType>(["book", "paper", "report", "video", "podcast", "course", "web_article", "newsletter", "social_post", "conversation", "manual_note", "note_batch", "markdown", "plain_text"]);
 const VALID_STATUSES = new Set<TaskStatus>(["open", "done"]);
 
@@ -40,13 +40,15 @@ function validateLinkReason(rel: string, reason: string | undefined, context: st
   }
 }
 
-const RELATED_HINT = 'Consider a more precise rel: supports (A strengthens B), refines (A is more specific than B), contradicts (A opposes B). "related" should be last resort.';
+const RELATED_HINT = 'Consider a more precise rel: supports (A strengthens B), refines (A is more specific than B), contradicts (A opposes B), continues (A is the next step in B\'s argument). "related" should be last resort.';
 
 /** Pattern-match reason text to suggest a more precise rel. Returns null if no strong signal. */
-function suggestRel(reason: string | undefined): "supports" | "refines" | "contradicts" | null {
+function suggestRel(reason: string | undefined): "supports" | "refines" | "contradicts" | "continues" | null {
   if (!reason) return null;
   // contradicts — explicit opposition indicators only
   if (/对立|相反|相悖|反驳|(?:两个|不同)视角|opposes?|contradicts?|conflicts? with/i.test(reason)) return "contradicts";
+  // continues — next step in argument
+  if (/续写|下一步|进一步|接着|继续|延续|在此基础上|continues?|next step|follow[- ]?up|building on/i.test(reason)) return "continues";
   // refines — A is more concrete/specific than B
   if (/具体实现|具体化|细化|更精确|正式版本|工程实现|延伸应用|核心提炼|具体应用|具体方法|implementat|concret|specific.*version/i.test(reason)) return "refines";
   // supports — A strengthens/validates B

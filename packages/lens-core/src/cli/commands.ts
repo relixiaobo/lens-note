@@ -164,12 +164,21 @@ async function tasksCommand(_args: string[], opts: CommandOptions) {
   }
 }
 
-async function similarCommand(args: string[], opts: CommandOptions) {
+async function discoverCommand(args: string[], opts: CommandOptions) {
   const { positional } = parseCliArgs(args);
   const id = positional[0];
-  if (!id && !opts.all) throw new Error("Usage: lens similar <id> [--threshold 0.3]  or  lens similar --all");
-  const { showSimilar } = await import("./similar");
-  await showSimilar(id, opts);
+  const { runDiscover } = await import("./discover");
+  await runDiscover(id, opts);
+}
+
+async function similarCommand(args: string[], opts: CommandOptions) {
+  const { respondDeprecation } = await import("./response");
+  if (opts.json) {
+    respondDeprecation("similar", "discover --duplicates", "Use: lens discover <id> --duplicates --json  or  lens discover --all --duplicates --json");
+  } else {
+    console.error("Error: similar is deprecated. Use: lens discover <id> --duplicates  or  lens discover --all --duplicates");
+    process.exitCode = 1;
+  }
 }
 
 async function indexCommand(args: string[], opts: CommandOptions) {
@@ -213,6 +222,7 @@ export const commands: Record<string, CommandHandler> = {
   write: writeCommand,
   fetch: fetchCommand,
   tasks: tasksCommand,
+  discover: discoverCommand,
   similar: similarCommand,
   index: indexCommand,
   lint: lintCommand,
@@ -320,11 +330,15 @@ export async function dispatchRequest(req: RequestEnvelope): Promise<void> {
       const { showLinks } = await import("./links");
       return showLinks(id, opts);
     }
-    case "similar": {
+    case "discover": {
       const id = req.positional?.[0];
-      if (!id && !opts.all) throw new Error('similar: "positional" with object ID is required, or use "flags": {"all": true}');
-      const { showSimilar } = await import("./similar");
-      return showSimilar(id, opts);
+      const { runDiscover } = await import("./discover");
+      return runDiscover(id, opts);
+    }
+    case "similar": {
+      const { respondDeprecation } = await import("./response");
+      respondDeprecation("similar", "discover --duplicates", 'Use: {"command":"discover","positional":["<id>"],"flags":{"duplicates":true}}');
+      return;
     }
     case "context": {
       const { respondDeprecation } = await import("./response");

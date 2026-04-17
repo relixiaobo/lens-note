@@ -60,7 +60,7 @@ lens — Knowledge graph CLI. 3 types, typed links, full-text search.
 Data model:
   Types:    note (one idea), source (provenance), task (action item)
   IDs:      note_<ULID>, src_<ULID>, task_<ULID>   (26 uppercase chars)
-  Links:    supports, contradicts, refines, related, indexes
+  Links:    supports, contradicts, refines, related, indexes, continues
   Storage:  ~/.lens/  (markdown files + SQLite cache + git history)
 
 Agent mode (recommended for programmatic use):
@@ -102,10 +102,12 @@ Shell mode:
     list sources --source-type book --json  Filter by source type
     list sources --inbox --json          Sources awaiting agent processing (set by clippers)
     list tasks --status open --json      Tasks by status
-    similar <id> --json                  Near-duplicates (+ --threshold 0.0-1.0)
-    similar --all --json                 Scan all notes, group duplicates
+    discover <id> --json                  Unlinked-but-related notes (+ --count N, --hops N)
+    discover <id> --collide --json       Cross-domain surprises (+ --count N)
+    discover <id> --duplicates --json    Near-duplicates (+ --threshold 0.0-1.0)
+    discover --all --duplicates --json   Scan all notes, group duplicates
     digest [week|month|year] --json      Recent insights (+ --days N)
-    lint --json                          Graph quality checks (9 checks) with offender IDs
+    lint --json                          Graph quality checks (12 checks) with offender IDs
     lint --audit <check> --json          Full offender export with context for one check
     lint --audit <check> --target <id>   Scope edge-shaped audits to one target (per-thesis audit)
     lint --check --json                  Same + exit code 1 on failures (for CI)
@@ -154,7 +156,7 @@ Envelope (stable, schema_version: 1):
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.21.0");
+  console.log("lens v1.22.0");
   process.exit(0);
 }
 

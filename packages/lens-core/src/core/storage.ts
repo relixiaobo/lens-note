@@ -533,35 +533,61 @@ export function resolveIdOrTitle(rawInput: string): { id: string } | { error: st
 // Similarity (character trigrams + Dice coefficient)
 // ============================================================
 
+// ============================================================
+// Similarity engine: Intl.Segmenter + TF-IDF (multilingual, zero dependencies)
+//
+// Uses Node.js built-in ICU word segmentation for all languages.
+// TF-IDF weights rare shared terms higher than common ones.
+// Title similarity boosted 2x (titles are claim-dense).
+// ============================================================
+
 function normalizeForSimilarity(text: string): string {
   return text.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
-function charNgrams(text: string): Set<string> {
+/** Extract words using Intl.Segmenter (ICU-based, supports all major languages). */
+const _segmenter = new Intl.Segmenter(undefined, { granularity: "word" });
+
+function extractWords(text: string): string[] {
   const norm = normalizeForSimilarity(text);
-  const grams = new Set<string>();
-  const n = Math.min(3, norm.length);
-  if (n === 0) return grams;
-  for (let i = 0; i <= norm.length - n; i++) {
-    grams.add(norm.substring(i, i + n));
-  }
-  return grams;
+  if (norm.length === 0) return [];
+  return [..._segmenter.segment(norm)]
+    .filter(s => s.isWordLike)
+    .map(s => s.segment);
 }
 
-function diceSimilarity(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 && b.size === 0) return 1;
-  if (a.size === 0 || b.size === 0) return 0;
-  let intersection = 0;
-  const [smaller, larger] = a.size <= b.size ? [a, b] : [b, a];
-  for (const g of smaller) {
-    if (larger.has(g)) intersection++;
+/** Compute term frequency map: word → count. */
+function termFrequency(words: string[]): Map<string, number> {
+  const tf = new Map<string, number>();
+  for (const w of words) {
+    tf.set(w, (tf.get(w) || 0) + 1);
   }
-  return (2 * intersection) / (a.size + b.size);
+  return tf;
 }
 
-/** Minimum size ratio for a pair to possibly reach a Dice threshold: r >= t / (2 - t). */
-function minSizeRatio(threshold: number): number {
-  return threshold / (2 - threshold);
+/** Compute TF-IDF cosine similarity between two documents given corpus IDF. */
+function tfidfCosineSimilarity(
+  tfA: Map<string, number>,
+  tfB: Map<string, number>,
+  idf: Map<string, number>,
+): number {
+  // Build TF-IDF vectors (sparse, only compute for shared terms + union)
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  const allTerms = new Set([...tfA.keys(), ...tfB.keys()]);
+  for (const term of allTerms) {
+    const idfVal = idf.get(term) || 0;
+    const a = (tfA.get(term) || 0) * idfVal;
+    const b = (tfB.get(term) || 0) * idfVal;
+    dotProduct += a * b;
+    normA += a * a;
+    normB += b * b;
+  }
+
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
 export function findSimilarNotes(id: string, threshold: number = 0.3): { id: string; title: string; similarity: number }[] {
@@ -570,46 +596,99 @@ export function findSimilarNotes(id: string, threshold: number = 0.3): { id: str
   const target = db.prepare("SELECT data, body FROM objects WHERE id = ?").get(id) as any;
   if (!target) return [];
   const targetData = JSON.parse(target.data);
-  const targetText = (targetData.title || "") + " " + (target.body || "");
-  const targetGrams = charNgrams(targetText);
-  if (targetGrams.size === 0) return [];
+  const targetTitle = targetData.title || "";
+  const targetBody = target.body || "";
 
-  const minRatio = minSizeRatio(threshold);
+  // Load all notes and build corpus IDF
   const rows = db.prepare("SELECT id, data, body FROM objects WHERE type = 'note' AND id != ?").all(id) as any[];
 
-  const results: { id: string; title: string; similarity: number }[] = [];
+  // Pre-compute word lists for all notes (including target)
+  const targetTitleWords = extractWords(targetTitle);
+  const targetBodyWords = extractWords(targetTitle + " " + targetBody);
+  if (targetBodyWords.length === 0) return [];
+
+  const targetTitleTf = termFrequency(targetTitleWords);
+  const targetBodyTf = termFrequency(targetBodyWords);
+
+  // Document frequency for IDF: count how many docs each term appears in
+  const docFreq = new Map<string, number>();
+  const noteData: { id: string; title: string; titleTf: Map<string, number>; bodyTf: Map<string, number> }[] = [];
+
+  // Count target's terms in doc frequency
+  for (const term of new Set(targetBodyWords)) {
+    docFreq.set(term, (docFreq.get(term) || 0) + 1);
+  }
+
   for (const row of rows) {
     const data = JSON.parse(row.data);
-    const text = (data.title || "") + " " + (row.body || "");
-    const grams = charNgrams(text);
+    const title = data.title || "";
+    const body = row.body || "";
+    const titleWords = extractWords(title);
+    const bodyWords = extractWords(title + " " + body);
+    if (bodyWords.length === 0) continue;
 
-    if (grams.size === 0) continue;
-    const sizeRatio = Math.min(targetGrams.size, grams.size) / Math.max(targetGrams.size, grams.size);
-    if (sizeRatio < minRatio) continue;
+    // Update document frequency
+    for (const term of new Set(bodyWords)) {
+      docFreq.set(term, (docFreq.get(term) || 0) + 1);
+    }
 
-    const similarity = diceSimilarity(targetGrams, grams);
+    noteData.push({
+      id: row.id,
+      title: title || "(untitled)",
+      titleTf: termFrequency(titleWords),
+      bodyTf: termFrequency(bodyWords),
+    });
+  }
+
+  // Compute IDF: log(N / df) where N = total docs
+  const N = noteData.length + 1; // +1 for target
+  const idf = new Map<string, number>();
+  for (const [term, df] of docFreq) {
+    idf.set(term, Math.log(N / df));
+  }
+
+  // Score each note
+  const results: { id: string; title: string; similarity: number }[] = [];
+  for (const note of noteData) {
+    const bodySim = tfidfCosineSimilarity(targetBodyTf, note.bodyTf, idf);
+    // Title-boosted: title similarity weighted 2x, blended with body similarity
+    const titleSim = (targetTitleTf.size > 0 && note.titleTf.size > 0)
+      ? tfidfCosineSimilarity(targetTitleTf, note.titleTf, idf) : 0;
+    const similarity = Math.max(bodySim, (titleSim * 2 + bodySim) / 3);
+
     if (similarity >= threshold) {
-      results.push({ id: row.id, title: data.title || "(untitled)", similarity: parseFloat(similarity.toFixed(3)) });
+      results.push({ id: note.id, title: note.title, similarity: parseFloat(similarity.toFixed(3)) });
     }
   }
 
   return results.sort((a, b) => b.similarity - a.similarity);
 }
 
-/** Scan all notes pairwise → group similar ones via Union-Find. */
+/** Scan all notes pairwise → group similar ones via Union-Find. Uses TF-IDF cosine. */
 export function findAllSimilarGroups(threshold: number = 0.3): { count: number; groups: { notes: { id: string; title: string }[]; pairs: { a: string; b: string; similarity: number }[] }[] } {
   const db = getDb();
   const rows = db.prepare("SELECT id, data, body FROM objects WHERE type = 'note'").all() as any[];
 
-  // Pre-compute trigrams for every note
-  const notes: { id: string; title: string; grams: Set<string> }[] = [];
+  // Pre-compute word TF for every note + build corpus doc frequency
+  const docFreq = new Map<string, number>();
+  const notes: { id: string; title: string; tf: Map<string, number> }[] = [];
   for (const row of rows) {
     const data = JSON.parse(row.data);
     const text = (data.title || "") + " " + (row.body || "");
-    const grams = charNgrams(text);
-    if (grams.size > 0) {
-      notes.push({ id: row.id, title: data.title || "(untitled)", grams });
+    const words = extractWords(text);
+    if (words.length === 0) continue;
+    const tf = termFrequency(words);
+    for (const term of new Set(words)) {
+      docFreq.set(term, (docFreq.get(term) || 0) + 1);
     }
+    notes.push({ id: row.id, title: data.title || "(untitled)", tf });
+  }
+
+  // Compute IDF
+  const N = notes.length;
+  const idf = new Map<string, number>();
+  for (const [term, df] of docFreq) {
+    idf.set(term, Math.log(N / df));
   }
 
   // Union-Find
@@ -627,15 +706,11 @@ export function findAllSimilarGroups(threshold: number = 0.3): { count: number; 
     if (ra !== rb) parent.set(ra, rb);
   };
 
-  // Pairwise comparison with pre-filters
-  const minRatio = minSizeRatio(threshold);
+  // Pairwise comparison
   const allPairs: { a: string; b: string; similarity: number }[] = [];
   for (let i = 0; i < notes.length; i++) {
     for (let j = i + 1; j < notes.length; j++) {
-      const sizeRatio = Math.min(notes[i].grams.size, notes[j].grams.size) / Math.max(notes[i].grams.size, notes[j].grams.size);
-      if (sizeRatio < minRatio) continue;
-
-      const sim = diceSimilarity(notes[i].grams, notes[j].grams);
+      const sim = tfidfCosineSimilarity(notes[i].tf, notes[j].tf, idf);
       if (sim >= threshold) {
         union(notes[i].id, notes[j].id);
         allPairs.push({ a: notes[i].id, b: notes[j].id, similarity: parseFloat(sim.toFixed(3)) });
@@ -663,6 +738,131 @@ export function findAllSimilarGroups(threshold: number = 0.3): { count: number; 
     .sort((a, b) => b.pairs[0].similarity - a.pairs[0].similarity);
 
   return { count: groups.length, groups };
+}
+
+/** Get all note IDs within N hops of a starting note (BFS on link graph). */
+export function getLinkNeighborhood(id: string, maxHops: number): Set<string> {
+  const db = getDb();
+  const visited = new Set<string>([id]);
+  let frontier = [id];
+
+  for (let hop = 0; hop < maxHops && frontier.length > 0; hop++) {
+    const next: string[] = [];
+    for (const nodeId of frontier) {
+      const links = db.prepare(
+        "SELECT from_id, to_id FROM links WHERE from_id = ? OR to_id = ?"
+      ).all(nodeId, nodeId) as { from_id: string; to_id: string }[];
+      for (const l of links) {
+        const other = l.from_id === nodeId ? l.to_id : l.from_id;
+        if (!visited.has(other) && other.startsWith("note_")) {
+          visited.add(other);
+          next.push(other);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return visited;
+}
+
+/** Get the full connected component containing a note (BFS, unlimited hops, capped at maxNodes). */
+export function getConnectedComponent(id: string, maxNodes: number = 2000): Set<string> {
+  const db = getDb();
+  const visited = new Set<string>([id]);
+  let frontier = [id];
+
+  while (frontier.length > 0 && visited.size < maxNodes) {
+    const next: string[] = [];
+    for (const nodeId of frontier) {
+      const links = db.prepare(
+        "SELECT from_id, to_id FROM links WHERE from_id = ? OR to_id = ?"
+      ).all(nodeId, nodeId) as { from_id: string; to_id: string }[];
+      for (const l of links) {
+        const other = l.from_id === nodeId ? l.to_id : l.from_id;
+        if (!visited.has(other) && other.startsWith("note_")) {
+          visited.add(other);
+          next.push(other);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return visited;
+}
+
+/**
+ * Find notes similar by TF-IDF but NOT in the given exclusion set.
+ * Shared engine for both `nearby` and `collide`.
+ */
+export function findSimilarExcluding(
+  id: string,
+  excludeIds: Set<string>,
+  count: number = 10,
+  minThreshold: number = 0.05,
+): { id: string; title: string; similarity: number }[] {
+  const db = getDb();
+
+  const target = db.prepare("SELECT data, body FROM objects WHERE id = ?").get(id) as any;
+  if (!target) return [];
+  const targetData = JSON.parse(target.data);
+  const targetTitle = targetData.title || "";
+  const targetBody = target.body || "";
+  const targetTitleWords = extractWords(targetTitle);
+  const targetBodyWords = extractWords(targetTitle + " " + targetBody);
+  if (targetBodyWords.length === 0) return [];
+
+  const targetTitleTf = termFrequency(targetTitleWords);
+  const targetBodyTf = termFrequency(targetBodyWords);
+
+  // Load candidate notes (exclude the given set)
+  const rows = db.prepare("SELECT id, data, body FROM objects WHERE type = 'note'").all() as any[];
+
+  const docFreq = new Map<string, number>();
+  const candidates: { id: string; title: string; titleTf: Map<string, number>; bodyTf: Map<string, number> }[] = [];
+
+  // Count target in doc freq
+  for (const term of new Set(targetBodyWords)) {
+    docFreq.set(term, (docFreq.get(term) || 0) + 1);
+  }
+
+  for (const row of rows) {
+    if (row.id === id || excludeIds.has(row.id)) continue;
+    const data = JSON.parse(row.data);
+    const title = data.title || "";
+    const body = row.body || "";
+    const bodyWords = extractWords(title + " " + body);
+    if (bodyWords.length === 0) continue;
+
+    for (const term of new Set(bodyWords)) {
+      docFreq.set(term, (docFreq.get(term) || 0) + 1);
+    }
+    candidates.push({
+      id: row.id,
+      title: title || "(untitled)",
+      titleTf: termFrequency(extractWords(title)),
+      bodyTf: termFrequency(bodyWords),
+    });
+  }
+
+  const N = candidates.length + 1;
+  const idf = new Map<string, number>();
+  for (const [term, df] of docFreq) {
+    idf.set(term, Math.log(N / df));
+  }
+
+  const results: { id: string; title: string; similarity: number }[] = [];
+  for (const c of candidates) {
+    const bodySim = tfidfCosineSimilarity(targetBodyTf, c.bodyTf, idf);
+    const titleSim = (targetTitleTf.size > 0 && c.titleTf.size > 0)
+      ? tfidfCosineSimilarity(targetTitleTf, c.titleTf, idf) : 0;
+    const similarity = Math.max(bodySim, (titleSim * 2 + bodySim) / 3);
+
+    if (similarity >= minThreshold) {
+      results.push({ id: c.id, title: c.title, similarity: parseFloat(similarity.toFixed(3)) });
+    }
+  }
+
+  return results.sort((a, b) => b.similarity - a.similarity).slice(0, count);
 }
 
 // ============================================================

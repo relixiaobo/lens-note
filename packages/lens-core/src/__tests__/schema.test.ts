@@ -38,7 +38,7 @@ test("lens schema --json", async (t) => {
 
   await t.test("every registered command is in the catalog", () => {
     // Ignore deprecated commands that still exist for backward-compat errors
-    const DEPRECATED = new Set(["status", "tasks", "context"]);
+    const DEPRECATED = new Set(["status", "tasks", "context", "similar"]);
     const registered = Object.keys(commands).filter((c) => !DEPRECATED.has(c));
     const documented = Object.keys(body.data.commands);
     for (const cmd of registered) {

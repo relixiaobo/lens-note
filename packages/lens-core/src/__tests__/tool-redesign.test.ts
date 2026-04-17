@@ -317,14 +317,17 @@ describe("tool redesign v2", () => {
   // ── lint checks ───────────────────────────────────────────
 
   describe("lint checks", () => {
-    it("runs all 9 checks", () => {
+    it("runs all 12 checks", () => {
       const { stdout } = lensStdin({ command: "lint" });
       const result = JSON.parse(stdout).data;
-      assert.equal(result.summary.total_checks, 9);
+      assert.equal(result.summary.total_checks, 12);
       const names = result.checks.map((c: any) => c.name);
       assert.ok(names.includes("vague_reasons"));
       assert.ok(names.includes("thin_notes"));
       assert.ok(names.includes("superseded_alive"));
+      assert.ok(names.includes("orphan_notes"));
+      assert.ok(names.includes("dangling_source"));
+      assert.ok(names.includes("keyword_coverage"));
     });
 
     it("detects thin notes", () => {

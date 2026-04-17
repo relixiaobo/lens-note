@@ -4,7 +4,7 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — stores, queries, and links. No API keys, no LLM dependencies.
 
-**Status**: v1.21.0. **Methodology**: Collision Method — Spark → Collide → Crystallize.
+**Status**: v1.22.0. **Methodology**: Collision Method — Spark → Collide → Crystallize.
 
 **Key docs**: `docs/product-vision.md`, `docs/product-evolution.md`, `docs/task-design.md`, `docs/tool-redesign-v2.md`.
 
@@ -22,9 +22,9 @@ Changes to data model or commands affect all three. See Change Protocol below.
 
 Every CLI command is a tool an LLM will call. Design accordingly:
 
-1. **Atomic over composite** — Each tool does one thing. Let the agent compose pipelines: `search` → `show` → `write`.
+1. **Atomic over composite** — Each tool does one thing. Let the agent compose pipelines: `search` → `show` → `write`. Exception: computation-intensive operations (embedding math, topological analysis) that would waste agent tokens or introduce errors if decomposed. In such cases, principle 2 (filter at source) takes precedence.
 2. **Filter at the source** — `--rel`, `--direction`, `--since` are cheaper than making the agent parse and filter. An LLM filtering JSON wastes tokens and introduces errors.
-3. **Few tools, rich parameters** — Prefer adding a flag to an existing command over creating a new command.
+3. **Few tools, rich parameters** — Prefer adding a flag to an existing command over creating a new command. Exception: when a new semantic intent (e.g., "find surprise" vs "find duplicate") would be confusing as a flag on an existing command, a new command is justified per principle 7.
 4. **Idempotent writes** — Re-running the same write should be safe. Return `"unchanged"`, not error.
 5. **Batch-friendly** — Support arrays and multi-ID inputs. Every avoided call = faster agent loop.
 6. **Errors guide next action** — Include `"hint"` telling the agent what to do next.
@@ -32,8 +32,10 @@ Every CLI command is a tool an LLM will call. Design accordingly:
 8. **Document composition patterns** — Atomic tools need documented pipelines:
    - **Link audit**: `links --rel related` → `show <targets>` → `write retype`
    - **Duplicate merge**: `similar` → `show <pair>` → `write merge`
-   - **MOC expansion**: `links --rel indexes` → `search` → `write link`
    - **Quality check**: `lint` → `links <offender>` → `write unlink/retype`
+   - **Filing**: `write --suggest` → review suggestions → `write link`
+   - **Wandering**: `index <kw>` → `links --rel continues` → repeat → `collide` for cross-domain jump
+   - **Contradiction discovery**: `collide <id>` → `show <pair>` → `write link --rel contradicts`
 9. **Preserve graph invariants** — Multi-object writes must maintain: `contradicts` bidirectional, no self-links, no dangling `[[ID]]` refs, no orphaned reverse links.
 10. **Stable JSON envelope** — All `--json` output uses `{"ok": bool, "schema_version": 1, "data"?: {...}, "error"?: {...}, "hint"?: "..."}`. Shipped in v1.21.0. Bump `schema_version` only when the envelope shape itself changes (not when `data` fields change). New commands + fields are additive within the same version.
 

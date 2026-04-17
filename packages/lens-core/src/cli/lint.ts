@@ -234,7 +234,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
   `).all() as { from_id: string; to_id: string; rels: string; cnt: number }[];
 
   // Rel strength for suggesting which to keep in duplicate pairs
-  const REL_STRENGTH: Record<string, number> = { indexes: 4, contradicts: 4, refines: 3, supports: 2, related: 1 };
+  const REL_STRENGTH: Record<string, number> = { indexes: 4, contradicts: 4, continues: 4, refines: 3, supports: 2, related: 1 };
 
   checks.push({
     name: "duplicate_links",
@@ -327,7 +327,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
     ).all(obj.id) as { from_id: string; rel: string }[];
 
     // Active inbound: links that treat this note as current knowledge
-    const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "indexes");
+    const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "indexes" || l.rel === "continues");
     if (activeInbound.length > 0) {
       try {
         const parsed = JSON.parse(obj.data);
@@ -350,6 +350,140 @@ export async function runLint(args: string[], opts: CommandOptions) {
       ? `${supersededAlive.length} notes marked superseded but still actively referenced. Redirect inbound links to the replacement note.`
       : "No superseded notes with stale references.",
     ...(supersededAlive.length > 0 ? { offenders: supersededAlive } : {}),
+  });
+
+  // ── 10. Orphan notes ────────────────────────────────────────
+  const orphanRows = db.prepare(`
+    SELECT o.id, json_extract(o.data, '$.title') as title
+    FROM objects o
+    WHERE o.type = 'note'
+      AND o.id NOT IN (SELECT from_id FROM links WHERE from_id LIKE 'note_%')
+      AND o.id NOT IN (SELECT to_id FROM links WHERE to_id LIKE 'note_%')
+  `).all() as { id: string; title: string }[];
+
+  checks.push({
+    name: "orphan_notes",
+    status: orphanRows.length > 20 ? "warn" : "ok",
+    value: orphanRows.length,
+    threshold: 20,
+    message: orphanRows.length > 0
+      ? `${orphanRows.length} notes with zero links (orphans). Use \`lens similar <id>\` to find linkable neighbors.`
+      : "No orphan notes — all notes are connected.",
+    ...(orphanRows.length > 0 ? {
+      offenders: orphanRows.slice(0, 10).map(r => ({
+        id: r.id,
+        title: r.title,
+        detail: "0 links (isolated)",
+      })),
+    } : {}),
+  });
+
+  // ── 11. Dangling source (broken provenance chain) ──────────
+  // Notes that have no `source` field AND no backward `supports` from a source-carrying note.
+  const notesWithoutSource = db.prepare(`
+    SELECT o.id, json_extract(o.data, '$.title') as title
+    FROM objects o
+    WHERE o.type = 'note'
+      AND json_extract(o.data, '$.source') IS NULL
+      AND o.id NOT IN (
+        SELECT l.to_id FROM links l
+        JOIN objects src_note ON src_note.id = l.from_id
+        WHERE l.rel = 'supports'
+          AND json_extract(src_note.data, '$.source') IS NOT NULL
+      )
+  `).all() as { id: string; title: string }[];
+
+  // Only flag notes with 3+ backward links (thesis-level) — leaf notes often lack sources naturally
+  const danglingSourceNotes = notesWithoutSource.filter(n => {
+    const inCount = (db.prepare("SELECT COUNT(*) as cnt FROM links WHERE to_id = ?").get(n.id) as { cnt: number }).cnt;
+    return inCount >= 3;
+  });
+
+  checks.push({
+    name: "dangling_source",
+    status: danglingSourceNotes.length > 10 ? "warn" : "ok",
+    value: danglingSourceNotes.length,
+    threshold: 10,
+    message: danglingSourceNotes.length > 0
+      ? `${danglingSourceNotes.length} thesis-level notes (3+ inbound) with no source attribution chain. Claims need provenance.`
+      : "All thesis-level notes have source provenance.",
+    ...(danglingSourceNotes.length > 0 ? {
+      offenders: danglingSourceNotes.slice(0, 10).map(r => ({
+        id: r.id,
+        title: r.title,
+        detail: "no source field, no supports from source-carrying note",
+      })),
+    } : {}),
+  });
+
+  // ── 12. Keyword coverage ───────────────────────────────────
+  // Thesis-level notes (5+ backward links) should be reachable from keyword index within 2 hops.
+  let keywordCoverageCount = 0;
+  const keywordCoverageOffenders: LintOffender[] = [];
+  try {
+    const indexPath = require("../core/paths").paths.keywordIndex;
+    const { existsSync, readFileSync } = require("fs");
+    if (existsSync(indexPath)) {
+      const indexData = JSON.parse(readFileSync(indexPath, "utf-8"));
+      const entryIds = new Set<string>();
+      for (const ids of Object.values(indexData.keywords || {})) {
+        for (const id of ids as string[]) entryIds.add(id);
+      }
+
+      // Expand entry IDs by 2 hops (forward + backward links)
+      const reachable = new Set(entryIds);
+      let frontier = [...entryIds];
+      for (let hop = 0; hop < 2; hop++) {
+        const next: string[] = [];
+        for (const id of frontier) {
+          const links = db.prepare("SELECT from_id, to_id FROM links WHERE from_id = ? OR to_id = ?").all(id, id) as { from_id: string; to_id: string }[];
+          for (const l of links) {
+            const other = l.from_id === id ? l.to_id : l.from_id;
+            if (!reachable.has(other) && other.startsWith("note_")) {
+              reachable.add(other);
+              next.push(other);
+            }
+          }
+        }
+        frontier = next;
+      }
+
+      // Find thesis-level notes not reachable
+      const thesisNotes = db.prepare(`
+        SELECT l.to_id as id, COUNT(*) as cnt, json_extract(o.data, '$.title') as title
+        FROM links l
+        JOIN objects o ON o.id = l.to_id
+        WHERE l.to_id LIKE 'note_%'
+        GROUP BY l.to_id
+        HAVING cnt >= 5
+      `).all() as { id: string; cnt: number; title: string }[];
+
+      for (const n of thesisNotes) {
+        if (!reachable.has(n.id)) {
+          keywordCoverageCount++;
+          if (keywordCoverageOffenders.length < 10) {
+            keywordCoverageOffenders.push({
+              id: n.id,
+              title: n.title,
+              detail: `${n.cnt} inbound links, not reachable from any keyword entry within 2 hops`,
+            });
+          }
+        }
+      }
+    }
+  } catch {
+    // keyword index not available — skip silently
+  }
+
+  checks.push({
+    name: "keyword_coverage",
+    status: keywordCoverageCount > 10 ? "warn" : "ok",
+    value: keywordCoverageCount,
+    threshold: 10,
+    message: keywordCoverageCount > 0
+      ? `${keywordCoverageCount} thesis-level notes (5+ inbound) unreachable from keyword index within 2 hops. Add keyword entries with \`lens index add\`.`
+      : "All thesis-level notes are reachable from keyword index entries.",
+    ...(keywordCoverageOffenders.length > 0 ? { offenders: keywordCoverageOffenders } : {}),
   });
 
   // ── Summary ───────────────────────────────────────────────
@@ -403,7 +537,7 @@ const VALID_AUDIT_CHECKS = new Set([
   "duplicate_links", "thin_notes", "superseded_alive",
 ]);
 
-const AUDIT_REL_STRENGTH: Record<string, number> = { indexes: 4, contradicts: 4, refines: 3, supports: 2, related: 1 };
+const AUDIT_REL_STRENGTH: Record<string, number> = { indexes: 4, contradicts: 4, continues: 4, refines: 3, supports: 2, related: 1 };
 
 async function runAudit(checkName: string, flags: Record<string, any>, opts: CommandOptions) {
   if (!VALID_AUDIT_CHECKS.has(checkName)) {
@@ -727,7 +861,7 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
           "SELECT from_id, rel FROM links WHERE to_id = ?"
         ).all(obj.id) as { from_id: string; rel: string }[];
 
-        const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "indexes");
+        const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "indexes" || l.rel === "continues");
         if (activeInbound.length > 0) {
           try {
             const parsed = JSON.parse(obj.data);

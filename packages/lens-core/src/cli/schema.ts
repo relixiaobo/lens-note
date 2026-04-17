@@ -41,7 +41,7 @@ interface CommandSpec {
   examples: { description: string; request: object }[];
 }
 
-const LINK_RELS = ["supports", "contradicts", "refines", "related", "indexes"] as const;
+const LINK_RELS = ["supports", "contradicts", "refines", "related", "indexes", "continues"] as const;
 const SOURCE_TYPES = ["web_article", "paper", "book", "video", "podcast", "conversation", "other"] as const;
 const TASK_STATUSES = ["open", "done"] as const;
 const OBJECT_TYPES = ["note", "source", "task"] as const;
@@ -112,18 +112,24 @@ const COMMANDS: Record<string, CommandSpec> = {
     ],
   },
 
-  similar: {
-    description: "Find near-duplicate notes using character trigrams + Dice coefficient.",
+  discover: {
+    description: "Discover related notes. Default: unlinked-but-related. --collide: cross-domain surprises. --duplicates: near-duplicates.",
     readonly: true,
-    positional: [{ name: "id_or_title", type: "string", description: "Note ID or title (omit with --all)" }],
+    positional: [{ name: "id_or_title", type: "string", description: "Note ID or title (omit with --all --duplicates)" }],
     flags: {
-      all: { type: "boolean", description: "Scan all notes and group duplicates" },
-      threshold: { type: "number", description: "Similarity threshold 0.0–1.0 (default 0.3)" },
+      collide: { type: "boolean", description: "Exclude entire connected component — find cross-domain surprises" },
+      duplicates: { type: "boolean", description: "No exclusion — find near-duplicates for merge" },
+      all: { type: "boolean", description: "Scan all notes (requires --duplicates)" },
+      count: { type: "integer", description: "Max results (default: 10, collide: 3)" },
+      hops: { type: "integer", description: "Link neighborhood hops to exclude in default mode (default 2)" },
+      threshold: { type: "number", description: "Similarity threshold 0.0–1.0 for --duplicates (default 0.3)" },
     },
-    output: "Single: {id, count, results: [{id, title, similarity}]}\n--all: {count, groups: [{notes, pairs}]}",
+    output: "Default: {id, neighborhood_size, count, results}\n--collide: {id, component_size, count, results, hint}\n--duplicates: {id, count, results}\n--all --duplicates: {count, groups}",
     examples: [
-      { description: "Near-duplicates", request: { command: "similar", positional: ["note_01ABC..."] } },
-      { description: "Scan all", request: { command: "similar", flags: { all: true, threshold: 0.5 } } },
+      { description: "Unlinked related", request: { command: "discover", positional: ["note_01ABC..."] } },
+      { description: "Cross-domain", request: { command: "discover", positional: ["note_01ABC..."], flags: { collide: true } } },
+      { description: "Find duplicates", request: { command: "discover", positional: ["note_01ABC..."], flags: { duplicates: true } } },
+      { description: "Scan all duplicates", request: { command: "discover", flags: { all: true, duplicates: true } } },
     ],
   },
 

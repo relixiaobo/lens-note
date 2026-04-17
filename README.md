@@ -66,13 +66,15 @@ printf '%s' '{"command":"write","input":{...}}' | lens --stdin  # Write via stdi
 
 See [Write API](#write-api) below for all write types.
 
-### Analyze
+### Discover & Analyze
 
 ```bash
-lens similar <id> --json                  # Find near-duplicate notes (+ --threshold)
-lens similar --all --json                 # Scan all notes, group duplicates
+lens discover <id> --json                 # Unlinked-but-related notes (spatial browsing)
+lens discover <id> --collide --json       # Cross-domain surprises (exclude connected component)
+lens discover <id> --duplicates --json    # Near-duplicate notes (+ --threshold)
+lens discover --all --duplicates --json   # Scan all notes, group duplicates
 lens digest [week|month|year] --json      # Recent insights grouped by type
-lens lint --json                          # Graph quality checks (9 checks) with offender IDs
+lens lint --json                          # Graph quality checks (12 checks) with offender IDs
 lens lint --audit <check> --json          # Full offender export with context for one check
 lens lint --audit <check> --target <id> --json  # Scope edge-shaped audits to one target node
 lens lint --check --json                  # Same + exit code 1 on failures (for CI)
@@ -126,7 +128,7 @@ Always check `ok` first. On success, read `data`. On failure, read `error.code` 
 
 `schema_version` bumps only when the envelope itself changes shape (never when data fields change). Consumers should pin to a known version and inspect this field before parsing.
 
-**Readonly-safe commands** (work when LENS_HOME is read-only): `search`, `show`, `links`, `list`, `similar`, `lint --summary`, `schema`, `doctor`. Call `lens schema --json` for the full list.
+**Readonly-safe commands** (work when LENS_HOME is read-only): `search`, `show`, `links`, `list`, `discover`, `lint`, `digest`, `schema`, `doctor`. Call `lens schema --json` for the full list.
 
 Error codes include: `command_error`, `deprecated_command`, `unknown_command`, `not_initialized`, `db_missing`, `db_corrupt`, `readonly_mode_write`, `ambiguous_match`, `no_match`, `partial_failure` (batch), `invalid_request`, `empty_stdin`, `no_input`.
 
@@ -156,7 +158,7 @@ updated_at: '2026-04-13T02:50:14.932Z'
 Evidence and reasoning in markdown body.
 ```
 
-**Link types**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related` (requires `reason`), `indexes` (MOC → child).
+**Link types**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related` (requires `reason`), `indexes`, `continues` (Folgezettel continuation chain).
 
 **IDs**: `<prefix>_<ULID>` — 26 uppercase characters. Never truncate.
 
