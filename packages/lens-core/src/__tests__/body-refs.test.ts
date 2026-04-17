@@ -120,7 +120,7 @@ describe("body reference extraction", () => {
 
     const { stdout } = lensStdin({ command: "search", positional: ["Context Source"], flags: { expand: true } });
     const ctx = JSON.parse(stdout).data;
-    const found = ctx.notes.find((n: any) => n.id === b.id);
+    const found = ctx.results.find((n: any) => n.id === b.id);
     assert.ok(found, "should find the note in search --expand");
     // Body stays raw
     assert.ok(found.body.includes(`[[${a.id}]]`), "expanded body should contain raw [[ID]]");

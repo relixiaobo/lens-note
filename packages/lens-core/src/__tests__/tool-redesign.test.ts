@@ -225,8 +225,8 @@ describe("tool redesign v2", () => {
     it("returns notes with full bodies", () => {
       const { stdout } = lensStdin({ command: "search", positional: ["Note"], flags: { expand: true } });
       const result = JSON.parse(stdout).data;
-      assert.ok(result.total_results > 0);
-      assert.ok(result.notes.every((n: any) => "body" in n));
+      assert.ok(result.total > 0);
+      assert.ok(result.results.every((n: any) => "body" in n));
     });
   });
 

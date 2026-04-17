@@ -88,10 +88,10 @@ export async function searchObjects(query: string, opts: CommandOptions) {
  * Replaces the `context` command. Same output format for compatibility.
  */
 async function searchExpanded(query: string, opts: CommandOptions) {
-  const results = searchIndex(query);
+  const hits = searchIndex(query);
   const noteMap = new Map<string, any>();
 
-  for (const r of results) {
+  for (const r of hits) {
     if (noteMap.has(r.id)) continue;
     const cached = getObjectFromCache(r.id);
     if (!cached || cached.obj.type !== "note") continue;
@@ -109,15 +109,15 @@ async function searchExpanded(query: string, opts: CommandOptions) {
     });
   }
 
-  const notes = Array.from(noteMap.values());
+  const results = Array.from(noteMap.values());
   const pack: Record<string, any> = {
     query,
-    timestamp: new Date().toISOString(),
-    notes,
-    total_results: notes.length,
+    total: results.length,
+    count: results.length,
+    results,
   };
 
-  if (notes.length === 0) {
+  if (results.length === 0) {
     pack.total_notes = listObjects("note").length;
     pack.hint = pack.total_notes === 0
       ? "No notes exist yet. Create notes with 'lens write'."

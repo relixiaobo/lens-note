@@ -56,7 +56,7 @@ const COMMANDS: Record<string, CommandSpec> = {
       resolve: { type: "boolean", description: "Return single ID for an exact title match" },
       expand: { type: "boolean", description: "Include full bodies and forward links" },
     },
-    output: "{query, total, count, results: [{id, type, title, snippet, ...typed_fields}]}",
+    output: "{query, total, count, results: [{id, type, title, ...}]}\n--expand adds: body, forward_links, body_refs to each result",
     examples: [
       { description: "Basic search", request: { command: "search", positional: ["distributed systems"] } },
       { description: "Title → ID", request: { command: "search", positional: ["My Note Title"], flags: { resolve: true } } },
