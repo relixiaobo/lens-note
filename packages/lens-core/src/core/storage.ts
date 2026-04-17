@@ -519,6 +519,19 @@ export function resolveIdOrTitle(rawInput: string): { id: string } | { error: st
     return { error: `Multiple objects match title "${input}".`, candidates: titleMatches.map(t => ({ id: t.id, title: t.title })) };
   }
 
+  // 2.5 Prefix match — "苦涩的教训" matches "苦涩的教训（Bitter Lesson）：计算力是..."
+  const inputLower = input.toLowerCase();
+  const db = getDb();
+  const prefixRows = db.prepare(
+    "SELECT id, json_extract(data, '$.title') as title FROM objects WHERE LOWER(json_extract(data, '$.title')) LIKE ? ESCAPE '\\'"
+  ).all(inputLower.replace(/[%_\\]/g, c => '\\' + c) + '%') as { id: string; title: string }[];
+  if (prefixRows.length === 1) return { id: prefixRows[0].id };
+  if (prefixRows.length > 1) {
+    // If multiple prefix matches, check if one is a significantly better match (exact prefix vs partial)
+    const exactPrefix = prefixRows.filter(r => r.title.toLowerCase().startsWith(inputLower));
+    if (exactPrefix.length === 1) return { id: exactPrefix[0].id };
+  }
+
   // 3. FTS5 search fallback
   const ftsResults = searchIndex(input);
   if (ftsResults.length === 1) return { id: ftsResults[0].id };
