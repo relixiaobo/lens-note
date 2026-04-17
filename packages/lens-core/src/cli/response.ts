@@ -10,7 +10,22 @@
  * when the envelope itself changes shape (not when `data` fields change).
  */
 
+import { appendFileSync } from "fs";
+import { paths } from "../core/paths";
+
 export const SCHEMA_VERSION = 1;
+
+/**
+ * Append a diagnostic entry to ~/.lens/diagnostics.jsonl.
+ * Best-effort — never throws, never blocks the main response.
+ */
+function logDiagnostic(entry: { code: string; message: string; command?: string; timestamp: string }): void {
+  try {
+    appendFileSync(paths.diagnostics, JSON.stringify(entry) + "\n");
+  } catch {
+    // Best-effort: if LENS_HOME doesn't exist or isn't writable, skip silently
+  }
+}
 
 /**
  * Error subclass that carries a machine-readable code and an actionable hint.
@@ -46,6 +61,7 @@ export function respondError(code: string, message: string, hint?: string, extra
   if (extra) Object.assign(output, extra);
   console.log(JSON.stringify(output, null, 2));
   process.exitCode = 1;
+  logDiagnostic({ code, message, timestamp: new Date().toISOString() });
 }
 
 export function respondDeprecation(command: string, replacement: string, hint: string): void {
@@ -80,11 +96,13 @@ export function errorEnvelope(code: string, message: string, extra?: Record<stri
  */
 export function errorEnvelopeFromThrown(err: unknown, extra?: Record<string, any>): Record<string, any> {
   if (err instanceof LensError) {
+    logDiagnostic({ code: err.code, message: err.message, command: extra?.command, timestamp: new Date().toISOString() });
     return errorEnvelope(err.code, err.message, {
       ...(err.hint ? { hint: err.hint } : {}),
       ...(extra || {}),
     });
   }
   const message = err instanceof Error ? err.message : String(err);
+  logDiagnostic({ code: "command_error", message, command: extra?.command, timestamp: new Date().toISOString() });
   return errorEnvelope("command_error", message, extra);
 }

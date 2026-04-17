@@ -274,10 +274,18 @@ const COMMANDS: Record<string, CommandSpec> = {
   },
 
   doctor: {
-    description: "Self-diagnostic: directory writability, git, SQLite integrity, schema version.",
+    description: "Self-diagnostic: directory writability, git, SQLite integrity, recent errors.",
     readonly: true,
-    output: "{status, checks: [{name, status, message, hint?}]}",
-    examples: [{ description: "Diagnose", request: { command: "doctor" } }],
+    flags: {
+      errors: { type: "boolean", description: "Show recent error diagnostics only" },
+      "clear-errors": { type: "boolean", description: "Truncate diagnostics log" },
+      limit: { type: "integer", description: "Max entries for --errors (default 20)" },
+    },
+    output: "Default: {status, checks}\n--errors: {count, total, entries}",
+    examples: [
+      { description: "Diagnose", request: { command: "doctor" } },
+      { description: "Recent errors", request: { command: "doctor", flags: { errors: true } } },
+    ],
   },
 };
 

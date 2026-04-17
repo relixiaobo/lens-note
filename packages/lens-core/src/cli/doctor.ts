@@ -8,7 +8,7 @@
  * top-level status is the worst status across all checks.
  */
 
-import { existsSync, accessSync, constants, statSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, accessSync, constants, statSync, writeFileSync, unlinkSync, readFileSync } from "fs";
 import { execFileSync } from "child_process";
 import { join } from "path";
 import Database from "better-sqlite3";
@@ -52,6 +52,32 @@ function canCreateFile(dir: string): boolean {
 }
 
 export async function runDoctor(_args: string[], opts: CommandOptions) {
+  // --errors: show recent diagnostics only
+  if (opts.errors) {
+    if (!existsSync(paths.diagnostics)) {
+      respondSuccess({ count: 0, entries: [], message: "No diagnostics recorded." });
+      return;
+    }
+    const raw = readFileSync(paths.diagnostics, "utf-8").trim();
+    const lines = raw ? raw.split("\n").filter(Boolean) : [];
+    const limit = opts.limit ? parseInt(String(opts.limit), 10) : 20;
+    const recent = lines.slice(-limit);
+    const entries = recent.map(l => { try { return JSON.parse(l); } catch { return { raw: l }; } });
+    respondSuccess({ count: entries.length, total: lines.length, entries });
+    return;
+  }
+
+  // --clear-errors: truncate diagnostics log
+  if (opts["clear-errors"]) {
+    try {
+      writeFileSync(paths.diagnostics, "");
+      respondSuccess({ action: "cleared", message: "Diagnostics log cleared." });
+    } catch {
+      respondSuccess({ action: "skipped", message: "No diagnostics file to clear." });
+    }
+    return;
+  }
+
   const checks: Check[] = [];
 
   // 1. Node version
@@ -215,6 +241,30 @@ export async function runDoctor(_args: string[], opts: CommandOptions) {
       });
     } catch {
       /* skip if stat fails */
+    }
+  }
+
+  // 12. Recent diagnostics (error log)
+  if (existsSync(paths.diagnostics)) {
+    try {
+      const raw = readFileSync(paths.diagnostics, "utf-8").trim();
+      if (raw) {
+        const lines = raw.split("\n").filter(Boolean);
+        const recent = lines.slice(-20); // last 20 entries
+        const cutoff24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const last24h = recent.filter(l => {
+          try { return JSON.parse(l).timestamp > cutoff24h; } catch { return false; }
+        });
+        const parsed = last24h.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+        checks.push({
+          name: "recent_errors",
+          status: parsed.length > 5 ? "warn" : parsed.length > 0 ? "ok" : "ok",
+          message: `${parsed.length} error(s) in last 24h, ${lines.length} total`,
+          ...(parsed.length > 0 ? { hint: `Recent: ${parsed.slice(-3).map((e: any) => `${e.code}: ${e.message?.slice(0, 50)}`).join("; ")}` } : {}),
+        });
+      }
+    } catch {
+      // skip if unreadable
     }
   }
 

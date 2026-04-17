@@ -141,7 +141,9 @@ Shell mode:
     init                             First-time setup
     rebuild-index --json             Rebuild SQLite cache from markdown files
     schema --json                    Machine-readable catalog (commands, types, enums)
-    doctor --json                    Self-diagnostic (paths, git, DB, schema version)
+    doctor --json                    Self-diagnostic (paths, git, DB, recent errors)
+    doctor --errors --json           Recent error diagnostics
+    doctor --clear-errors --json     Truncate error log
 
 Options:
   --json         Structured JSON output (always on in --stdin mode)
@@ -156,7 +158,7 @@ Envelope (stable, schema_version: 1):
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.23.1");
+  console.log("lens v1.24.0");
   process.exit(0);
 }
 
