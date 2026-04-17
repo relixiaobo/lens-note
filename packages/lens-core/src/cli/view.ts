@@ -21,7 +21,7 @@ import { dirname, extname, join, normalize, resolve } from "path";
 import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 import { paths, LENS_HOME } from "../core/paths";
-import { getDb, setReadonly, ensureInitialized, readObject, getBacklinks } from "../core/storage";
+import { getDb, setReadonly, ensureInitialized, readObject, getBacklinks, resolveIdOrTitle } from "../core/storage";
 import type { CommandOptions } from "./commands";
 import { LensError, respondSuccess } from "./response";
 
@@ -186,6 +186,24 @@ function buildShow(id: string): unknown {
   };
 }
 
+/** Landing: which card to open if no id was passed. Most recently updated note. */
+function buildLanding(): { id: string | null; title: string | null; total: number } {
+  const db = getDb();
+  const totalRow = db.prepare("SELECT COUNT(*) AS c FROM objects WHERE type = 'note'").get() as { c: number };
+  const total = totalRow?.c ?? 0;
+  if (total === 0) return { id: null, title: null, total: 0 };
+  const row = db.prepare(
+    "SELECT id, data FROM objects WHERE type = 'note' ORDER BY json_extract(data, '$.updated_at') DESC, id DESC LIMIT 1",
+  ).get() as { id: string; data: string } | undefined;
+  if (!row) return { id: null, title: null, total };
+  try {
+    const data = JSON.parse(row.data);
+    return { id: row.id, title: data.title || "(untitled)", total };
+  } catch {
+    return { id: row.id, title: null, total };
+  }
+}
+
 async function loadLayout(): Promise<Record<string, { x: number; y: number }>> {
   const f = layoutFile();
   if (!existsSync(f)) return {};
@@ -226,11 +244,24 @@ export async function runView(args: string[], opts: CommandOptions) {
     });
   }
 
-  // Optional ego-view target: `lens view note_01ABC`. MVP boots the full graph
-  // either way; Day 2.5 wires the hash into ego-view. Reject `--flag` tokens
-  // that slipped in as args[0].
+  // Optional card-view target: `lens view <id-or-title>`. Resolves titles to
+  // IDs up-front so the server only deals with canonical IDs.
   const positional = args.filter(a => !a.startsWith("--"));
-  const focusId = positional.find(a => /^(note|src|task)_[A-Z0-9]{26}$/.test(a));
+  let focusId: string | undefined;
+  if (positional.length > 0) {
+    const raw = positional[0];
+    const resolved = resolveIdOrTitle(raw);
+    if ("id" in resolved) {
+      focusId = resolved.id;
+    } else {
+      throw new LensError(`Could not resolve "${raw}" to an object`, {
+        code: "not_found",
+        hint: resolved.candidates && resolved.candidates.length > 0
+          ? `Candidates: ${resolved.candidates.slice(0, 3).map(c => c.title).join(" | ")}`
+          : "Pass a full ID (note_XXX, src_XXX, task_XXX) or an exact title",
+      });
+    }
+  }
 
   const port = typeof opts.port === "string" ? parseInt(opts.port, 10) : 0; // 0 = pick any free port
 
@@ -249,6 +280,10 @@ export async function runView(args: string[], opts: CommandOptions) {
         const data = buildShow(id);
         if (!data) return sendError(res, 404, `not found: ${id}`);
         return sendJson(res, { ok: true, data });
+      }
+      if (path === "/api/landing") {
+        // Which note should we open by default? Most recently updated.
+        return sendJson(res, { ok: true, data: buildLanding() });
       }
       if (path === "/api/layout" && req.method === "GET") {
         return sendJson(res, { ok: true, data: await loadLayout() });
@@ -269,9 +304,15 @@ export async function runView(args: string[], opts: CommandOptions) {
         return;
       }
 
-      // Static files ────────────────────────────────────────────
-      const rel = path === "/" ? "/index.html" : path;
-      await serveStatic(res, rel);
+      // Static files vs SPA routes ──────────────────────────────
+      // Paths with a file extension (/.css, /.js, /.png, ...) are real static
+      // assets. Everything else is an SPA route and should serve index.html
+      // so the client-side router can handle it.
+      if (path === "/" || !extname(path)) {
+        await serveStatic(res, "/index.html");
+      } else {
+        await serveStatic(res, path);
+      }
     } catch (err: any) {
       sendError(res, 500, err.message);
     }
@@ -284,7 +325,7 @@ export async function runView(args: string[], opts: CommandOptions) {
 
   const addr = server.address();
   const actualPort = typeof addr === "object" && addr ? addr.port : port;
-  const url = `http://localhost:${actualPort}${focusId ? `/#/n/${focusId}` : "/"}`;
+  const url = `http://localhost:${actualPort}${focusId ? `/view/${focusId}` : "/"}`;
 
   // JSON mode: caller wants structured info (rare, mostly for CI/scripts)
   if (opts.json) {
