@@ -177,6 +177,34 @@ export async function runDoctor(_args: string[], opts: CommandOptions) {
         });
       }
     }
+
+    // 7.5 Orphan edges — links pointing to objects that no longer exist.
+    // These can't be rendered in lens view and may indicate incomplete cleanup.
+    try {
+      const db = new Database(paths.db, { readonly: true, fileMustExist: true });
+      const orphans = db.prepare(
+        `SELECT l.from_id, l.to_id, l.rel
+         FROM links l
+         LEFT JOIN objects o_from ON o_from.id = l.from_id
+         LEFT JOIN objects o_to   ON o_to.id   = l.to_id
+         WHERE o_from.id IS NULL OR o_to.id IS NULL
+         LIMIT 20`,
+      ).all() as { from_id: string; to_id: string; rel: string }[];
+      db.close();
+      if (orphans.length === 0) {
+        checks.push({ name: "orphan_edges", status: "ok", message: "none" });
+      } else {
+        const sample = orphans.slice(0, 3).map(o => `${o.from_id.slice(0, 14)}…→${o.to_id.slice(0, 14)}…(${o.rel})`).join(", ");
+        checks.push({
+          name: "orphan_edges",
+          status: "warn",
+          message: `${orphans.length}${orphans.length === 20 ? "+" : ""} edge(s) point to deleted objects`,
+          hint: `Sample: ${sample}. Clean up with: lens rebuild-index`,
+        });
+      }
+    } catch {
+      /* non-critical; skip if DB state is already flagged by earlier checks */
+    }
   } else {
     checks.push({
       name: "sqlite_readable",

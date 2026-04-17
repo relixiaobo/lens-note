@@ -290,6 +290,67 @@ async function renderCard(id: string) {
   // Scroll to top on navigation
   window.scrollTo(0, 0);
   document.title = `${show.title || "(untitled)"} · lens`;
+  resetCardKeyNav();
+}
+
+// ── Card keyboard navigation (j/k, arrows, Enter, /) ─────────
+//
+// Lets the reader walk without touching the mouse. Focus moves through every
+// internal link on the card (sidebar rows + inline [[ID]] refs) in DOM order.
+
+let cardNavIndex = -1;
+
+function cardNavLinks(): HTMLAnchorElement[] {
+  const card = document.getElementById("card");
+  if (!card) return [];
+  return Array.from(card.querySelectorAll<HTMLAnchorElement>('a[href^="/view/"]'));
+}
+
+function resetCardKeyNav() {
+  cardNavIndex = -1;
+  const prev = document.querySelector(".card-nav-focus");
+  if (prev) prev.classList.remove("card-nav-focus");
+}
+
+function moveCardNav(delta: number) {
+  const links = cardNavLinks();
+  if (links.length === 0) return;
+  cardNavIndex = Math.max(0, Math.min(links.length - 1,
+    cardNavIndex === -1 ? (delta > 0 ? 0 : links.length - 1) : cardNavIndex + delta));
+  const prev = document.querySelector(".card-nav-focus");
+  if (prev) prev.classList.remove("card-nav-focus");
+  const target = links[cardNavIndex];
+  target.classList.add("card-nav-focus");
+  target.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function wireCardKeyNav() {
+  document.addEventListener("keydown", (e) => {
+    // Don't interfere when typing in inputs
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+    // Only active in card mode
+    if (document.body.dataset.mode !== "card") return;
+    // Ignore modifier combos (leave those for the browser)
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+    if (e.key === "j" || e.key === "ArrowDown") {
+      e.preventDefault();
+      moveCardNav(+1);
+    } else if (e.key === "k" || e.key === "ArrowUp") {
+      e.preventDefault();
+      moveCardNav(-1);
+    } else if (e.key === "Enter") {
+      const links = cardNavLinks();
+      if (cardNavIndex >= 0 && cardNavIndex < links.length) {
+        e.preventDefault();
+        links[cardNavIndex].click();
+      }
+    } else if (e.key === "/") {
+      e.preventDefault();
+      (document.getElementById("search") as HTMLInputElement | null)?.focus();
+    }
+  });
 }
 
 // ── Graph mode (largely preserved from prior impl) ───────────
@@ -682,6 +743,7 @@ wireRelayout();
 wirePanelClose();
 wireSearch();
 wireLinkInterception();
+wireCardKeyNav();
 route().catch(err => {
   const card = document.getElementById("card");
   if (card) card.innerHTML = `<div class="card-loading">Failed to load: ${escapeHtml(err.message)}</div>`;

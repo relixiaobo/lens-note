@@ -1,6 +1,6 @@
 {
   "name": "lens-note",
-  "version": "1.29.0",
+  "version": "1.30.0",
   "description": "Knowledge graph CLI for humans and agents. Like Git for knowledge.",
   "type": "module",
   "bin": {
