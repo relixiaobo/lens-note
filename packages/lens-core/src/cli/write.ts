@@ -15,7 +15,7 @@
 
 import { readFileSync, unlinkSync } from "fs";
 import { generateId, type Note, type Source, type Task, type TaskStatus, type NoteLink, type LinkRel, type SourceType } from "../core/types";
-import { saveObject, readObject, ensureInitialized, getDb } from "../core/storage";
+import { saveObject, readObject, ensureInitialized, getDb, resolveIdOrTitle, getLinkNeighborhood, findSimilarExcluding } from "../core/storage";
 import { objectPath, paths } from "../core/paths";
 import { join } from "path";
 import { parseCliArgs, type CommandOptions } from "./commands";
@@ -56,9 +56,34 @@ function suggestRel(reason: string | undefined): "supports" | "refines" | "contr
   return null;
 }
 
-function validateId(id: string, label: string): void {
-  if (!id || typeof id !== "string") throw new Error(`${label}: ID is required`);
-  if (!readObject(id)) throw new Error(`${label}: "${id}" not found. Use \`lens search\` to find the correct ID.`);
+/**
+ * Resolve a string to an object ID. Accepts:
+ * - Valid object ID (note_*, src_*, task_*) — validated for existence
+ * - Title string — resolved via resolveIdOrTitle (exact match first, then FTS)
+ * - Batch reference ($N) — returned as-is for later resolution
+ */
+function resolveToId(input: string, label: string): string {
+  if (!input || typeof input !== "string") throw new Error(`${label}: ID or title is required`);
+
+  // Batch references are resolved separately
+  if (input.startsWith("$")) return input;
+
+  // ID pattern — validate directly
+  if (/^(note|src|task)_/.test(input)) {
+    if (!readObject(input)) throw new Error(`${label}: "${input}" not found.`);
+    return input;
+  }
+
+  // Title resolution
+  const resolved = resolveIdOrTitle(input);
+  if ("error" in resolved) {
+    if (resolved.candidates) {
+      const list = resolved.candidates.map(c => `  ${c.id}  ${c.title}`).join("\n");
+      throw new Error(`${label}: ambiguous title "${input}". Candidates:\n${list}`);
+    }
+    throw new Error(`${label}: "${input}" not found. Use \`lens search\` to find the correct ID.`);
+  }
+  return resolved.id;
 }
 
 // Secret patterns — prefix-based tokens and PEM private keys
@@ -108,6 +133,7 @@ interface WriteResult {
   hint?: string;
   suggested_rel?: string;
   advisory?: string | Record<string, any>;
+  suggestions?: { id: string; title: string; similarity: number }[];
   object?: Record<string, any>;
 }
 
@@ -130,8 +156,7 @@ function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
       if (!link.to || !link.rel) throw new Error("note.links: each link needs 'to' and 'rel'");
       if (!VALID_RELS.has(link.rel)) throw new Error(`note.links: rel "${link.rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
       validateLinkReason(link.rel, link.reason, "note.links");
-      const resolvedTo = resolveRef(link.to);
-      validateId(resolvedTo, "note.links.to");
+      const resolvedTo = resolveToId(resolveRef(link.to), "note.links.to");
       links.push({
         to: resolvedTo,
         rel: link.rel,
@@ -144,8 +169,7 @@ function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
   for (const rel of ["supports", "contradicts", "refines"] as const) {
     if (input[rel]) {
       for (const to of input[rel]) {
-        const resolvedTo = resolveRef(to);
-        validateId(resolvedTo, `note.${rel}`);
+        const resolvedTo = resolveToId(resolveRef(to), `note.${rel}`);
         links.push({ to: resolvedTo, rel });
       }
     }
@@ -170,8 +194,19 @@ function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
 
   const body = input.body || "";
   saveObject(note, body);
+
+  // Write-time suggestions: find unlinked-but-related notes (best-effort, non-blocking)
+  let suggestions: { id: string; title: string; similarity: number }[] | undefined;
+  try {
+    const neighborhood = getLinkNeighborhood(id, 1);
+    const candidates = findSimilarExcluding(id, neighborhood, 5, 0.1);
+    if (candidates.length > 0) suggestions = candidates;
+  } catch {
+    // Suggestions are advisory — never fail the write
+  }
+
   const hasRelated = links.some(l => l.rel === "related");
-  return { id, type: "note", action: "created", object: { ...note, body }, ...(hasRelated ? { hint: RELATED_HINT } : {}) };
+  return { id, type: "note", action: "created", object: { ...note, body }, ...(suggestions ? { suggestions } : {}), ...(hasRelated ? { hint: RELATED_HINT } : {}) };
 }
 
 function writeSource(input: any): WriteResult {
@@ -240,8 +275,7 @@ function writeTask(input: any, batchIds?: Map<string, string>): WriteResult {
       if (!link.to || !link.rel) throw new Error("task.links: each link needs 'to' and 'rel'");
       if (!VALID_RELS.has(link.rel)) throw new Error(`task.links: rel "${link.rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
       validateLinkReason(link.rel, link.reason, "task.links");
-      const resolvedTo = resolveRef(link.to);
-      validateId(resolvedTo, "task.links.to");
+      const resolvedTo = resolveToId(resolveRef(link.to), "task.links.to");
       links.push({
         to: resolvedTo,
         rel: link.rel,
@@ -274,8 +308,8 @@ function writeTask(input: any, batchIds?: Map<string, string>): WriteResult {
 }
 
 function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
-  const from = resolveReference(input.from, batchIds);
-  const to = resolveReference(input.to, batchIds);
+  let from = resolveReference(input.from, batchIds);
+  let to = resolveReference(input.to, batchIds);
   const rel = input.rel as LinkRel;
   const reason = input.reason;
 
@@ -285,11 +319,11 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   if (to.startsWith("$")) throw new Error(`link: unresolved batch reference "${to}". Batch refs ($0, $1...) only work inside array batches.`);
   if (!rel) throw new Error("link: 'rel' is required");
   if (!VALID_RELS.has(rel)) throw new Error(`link: rel "${rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
-  if (from === to) throw new Error("link: 'from' and 'to' must be different");
   validateLinkReason(rel, reason, "link");
 
-  validateId(from, "link.from");
-  validateId(to, "link.to");
+  from = resolveToId(from, "link.from");
+  to = resolveToId(to, "link.to");
+  if (from === to) throw new Error("link: 'from' and 'to' must be different");
 
   // Idempotency: check existing links before creating
   const fromObj = readObject(from);
@@ -362,11 +396,11 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
 }
 
 function writeUnlink(input: any): WriteResult {
-  const { from, to, rel } = input;
-  if (!from || !to || !rel) throw new Error("unlink: from, to, and rel are required");
+  const { rel } = input;
+  if (!input.from || !input.to || !rel) throw new Error("unlink: from, to, and rel are required");
   if (!VALID_RELS.has(rel)) throw new Error(`unlink: rel "${rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
-  validateId(from, "unlink.from");
-  validateId(to, "unlink.to");
+  const from = resolveToId(input.from, "unlink.from");
+  const to = resolveToId(input.to, "unlink.to");
 
   removeLinkFromExisting(from, rel, to);
   if (rel === "contradicts") removeLinkFromExisting(to, "contradicts", from);
@@ -375,9 +409,8 @@ function writeUnlink(input: any): WriteResult {
 }
 
 function writeUpdate(input: any): WriteResult {
-  const id = input.id;
-  if (!id) throw new Error("update: 'id' is required");
-  validateId(id, "update.id");
+  if (!input.id) throw new Error("update: 'id' is required");
+  const id = resolveToId(input.id, "update.id");
 
   const existing = readObject(id);
   if (!existing) throw new Error(`update: "${id}" not found. Use \`lens search\` to find the correct ID.`);
@@ -410,9 +443,9 @@ function writeUpdate(input: any): WriteResult {
     for (const newLink of input.add.links) {
       if (!newLink.to || !newLink.rel) throw new Error("update.add.links: each link needs 'to' and 'rel'");
       if (!VALID_RELS.has(newLink.rel)) throw new Error(`update.add.links: rel "${newLink.rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
-      if (newLink.to === id) throw new Error("update.add.links: cannot link to self");
       validateLinkReason(newLink.rel, newLink.reason, "update.add.links");
-      validateId(newLink.to, "update.add.links.to");
+      newLink.to = resolveToId(newLink.to, "update.add.links.to");
+      if (newLink.to === id) throw new Error("update.add.links: cannot link to self");
     }
     // Persist pass (only after all validation succeeds)
     const links: NoteLink[] = data.links || [];
@@ -448,21 +481,21 @@ function writeUpdate(input: any): WriteResult {
 }
 
 function writeRetype(input: any): WriteResult {
-  const { from, to, old_rel, new_rel, reason } = input;
-  if (!from) throw new Error("retype: 'from' is required");
-  if (!to) throw new Error("retype: 'to' is required");
+  const { old_rel, new_rel, reason } = input;
+  if (!input.from) throw new Error("retype: 'from' is required");
+  if (!input.to) throw new Error("retype: 'to' is required");
   if (!old_rel) throw new Error("retype: 'old_rel' is required");
   if (!new_rel) throw new Error("retype: 'new_rel' is required");
   if (!VALID_RELS.has(old_rel)) throw new Error(`retype: old_rel "${old_rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
   if (!VALID_RELS.has(new_rel)) throw new Error(`retype: new_rel "${new_rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);
-  if (from === to) throw new Error("retype: 'from' and 'to' must be different");
   if (new_rel === "related") {
     validateLinkReason("related", reason, "retype");
   }
 
-  // Validate IDs and link existence BEFORE checking same-rel shortcut
-  validateId(from, "retype.from");
-  validateId(to, "retype.to");
+  // Resolve IDs (accepts titles) and validate existence BEFORE checking same-rel shortcut
+  const from = resolveToId(input.from, "retype.from");
+  const to = resolveToId(input.to, "retype.to");
+  if (from === to) throw new Error("retype: 'from' and 'to' must be different");
 
   const fromObj = readObject(from);
   const existingLinks: NoteLink[] = fromObj?.data.links || [];
@@ -503,18 +536,25 @@ function writeRetype(input: any): WriteResult {
 }
 
 function writeMerge(input: any): WriteResult {
-  const { from, into } = input;
-  if (!from) throw new Error("merge: 'from' is required");
-  if (!into) throw new Error("merge: 'into' is required");
-  if (from === into) throw new Error("merge: 'from' and 'into' must be different");
+  if (!input.from) throw new Error("merge: 'from' is required");
+  if (!input.into) throw new Error("merge: 'into' is required");
+
+  // Resolve from — supports title, but ID-not-found is idempotent (already merged)
+  let from: string;
+  if (/^(note|src|task)_/.test(input.from)) {
+    from = input.from;
+  } else {
+    from = resolveToId(input.from, "merge.from");
+  }
 
   // Idempotent: if from already deleted (previous merge), return unchanged
   const fromObj = readObject(from);
   if (!fromObj) {
-    return { type: "merge", action: "unchanged", object: { from, into }, message: `${from} not found (already merged?)` };
+    return { type: "merge", action: "unchanged", object: { from, into: input.into }, message: `${from} not found (already merged?)` };
   }
 
-  validateId(into, "merge.into");
+  const into = resolveToId(input.into, "merge.into");
+  if (from === into) throw new Error("merge: 'from' and 'into' must be different");
   const intoObj = readObject(into);
   if (!intoObj) throw new Error(`merge: "${into}" not found.`);
 
@@ -606,7 +646,28 @@ function writeMerge(input: any): WriteResult {
     }
   }
 
-  // --- Step 5: Delete `from` ---
+  // --- Step 5: Preserve source attribution ---
+  // If `from` had a source, propagate it to any notes that referenced `from` as their source
+  // (including `into` itself) so the provenance chain doesn't break.
+  const fromSource = fromObj.data.source;
+  if (fromSource) {
+    const sourceRefs = db.prepare(
+      "SELECT id FROM objects WHERE json_extract(data, '$.source') = ?"
+    ).all(from) as { id: string }[];
+    for (const { id: refId } of sourceRefs) {
+      const ref = readObject(refId);
+      if (!ref) continue;
+      const refData = { ...ref.data, source: fromSource, updated_at: new Date().toISOString() };
+      saveObject({ ...refData, id: refId } as any, ref.content);
+    }
+    // Also propagate to `into` if it doesn't have its own source
+    if (!intoData.source) {
+      intoData.source = fromSource;
+      saveObject({ ...intoData, id: into } as any, intoBody);
+    }
+  }
+
+  // --- Step 6: Delete `from` ---
   // Remove file
   try { unlinkSync(objectPath(from)); } catch {}
   const rawPath = join(paths.raw, `${from}.html`);
@@ -617,13 +678,12 @@ function writeMerge(input: any): WriteResult {
   db.prepare("DELETE FROM search_index WHERE id = ?").run(from);
   db.prepare("DELETE FROM links WHERE from_id = ? OR to_id = ?").run(from, from);
 
-  return { type: "merge", action: "merged", id: into, object: { from, into, links_carried: fromLinks.length, body_appended: !!fromBody } };
+  return { type: "merge", action: "merged", id: into, object: { from, into, links_carried: fromLinks.length, body_appended: !!fromBody, ...(fromSource ? { source_preserved: fromSource } : {}) } };
 }
 
 function writeDelete(input: any): WriteResult {
-  const id = input.id;
-  if (!id) throw new Error("delete: 'id' is required");
-  validateId(id, "delete.id");
+  if (!input.id) throw new Error("delete: 'id' is required");
+  const id = resolveToId(input.id, "delete.id");
 
   const existing = readObject(id);
   if (!existing) throw new Error(`delete: "${id}" not found. Use \`lens search\` to find the correct ID.`);
@@ -867,7 +927,7 @@ function executeWrite(parsed: any, opts: CommandOptions) {
         }),
         ...(batchWarnings.length > 0 ? { warnings: batchWarnings } : {}),
       }
-      : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}), ...(results[0].hint ? { hint: results[0].hint } : {}), ...(results[0].suggested_rel ? { suggested_rel: results[0].suggested_rel } : {}), ...(results[0].advisory ? { advisory: results[0].advisory } : {}) };
+      : { id: results[0].id, type: results[0].type, action: results[0].action, ...(results[0].object || {}), ...(results[0].suggestions ? { suggestions: results[0].suggestions } : {}), ...(results[0].hint ? { hint: results[0].hint } : {}), ...(results[0].suggested_rel ? { suggested_rel: results[0].suggested_rel } : {}), ...(results[0].advisory ? { advisory: results[0].advisory } : {}) };
 
     if (isBatch && failedIndices.size > 0) {
       // Partial failure: ok=false with data so consumer can inspect individual results

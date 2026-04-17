@@ -156,7 +156,7 @@ Envelope (stable, schema_version: 1):
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.22.0");
+  console.log("lens v1.23.0");
   process.exit(0);
 }
 

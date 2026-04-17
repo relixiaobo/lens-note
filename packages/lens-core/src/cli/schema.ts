@@ -134,15 +134,16 @@ const COMMANDS: Record<string, CommandSpec> = {
   },
 
   digest: {
-    description: "Recent insights grouped by time window.",
+    description: "Recent insights grouped by time window. Shows new notes, new links on existing notes, and notes that gained evidence.",
     readonly: true,
     positional: [{ name: "window", type: "string", description: "Time window: week | month | year" }],
     flags: {
       days: { type: "integer", description: "Custom day count (overrides window)" },
     },
-    output: "{period, notes: [{id, title, updated_at, ...}], count}",
+    output: "{period, total, tensions, connected, seeds, new_links?, gained_evidence?}",
     examples: [
       { description: "Weekly digest", request: { command: "digest", positional: ["week"] } },
+      { description: "Monthly", request: { command: "digest", positional: ["month"] } },
     ],
   },
 
@@ -166,7 +167,7 @@ const COMMANDS: Record<string, CommandSpec> = {
   },
 
   write: {
-    description: "Write notes, sources, tasks, links, updates, deletes. Supports batch via array input.",
+    description: "Write notes, sources, tasks, links, updates, deletes. Supports batch via array input. IDs accept titles (resolved automatically).",
     readonly: false,
     input_shape:
       "One of: " +
@@ -180,7 +181,7 @@ const COMMANDS: Record<string, CommandSpec> = {
       '{type:"retype", from, to, rel_from, rel_to}; ' +
       '{type:"merge", from, into}; ' +
       "array for batch — use $0/$1 to reference earlier items' IDs",
-    output: "Single: written object or operation result.\nBatch: [{ok, ...per_item}]",
+    output: "Single: written object or operation result. Notes include suggestions[] (unlinked-but-related notes).\nBatch: [{ok, ...per_item}]",
     examples: [
       { description: "Quick note", request: { command: "write", input: { type: "note", title: "Insight", body: "Details..." } } },
       { description: "Create link", request: { command: "write", input: { type: "link", from: "note_A", to: "note_B", rel: "supports", reason: "..." } } },
