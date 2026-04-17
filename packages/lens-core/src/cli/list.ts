@@ -2,7 +2,7 @@
  * lens list <type> [--since] — Browse objects by type.
  */
 
-import { listObjects, readObject, getOrphanNotes, getForwardLinks, getBacklinks, ensureInitialized } from "../core/storage";
+import { listObjects, readObject, getOrphanNotes, getForwardLinks, getBacklinks, ensureInitialized, setReadonly } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
 import type { ObjectType } from "../core/types";
 import { respondSuccess } from "./response";
@@ -14,6 +14,7 @@ const TYPE_MAP: Record<string, ObjectType> = {
 };
 
 export async function listCommand(args: string[], opts: CommandOptions) {
+  setReadonly();
   ensureInitialized();
 
   const { positional, flags } = parseCliArgs(args);

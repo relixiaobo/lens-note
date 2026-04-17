@@ -15,7 +15,7 @@
  * --check: exit code 1 if any failures exist (for CI/automation)
  */
 
-import { getDb, ensureInitialized } from "../core/storage";
+import { getDb, ensureInitialized, setReadonly } from "../core/storage";
 import { parseCliArgs, type CommandOptions } from "./commands";
 import { respondSuccess } from "./response";
 
@@ -47,6 +47,7 @@ const VAGUE_REASON_PATTERNS = /^(related|related to|supports|contradicts|refines
 const SUPPORTS_TOPIC_PROXIMITY_PATTERN = /^[^，,。；;！!？?\n]{4,70}[与和][^，,。；;！!？?\n]{3,50}$/;
 
 export async function runLint(args: string[], opts: CommandOptions) {
+  setReadonly();
   ensureInitialized();
 
   const { flags } = parseCliArgs(args);

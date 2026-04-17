@@ -4,12 +4,13 @@
  * JSON output includes type-specific fields so LLMs don't need follow-up show calls.
  */
 
-import { searchIndex, getObjectFromCache, listObjects, ensureInitialized, resolveIdOrTitle, extractBodyRefs } from "../core/storage";
+import { searchIndex, getObjectFromCache, listObjects, ensureInitialized, resolveIdOrTitle, extractBodyRefs, setReadonly } from "../core/storage";
 import type { Note } from "../core/types";
 import type { CommandOptions } from "./commands";
 import { respondSuccess, respondError } from "./response";
 
 export async function searchObjects(query: string, opts: CommandOptions) {
+  setReadonly();
   ensureInitialized();
 
   // --resolve: conservative ID resolution (delegates to shared helper)

@@ -15,6 +15,7 @@ import matter from "gray-matter";
 import { paths, objectPath } from "./paths";
 import { execFileSync } from "child_process";
 import type { LensObject, ObjectType, Note, Task } from "./types";
+import { LensError } from "../cli/response";
 
 // ============================================================
 // Initialization check
@@ -22,7 +23,10 @@ import type { LensObject, ObjectType, Note, Task } from "./types";
 
 export function ensureInitialized() {
   if (!existsSync(paths.config)) {
-    throw new Error("lens is not initialized. Run: lens init");
+    throw new LensError("lens is not initialized at " + paths.root, {
+      code: "not_initialized",
+      hint: "Run: lens init  (or set LENS_HOME to an existing lens directory)",
+    });
   }
 }
 
@@ -107,9 +111,34 @@ export function listObjects(type: ObjectType): string[] {
 // ============================================================
 
 let _db: InstanceType<typeof Database> | null = null;
+let _readonly = false;
+
+/**
+ * Open subsequent `getDb()` calls in read-only mode.
+ *
+ * Read-only mode skips `mkdirSync`, `PRAGMA journal_mode=WAL`, and `initSchema`,
+ * and opens SQLite with `{ readonly: true, fileMustExist: true }`. Safe in
+ * environments where LENS_HOME is not writable (CI, sandboxes, concurrent
+ * viewer processes). Must be called before any DB access.
+ */
+export function setReadonly(yes: boolean = true) {
+  if (_db) throw new Error("setReadonly() must be called before any DB access");
+  _readonly = yes;
+}
 
 export function getDb(): InstanceType<typeof Database> {
   if (_db) return _db;
+
+  if (_readonly) {
+    if (!existsSync(paths.db)) {
+      throw new LensError(`lens database not found at ${paths.db}`, {
+        code: "db_missing",
+        hint: "Run: lens init  (or: lens rebuild-index to regenerate from markdown)",
+      });
+    }
+    _db = new Database(paths.db, { readonly: true, fileMustExist: true });
+    return _db;
+  }
 
   mkdirSync(paths.root, { recursive: true });
   _db = new Database(paths.db);
@@ -152,6 +181,12 @@ function initSchema(db: InstanceType<typeof Database>) {
 }
 
 export function indexObject(obj: LensObject, body: string = "") {
+  if (_readonly) {
+    throw new LensError("cannot index object in read-only mode", {
+      code: "readonly_mode_write",
+      hint: "Writes require getDb() in read-write mode. Do not call setReadonly() before write paths.",
+    });
+  }
   const db = getDb();
   const now = new Date().toISOString();
   const data = JSON.stringify(obj);
@@ -313,6 +348,12 @@ export function getObjectFromCache(id: string): { obj: LensObject; body: string 
 }
 
 export function rebuildAllIndex() {
+  if (_readonly) {
+    throw new LensError("cannot rebuild index in read-only mode", {
+      code: "readonly_mode_write",
+      hint: "rebuild-index needs a writable LENS_HOME.",
+    });
+  }
   const db = getDb();
   let count = 0;
 

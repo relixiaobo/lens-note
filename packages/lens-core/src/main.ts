@@ -5,6 +5,7 @@
  */
 
 import { commands, parseCliArgs, dispatchRequest, type RequestEnvelope } from "./cli/commands";
+import { errorEnvelope, errorEnvelopeFromThrown } from "./cli/response";
 import { readFileSync } from "fs";
 
 const args = process.argv.slice(2);
@@ -14,7 +15,7 @@ const command = args[0];
 // Used by AI agents. Content never touches the shell parser.
 if (command === "--stdin") {
   if (process.stdin.isTTY) {
-    console.log(JSON.stringify({ ok: false, error: { code: "no_input", message: "No piped input. Usage: printf '%s' '{\"command\":\"...\"}' | lens --stdin" } }));
+    console.log(JSON.stringify(errorEnvelope("no_input", "No piped input. Usage: printf '%s' '{\"command\":\"...\"}' | lens --stdin")));
     process.exit(1);
   }
 
@@ -22,12 +23,12 @@ if (command === "--stdin") {
   try {
     raw = readFileSync(0, "utf-8").trim();
   } catch {
-    console.log(JSON.stringify({ ok: false, error: { code: "empty_stdin", message: "Expected JSON request on stdin" } }));
+    console.log(JSON.stringify(errorEnvelope("empty_stdin", "Expected JSON request on stdin")));
     process.exit(1);
   }
 
   if (!raw) {
-    console.log(JSON.stringify({ ok: false, error: { code: "empty_stdin", message: "Expected JSON request on stdin" } }));
+    console.log(JSON.stringify(errorEnvelope("empty_stdin", "Expected JSON request on stdin")));
     process.exit(1);
   }
 
@@ -39,15 +40,14 @@ if (command === "--stdin") {
     }
     req = parsed as RequestEnvelope;
   } catch (e: any) {
-    console.log(JSON.stringify({ ok: false, error: { code: "invalid_request", message: e.message } }));
+    console.log(JSON.stringify(errorEnvelope("invalid_request", e.message)));
     process.exit(1);
   }
 
   try {
     await dispatchRequest(req);
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.log(JSON.stringify({ ok: false, error: { code: "command_error", message }, command: req.command }, null, 2));
+    console.log(JSON.stringify(errorEnvelopeFromThrown(err, { command: req.command }), null, 2));
     process.exit(1);
   }
   process.exit(process.exitCode || 0);
@@ -138,20 +138,23 @@ Shell mode:
   System:
     init                             First-time setup
     rebuild-index --json             Rebuild SQLite cache from markdown files
+    schema --json                    Machine-readable catalog (commands, types, enums)
+    doctor --json                    Self-diagnostic (paths, git, DB, schema version)
 
 Options:
   --json         Structured JSON output (always on in --stdin mode)
   --help, -h     Show this help
   --version, -v  Show version
 
-Success: {"ok": true, "data": {...}}
-Errors:  {"ok": false, "error": {"code": "...", "message": "..."}}
+Envelope (stable, schema_version: 1):
+  Success: {"ok": true, "schema_version": 1, "data": {...}}
+  Errors:  {"ok": false, "schema_version": 1, "error": {"code": "...", "message": "..."}, "hint": "..."}
 `);
   process.exit(0);
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.20.1");
+  console.log("lens v1.21.0");
   process.exit(0);
 }
 
@@ -163,7 +166,7 @@ const handler = commands[command];
 if (!handler) {
   const available = Object.keys(commands).join(", ");
   if (jsonFlag) {
-    console.log(JSON.stringify({ ok: false, error: { code: "unknown_command", message: `Unknown command: ${command}` }, hint: `Available commands: ${available}` }));
+    console.log(JSON.stringify(errorEnvelope("unknown_command", `Unknown command: ${command}`, { hint: `Available commands: ${available}` })));
   } else {
     console.error(`Unknown command: ${command}`);
     console.error(`Available: ${available}`);
@@ -177,7 +180,7 @@ try {
 } catch (err: unknown) {
   const message = err instanceof Error ? err.message : String(err);
   if (jsonFlag) {
-    console.log(JSON.stringify({ ok: false, error: { code: "command_error", message }, command }, null, 2));
+    console.log(JSON.stringify(errorEnvelopeFromThrown(err, { command }), null, 2));
   } else {
     console.error(`Error: ${message}`);
   }

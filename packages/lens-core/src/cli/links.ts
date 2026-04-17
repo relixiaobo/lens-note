@@ -5,7 +5,7 @@
  * Titles are resolved so the LLM doesn't need follow-up show calls.
  */
 
-import { getForwardLinks, getBacklinks, readObject, ensureInitialized, resolveIdOrTitle } from "../core/storage";
+import { getForwardLinks, getBacklinks, readObject, ensureInitialized, resolveIdOrTitle, setReadonly } from "../core/storage";
 import type { CommandOptions } from "./commands";
 import { respondSuccess } from "./response";
 
@@ -26,6 +26,7 @@ function resolveLink(linkId: string): { type?: string; title: string } {
 }
 
 export async function showLinks(input: string, opts: CommandOptions) {
+  setReadonly();
   ensureInitialized();
 
   if (!input) throw new Error("Usage: lens links <id>");

@@ -3,12 +3,13 @@
  * Supports batch mode: multiple IDs return {count, items} array.
  */
 
-import { readObject, getBacklinks, ensureInitialized, extractBodyRefs, resolveBodyRefs, resolveIdOrTitle } from "../core/storage";
+import { readObject, getBacklinks, ensureInitialized, extractBodyRefs, resolveBodyRefs, resolveIdOrTitle, setReadonly } from "../core/storage";
 import type { CommandOptions } from "./commands";
 import { respondSuccess } from "./response";
 
 /** Read multiple objects at once. Returns array of results. */
 export async function readObjects(inputs: string[], opts: CommandOptions) {
+  setReadonly();
   ensureInitialized();
 
   if (inputs.length === 1) {
@@ -103,6 +104,7 @@ function buildJsonOutput(id: string, result: { data: any; content: string }) {
 }
 
 export async function showObject(input: string, opts: CommandOptions) {
+  setReadonly();
   ensureInitialized();
 
   // Accept ID or title — auto-resolve

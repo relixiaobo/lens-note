@@ -105,23 +105,30 @@ lens feed remove <id|url> --json          # Unsubscribe
 lens config list --json                   # Show all config
 lens config set context.role "PM" --json  # Set user context
 lens rebuild-index --json                 # Rebuild SQLite cache from files
+lens schema --json                        # Machine-readable command catalog (for agents)
+lens doctor --json                        # Self-diagnostic (paths, git, DB, schema version)
+lens init                                 # First-time setup; re-run to repair a half-init
 ```
 
 ## JSON Output
 
-All `--json` output uses a stable envelope:
+All `--json` output uses a stable envelope carrying `schema_version: 1`:
 
 ```json
-{"ok": true, "data": {"query": "...", "results": [...]}}
+{"ok": true, "schema_version": 1, "data": {"query": "...", "results": [...]}}
 ```
 
 ```json
-{"ok": false, "error": {"code": "command_error", "message": "..."}, "hint": "..."}
+{"ok": false, "schema_version": 1, "error": {"code": "not_initialized", "message": "..."}, "hint": "Run: lens init"}
 ```
 
-Always check `ok` first. On success, read `data`. On failure, read `error.code` and `error.message`.
+Always check `ok` first. On success, read `data`. On failure, read `error.code` and `error.message`, and follow `hint` when present.
 
-Error codes: `command_error`, `deprecated_command`, `unknown_command`, `ambiguous_match`, `no_match`, `partial_failure` (batch), `invalid_request`, `empty_stdin`, `no_input`.
+`schema_version` bumps only when the envelope itself changes shape (never when data fields change). Consumers should pin to a known version and inspect this field before parsing.
+
+**Readonly-safe commands** (work when LENS_HOME is read-only): `search`, `show`, `links`, `list`, `similar`, `lint --summary`, `schema`, `doctor`. Call `lens schema --json` for the full list.
+
+Error codes include: `command_error`, `deprecated_command`, `unknown_command`, `not_initialized`, `db_missing`, `db_corrupt`, `readonly_mode_write`, `ambiguous_match`, `no_match`, `partial_failure` (batch), `invalid_request`, `empty_stdin`, `no_input`.
 
 ## Data Model
 

@@ -465,6 +465,26 @@ describe("tool redesign v2", () => {
       assert.ok(parsed.data.query);
     });
 
+    it("success envelope includes schema_version", () => {
+      const { stdout } = lensStdin({ command: "search", positional: ["Note"] });
+      const parsed = JSON.parse(stdout);
+      assert.equal(parsed.schema_version, 1, "every success response must carry schema_version");
+    });
+
+    it("error envelope includes schema_version", () => {
+      const { stdout } = lensStdin({ command: "show", positional: ["note_01ZZZZZZZZZZZZZZZZZZZZZZZZ"] });
+      const parsed = JSON.parse(stdout);
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.schema_version, 1, "every error response must carry schema_version");
+    });
+
+    it("unknown command (CLI) includes schema_version", () => {
+      const { stdout } = lens("nonexistent", "--json");
+      const parsed = JSON.parse(stdout);
+      assert.equal(parsed.ok, false);
+      assert.equal(parsed.schema_version, 1);
+    });
+
     it("unknown command returns ok:false with hint at top level", () => {
       // Use CLI path (not --stdin) to hit the unknown_command handler
       const { stdout, exitCode } = lens("nonexistent", "--json");

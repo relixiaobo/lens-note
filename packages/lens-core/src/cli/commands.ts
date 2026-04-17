@@ -188,6 +188,16 @@ async function configCommand(args: string[], opts: CommandOptions) {
   await handleConfig(args, opts);
 }
 
+async function schemaCommand(args: string[], opts: CommandOptions) {
+  const { runSchema } = await import("./schema");
+  await runSchema(args, opts);
+}
+
+async function doctorCommand(args: string[], opts: CommandOptions) {
+  const { runDoctor } = await import("./doctor");
+  await runDoctor(args, opts);
+}
+
 export const commands: Record<string, CommandHandler> = {
   init: initCommand,
   status: statusCommand,
@@ -207,6 +217,8 @@ export const commands: Record<string, CommandHandler> = {
   index: indexCommand,
   lint: lintCommand,
   config: configCommand,
+  schema: schemaCommand,
+  doctor: doctorCommand,
   "rebuild-index": rebuildIndexCommand,
 };
 

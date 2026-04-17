@@ -6,11 +6,12 @@
  * near-duplicate detection. Works for all scripts (Latin, CJK, Arabic, etc).
  */
 
-import { readObject, findSimilarNotes, findAllSimilarGroups, ensureInitialized, resolveIdOrTitle } from "../core/storage";
+import { readObject, findSimilarNotes, findAllSimilarGroups, ensureInitialized, resolveIdOrTitle, setReadonly } from "../core/storage";
 import type { CommandOptions } from "./commands";
 import { respondSuccess } from "./response";
 
 export async function showSimilar(input: string | undefined, opts: CommandOptions) {
+  setReadonly();
   ensureInitialized();
 
   const threshold = opts.threshold ? parseFloat(String(opts.threshold)) : 0.3;

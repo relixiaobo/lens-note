@@ -4,7 +4,7 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — stores, queries, and links. No API keys, no LLM dependencies.
 
-**Status**: v1.9.0. **Methodology**: Collision Method — Spark → Collide → Crystallize.
+**Status**: v1.21.0. **Methodology**: Collision Method — Spark → Collide → Crystallize.
 
 **Key docs**: `docs/product-vision.md`, `docs/product-evolution.md`, `docs/task-design.md`, `docs/tool-redesign-v2.md`.
 
@@ -35,7 +35,7 @@ Every CLI command is a tool an LLM will call. Design accordingly:
    - **MOC expansion**: `links --rel indexes` → `search` → `write link`
    - **Quality check**: `lint` → `links <offender>` → `write unlink/retype`
 9. **Preserve graph invariants** — Multi-object writes must maintain: `contradicts` bidirectional, no self-links, no dangling `[[ID]]` refs, no orphaned reverse links.
-10. **Stable JSON envelope** (target, not yet fully implemented) — All `--json` output should use `{"ok": bool, "data": {...}, "error"?: {...}, "hint"?: "..."}`. Never change field names or types without a version bump. Currently: deprecation errors follow this format; success responses still use bare payloads.
+10. **Stable JSON envelope** — All `--json` output uses `{"ok": bool, "schema_version": 1, "data"?: {...}, "error"?: {...}, "hint"?: "..."}`. Shipped in v1.21.0. Bump `schema_version` only when the envelope shape itself changes (not when `data` fields change). New commands + fields are additive within the same version.
 
 ## Development
 
@@ -70,6 +70,7 @@ Downstream references (other repos):
 - `README.md` — Commands section
 - `--stdin` dispatch in `commands.ts` — must mirror CLI command changes
 - `main.ts` help text — must list all current commands
+- `cli/schema.ts` — agent-facing catalog (schema.test.ts enforces every registered command appears here)
 - `../lens-note-plugin/plugin/skills/lens/SKILL.md` — Command reference
 
 ### Publish checklist
