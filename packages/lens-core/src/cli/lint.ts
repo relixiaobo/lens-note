@@ -31,6 +31,7 @@ interface LintCheck {
   value: number;
   threshold?: number;
   message: string;
+  auditable?: boolean;
   offenders?: LintOffender[];
 }
 
@@ -367,7 +368,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
     value: orphanRows.length,
     threshold: 20,
     message: orphanRows.length > 0
-      ? `${orphanRows.length} notes with zero links (orphans). Use \`lens similar <id>\` to find linkable neighbors.`
+      ? `${orphanRows.length} notes with zero links (orphans). Use \`lens discover <id>\` to find linkable neighbors.`
       : "No orphan notes — all notes are connected.",
     ...(orphanRows.length > 0 ? {
       offenders: orphanRows.slice(0, 10).map(r => ({
@@ -486,6 +487,11 @@ export async function runLint(args: string[], opts: CommandOptions) {
     ...(keywordCoverageOffenders.length > 0 ? { offenders: keywordCoverageOffenders } : {}),
   });
 
+  // Annotate checks with auditable flag so agents know which support --audit
+  for (const check of checks) {
+    check.auditable = VALID_AUDIT_CHECKS.has(check.name);
+  }
+
   // ── Summary ───────────────────────────────────────────────
   const passed = checks.filter(c => c.status === "ok").length;
   const warnings = checks.filter(c => c.status === "warn").length;
@@ -535,6 +541,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
 const VALID_AUDIT_CHECKS = new Set([
   "supports_density", "related_dominance", "missing_reasons", "vague_reasons",
   "duplicate_links", "thin_notes", "superseded_alive",
+  "super_connectors", "dead_links", "orphan_notes", "dangling_source", "keyword_coverage",
 ]);
 
 const AUDIT_REL_STRENGTH: Record<string, number> = { indexes: 4, contradicts: 4, continues: 4, refines: 3, supports: 2, related: 1 };
@@ -883,6 +890,202 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
       respondSuccess({
         check: checkName, status: total > 0 ? "warn" : "ok",
         value: total, total_notes: total, count: items.length,
+        ...(offset > 0 ? { offset } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        offenders: items,
+      });
+      return;
+    }
+
+    // ── super_connectors: notes with excessive inbound links ──
+    case "super_connectors": {
+      const hubs = db.prepare(`
+        SELECT l.to_id as id, COUNT(*) as cnt,
+          json_extract(o.data, '$.title') as title
+        FROM links l
+        JOIN objects o ON o.id = l.to_id
+        WHERE l.to_id LIKE 'note_%'
+        GROUP BY l.to_id
+        HAVING cnt > ?
+        ORDER BY cnt DESC
+      `).all(SUPER_CONNECTOR_THRESHOLD) as { id: string; cnt: number; title: string }[];
+
+      const offenders = hubs.map(h => {
+        const byRel = db.prepare(
+          "SELECT rel, COUNT(*) as cnt FROM links WHERE to_id = ? GROUP BY rel"
+        ).all(h.id) as { rel: string; cnt: number }[];
+        return {
+          id: h.id, title: h.title, inbound_count: h.cnt,
+          by_rel: Object.fromEntries(byRel.map(r => [r.rel, r.cnt])),
+        };
+      });
+
+      const total = offenders.length;
+      let items = offenders;
+      if (offset > 0) items = items.slice(offset);
+      if (limit !== undefined) items = items.slice(0, limit);
+
+      respondSuccess({
+        check: checkName, status: total > 0 ? "warn" : "ok",
+        value: total, threshold: SUPER_CONNECTOR_THRESHOLD, count: items.length,
+        ...(offset > 0 ? { offset } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        offenders: items,
+      });
+      return;
+    }
+
+    // ── dead_links: links pointing to non-existent objects ──
+    case "dead_links": {
+      const deadRows = db.prepare(`
+        SELECT l.from_id, l.to_id, l.rel,
+          json_extract(o.data, '$.title') as from_title
+        FROM links l
+        JOIN objects o ON o.id = l.from_id
+        LEFT JOIN objects t ON t.id = l.to_id
+        WHERE t.id IS NULL
+      `).all() as { from_id: string; to_id: string; rel: string; from_title: string }[];
+
+      const total = deadRows.length;
+      let items = deadRows;
+      if (offset > 0) items = items.slice(offset);
+      if (limit !== undefined) items = items.slice(0, limit);
+
+      respondSuccess({
+        check: checkName, status: total > 0 ? "fail" : "ok",
+        value: total, count: items.length,
+        ...(offset > 0 ? { offset } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        offenders: items.map(r => ({
+          id: r.from_id, title: r.from_title,
+          dead_target: r.to_id, rel: r.rel,
+        })),
+      });
+      return;
+    }
+
+    // ── orphan_notes: notes with zero links ──
+    case "orphan_notes": {
+      const orphans = db.prepare(`
+        SELECT o.id, json_extract(o.data, '$.title') as title,
+          SUBSTR(o.body, 1, 100) as body_preview
+        FROM objects o
+        WHERE o.type = 'note'
+          AND o.id NOT IN (SELECT from_id FROM links WHERE from_id LIKE 'note_%')
+          AND o.id NOT IN (SELECT to_id FROM links WHERE to_id LIKE 'note_%')
+        ORDER BY o.id DESC
+      `).all() as { id: string; title: string; body_preview: string }[];
+
+      const total = orphans.length;
+      let items = orphans;
+      if (offset > 0) items = items.slice(offset);
+      if (limit !== undefined) items = items.slice(0, limit);
+
+      respondSuccess({
+        check: checkName, status: total > 20 ? "warn" : "ok",
+        value: total, count: items.length,
+        ...(offset > 0 ? { offset } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        offenders: items.map(r => ({
+          id: r.id, title: r.title,
+          body_preview: (r.body_preview || "").trim(),
+        })),
+      });
+      return;
+    }
+
+    // ── dangling_source: thesis notes without source provenance ──
+    case "dangling_source": {
+      const rows = db.prepare(`
+        SELECT o.id, json_extract(o.data, '$.title') as title
+        FROM objects o
+        WHERE o.type = 'note'
+          AND json_extract(o.data, '$.source') IS NULL
+          AND o.id NOT IN (
+            SELECT l.to_id FROM links l
+            JOIN objects src_note ON src_note.id = l.from_id
+            WHERE l.rel = 'supports'
+              AND json_extract(src_note.data, '$.source') IS NOT NULL
+          )
+      `).all() as { id: string; title: string }[];
+
+      const offenders = rows.filter(n => {
+        const cnt = (db.prepare("SELECT COUNT(*) as cnt FROM links WHERE to_id = ?").get(n.id) as { cnt: number }).cnt;
+        return cnt >= 3;
+      }).map(n => {
+        const cnt = (db.prepare("SELECT COUNT(*) as cnt FROM links WHERE to_id = ?").get(n.id) as { cnt: number }).cnt;
+        return { id: n.id, title: n.title, inbound_count: cnt };
+      });
+
+      const total = offenders.length;
+      let items = offenders;
+      if (offset > 0) items = items.slice(offset);
+      if (limit !== undefined) items = items.slice(0, limit);
+
+      respondSuccess({
+        check: checkName, status: total > 10 ? "warn" : "ok",
+        value: total, count: items.length,
+        ...(offset > 0 ? { offset } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+        offenders: items,
+      });
+      return;
+    }
+
+    // ── keyword_coverage: thesis notes unreachable from keyword index ──
+    case "keyword_coverage": {
+      const { paths } = await import("../core/paths");
+      const { existsSync, readFileSync } = await import("fs");
+
+      if (!existsSync(paths.keywordIndex)) {
+        respondSuccess({ check: checkName, status: "ok", value: 0, count: 0, offenders: [] });
+        return;
+      }
+
+      const indexData = JSON.parse(readFileSync(paths.keywordIndex, "utf-8"));
+      const entryIds = new Set<string>();
+      for (const ids of Object.values(indexData.keywords || {})) {
+        for (const id of ids as string[]) entryIds.add(id);
+      }
+
+      const reachable = new Set(entryIds);
+      let frontier = [...entryIds];
+      for (let hop = 0; hop < 2; hop++) {
+        const next: string[] = [];
+        for (const id of frontier) {
+          const links = db.prepare("SELECT from_id, to_id FROM links WHERE from_id = ? OR to_id = ?").all(id, id) as { from_id: string; to_id: string }[];
+          for (const l of links) {
+            const other = l.from_id === id ? l.to_id : l.from_id;
+            if (!reachable.has(other) && other.startsWith("note_")) {
+              reachable.add(other);
+              next.push(other);
+            }
+          }
+        }
+        frontier = next;
+      }
+
+      const thesisNotes = db.prepare(`
+        SELECT l.to_id as id, COUNT(*) as cnt, json_extract(o.data, '$.title') as title
+        FROM links l
+        JOIN objects o ON o.id = l.to_id
+        WHERE l.to_id LIKE 'note_%'
+        GROUP BY l.to_id
+        HAVING cnt >= 5
+      `).all() as { id: string; cnt: number; title: string }[];
+
+      const offenders = thesisNotes.filter(n => !reachable.has(n.id)).map(n => ({
+        id: n.id, title: n.title, inbound_count: n.cnt,
+      }));
+
+      const total = offenders.length;
+      let items = offenders;
+      if (offset > 0) items = items.slice(offset);
+      if (limit !== undefined) items = items.slice(0, limit);
+
+      respondSuccess({
+        check: checkName, status: total > 10 ? "warn" : "ok",
+        value: total, count: items.length,
         ...(offset > 0 ? { offset } : {}),
         ...(limit !== undefined ? { limit } : {}),
         offenders: items,

@@ -106,8 +106,8 @@ Shell mode:
     discover <id> --duplicates --json    Near-duplicates (+ --threshold 0.0-1.0)
     discover --all --duplicates --json   Scan all notes, group duplicates
     digest [week|month|year] --json      Recent insights (+ --days N)
-    lint --json                          Graph quality checks (12 checks) with offender IDs
-    lint --audit <check> --json          Full offender export with context for one check
+    lint --json                          Graph quality checks (12 checks) with offender IDs + auditable flag
+    lint --audit <check> --json          Full offender export with context (all 12 checks auditable)
     lint --audit <check> --target <id>   Scope edge-shaped audits to one target (per-thesis audit)
     lint --check --json                  Same + exit code 1 on failures (for CI)
     lint --summary --json                Stats + graph health + user context

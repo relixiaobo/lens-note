@@ -159,21 +159,22 @@ const COMMANDS: Record<string, CommandSpec> = {
   },
 
   lint: {
-    description: "Graph quality checks (9 deterministic checks) with offender IDs.",
+    description: "Graph quality checks (12 deterministic checks) with offender IDs.",
     readonly: true,
     flags: {
       summary: { type: "boolean", description: "Stats + health + user context instead of full checks" },
-      audit: { type: "string", description: "Deep-dive one check: full offenders with context" },
+      audit: { type: "string", description: "Deep-dive one check: full offenders with context. Auditable checks: supports_density, related_dominance, missing_reasons, vague_reasons, duplicate_links, thin_notes, superseded_alive, super_connectors, dead_links, orphan_notes, dangling_source, keyword_coverage" },
       target: { type: "string", description: "Scope audit to one thesis (for edge-shaped checks)" },
       check: { type: "boolean", description: "Exit code 1 on failures (for CI)" },
       limit: { type: "integer", description: "Max offenders in --audit mode" },
       offset: { type: "integer", description: "Paginate --audit offenders" },
     },
-    output: "Default: {checks: [{name, status, value, message, offenders?}]}\n--summary: stats\n--audit: full offender list",
+    output: "Default: {checks: [{name, status, value, message, auditable, offenders?}]}\n--summary: stats\n--audit: full offender list",
     examples: [
       { description: "Quality scan", request: { command: "lint" } },
       { description: "Graph health", request: { command: "lint", flags: { summary: true } } },
       { description: "Deep-dive one check", request: { command: "lint", flags: { audit: "vague_reasons" } } },
+      { description: "Audit super-connectors", request: { command: "lint", flags: { audit: "super_connectors" } } },
     ],
   },
 
