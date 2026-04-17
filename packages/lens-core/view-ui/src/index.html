@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>lens · graph</title>
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">lens</div>
+    <div class="stats" id="stats">—</div>
+    <div class="filters" id="filters">
+      <span class="label">type</span>
+      <label><input type="checkbox" data-filter="type" value="note" checked> note</label>
+      <label><input type="checkbox" data-filter="type" value="source" checked> source</label>
+      <label><input type="checkbox" data-filter="type" value="task" checked> task</label>
+      <span class="sep"></span>
+      <span class="label">rel</span>
+      <label><input type="checkbox" data-filter="rel" value="supports" checked> supports</label>
+      <label><input type="checkbox" data-filter="rel" value="contradicts" checked> contradicts</label>
+      <label><input type="checkbox" data-filter="rel" value="refines" checked> refines</label>
+      <label><input type="checkbox" data-filter="rel" value="related" checked> related</label>
+      <label><input type="checkbox" data-filter="rel" value="indexes" checked> indexes</label>
+      <label><input type="checkbox" data-filter="rel" value="continues" checked> continues</label>
+    </div>
+    <input class="search" id="search" type="text" placeholder="search title…" autocomplete="off" />
+    <button class="btn" id="relayout" title="Re-run layout (re-position all nodes)">⟳</button>
+  </header>
+
+  <main class="layout">
+    <div id="graph" class="graph"></div>
+    <aside id="node-panel" class="panel panel-node hidden">
+      <button class="panel-close" id="panel-close" aria-label="Close">✕</button>
+      <div id="node-panel-body"></div>
+    </aside>
+    <aside id="links-panel" class="panel panel-links hidden">
+      <div id="links-panel-body"></div>
+    </aside>
+  </main>
+
+  <div class="legend" id="legend">
+    <div class="legend-row"><span class="dot type-note"></span>note</div>
+    <div class="legend-row"><span class="dot type-source"></span>source</div>
+    <div class="legend-row"><span class="dot type-task"></span>task</div>
+    <div class="legend-sep"></div>
+    <div class="legend-row"><span class="bar rel-supports"></span>supports</div>
+    <div class="legend-row"><span class="bar rel-contradicts"></span>contradicts</div>
+    <div class="legend-row"><span class="bar rel-refines"></span>refines</div>
+    <div class="legend-row"><span class="bar rel-related"></span>related</div>
+    <div class="legend-row"><span class="bar rel-indexes"></span>indexes</div>
+    <div class="legend-row"><span class="bar rel-continues"></span>continues</div>
+  </div>
+
+  <div id="empty" class="empty hidden">
+    <h2>No objects yet</h2>
+    <p>Add your first note from the terminal:</p>
+    <code>lens note "my first idea"</code>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

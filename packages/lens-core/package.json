@@ -1,6 +1,6 @@
 {
   "name": "lens-note",
-  "version": "1.26.1",
+  "version": "1.27.0",
   "description": "Knowledge graph CLI for humans and agents. Like Git for knowledge.",
   "type": "module",
   "bin": {
@@ -10,7 +10,8 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/build-view.mjs",
+    "build:view": "node scripts/build-view.mjs",
     "prepublishOnly": "npm run build",
     "test": "node --import tsx/esm --test src/__tests__/*.test.ts",
     "typecheck": "tsc --noEmit",
@@ -24,6 +25,8 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/js-yaml": "^4.0.9",
     "@types/turndown": "^5.0.6",
+    "cytoscape": "^3.33.2",
+    "cytoscape-fcose": "^2.2.0",
     "defuddle": "^0.15.0",
     "feedsmith": "^2.9.1",
     "linkedom": "^0.18.12",

@@ -143,6 +143,7 @@ Shell mode:
     doctor --json                    Self-diagnostic (paths, git, DB, recent errors)
     doctor --errors --json           Recent error diagnostics
     doctor --clear-errors --json     Truncate error log
+    view                             Launch local web viewer (force-directed graph, read-only)
 
 Options:
   --json         Structured JSON output (always on in --stdin mode)
@@ -157,7 +158,7 @@ Envelope (stable, schema_version: 1):
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.26.1");
+  console.log("lens v1.27.0");
   process.exit(0);
 }
 

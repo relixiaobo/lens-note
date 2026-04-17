@@ -299,6 +299,20 @@ const COMMANDS: Record<string, CommandSpec> = {
       { description: "Recent errors", request: { command: "doctor", flags: { errors: true } } },
     ],
   },
+
+  view: {
+    description: "Launch the local web viewer — force-directed graph of the knowledge base. Read-only. Runs on an ephemeral localhost port and opens the default browser. Ctrl-C to stop.",
+    readonly: true,
+    positional: [{ name: "id", type: "string", description: "Optional: focus on a single node (ego view, 2-hop neighborhood)" }],
+    flags: {
+      port: { type: "integer", description: "Bind a specific port instead of an ephemeral one" },
+    },
+    output: "Long-running process. --json prints {url, port, lens_home}.",
+    examples: [
+      { description: "Open the full graph", request: { command: "view" } },
+      { description: "Get the URL in JSON (scripts)", request: { command: "view", flags: { json: true } } },
+    ],
+  },
 };
 
 const DATA_TYPES = {

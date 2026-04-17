@@ -214,6 +214,11 @@ async function doctorCommand(args: string[], opts: CommandOptions) {
   await runDoctor(args, opts);
 }
 
+async function viewCommand(args: string[], opts: CommandOptions) {
+  const { runView } = await import("./view");
+  await runView(args, opts);
+}
+
 export const commands: Record<string, CommandHandler> = {
   init: initCommand,
   status: statusCommand,
@@ -237,6 +242,7 @@ export const commands: Record<string, CommandHandler> = {
   config: configCommand,
   schema: schemaCommand,
   doctor: doctorCommand,
+  view: viewCommand,
   "rebuild-index": rebuildIndexCommand,
 };
 
