@@ -114,12 +114,14 @@ const COMMANDS: Record<string, CommandSpec> = {
       "source-type": { type: "string", description: "Filter sources by source_type", enum: SOURCE_TYPES },
       inbox: { type: "boolean", description: "Sources awaiting agent processing (set by clippers)" },
       status: { type: "string", description: "Filter tasks by status", enum: TASK_STATUSES },
+      fields: { type: "string", description: "Comma-separated fields to project (e.g. 'url' or 'url,id'). Rows empty on all selected fields are dropped. Unknown fields error." },
     },
-    output: "{type, total, count, items: [{id, title, ...typed_fields}], offset?, limit?, filter?}",
+    output: "{type, total, count, items: [{id, title, ...typed_fields}], offset?, limit?, filter?, fields?}",
     examples: [
       { description: "Orphans", request: { command: "list", positional: ["notes"], flags: { orphans: true } } },
       { description: "Inbox sources", request: { command: "list", positional: ["sources"], flags: { inbox: true } } },
       { description: "Open tasks", request: { command: "list", positional: ["tasks"], flags: { status: "open" } } },
+      { description: "Source URLs only (manifest)", request: { command: "list", positional: ["sources"], flags: { fields: "url" } } },
     ],
   },
 

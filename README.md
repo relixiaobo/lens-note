@@ -54,6 +54,7 @@ lens list notes --min-links 10 --json     # Hub notes by link count
 lens list notes --max-links 0 --json      # Isolated notes
 lens list sources --source-type book --json # Filter by source type
 lens list sources --inbox --json          # Sources awaiting agent processing
+lens list sources --fields url --json     # Project to url only (clippers/manifests)
 lens list tasks --status open --json      # Tasks by status (open/done)
 ```
 

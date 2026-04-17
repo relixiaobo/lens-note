@@ -13,6 +13,30 @@ const TYPE_MAP: Record<string, ObjectType> = {
   tasks: "task", task: "task",
 };
 
+const PROJECTABLE_FIELDS: Record<ObjectType, string[]> = {
+  source: ["id", "title", "source_type", "url", "author", "word_count", "raw_file", "ingested_at", "created_at", "inbox"],
+  note:   ["id", "title", "source", "links", "created_at", "updated_at"],
+  task:   ["id", "title", "status", "source", "links", "created_at", "updated_at"],
+};
+
+function parseFields(raw: string, objType: ObjectType): string[] {
+  const fields = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  if (fields.length === 0) throw new Error("--fields must list at least one field name");
+  const allowed = new Set(PROJECTABLE_FIELDS[objType]);
+  const unknown = fields.filter((f) => !allowed.has(f));
+  if (unknown.length > 0) {
+    throw new Error(`--fields unknown for ${objType}: ${unknown.join(", ")}. Valid: ${PROJECTABLE_FIELDS[objType].join(", ")}`);
+  }
+  return fields;
+}
+
+function isEmpty(v: unknown): boolean {
+  if (v === null || v === undefined) return true;
+  if (typeof v === "string" && v === "") return true;
+  if (Array.isArray(v) && v.length === 0) return true;
+  return false;
+}
+
 export async function listCommand(args: string[], opts: CommandOptions) {
   setReadonly();
   ensureInitialized();
@@ -99,6 +123,24 @@ export async function listCommand(args: string[], opts: CommandOptions) {
     items = items.filter((item) => item.status === st);
   }
 
+  // --fields: project to selected fields; drop rows where all projected fields are empty
+  const fieldsFlag = flags.fields !== undefined ? String(flags.fields) : undefined;
+  const projectFields = fieldsFlag ? parseFields(fieldsFlag, objType) : undefined;
+  if (projectFields) {
+    const projected: Record<string, any>[] = [];
+    for (const item of items) {
+      const row: Record<string, any> = {};
+      let allEmpty = true;
+      for (const f of projectFields) {
+        const v = item[f];
+        row[f] = v ?? null;
+        if (!isEmpty(v)) allEmpty = false;
+      }
+      if (!allEmpty) projected.push(row);
+    }
+    items = projected;
+  }
+
   const totalCount = items.length;
 
   // Pagination (works for all queries, not just orphans)
@@ -110,18 +152,21 @@ export async function listCommand(args: string[], opts: CommandOptions) {
   if (limit !== undefined) items = items.slice(0, limit);
 
   if (opts.json) {
-    const summaries = items.map(item => {
-      const base: Record<string, any> = { id: item.id, title: item.title };
-      if (item.links?.length) base.links = item.links.length;
-      if (item.source) base.source = item.source;
-      if (item.source_type) base.source_type = item.source_type;
-      if (item.word_count) base.word_count = item.word_count;
-      if (item.url) base.url = item.url;
-      if (item.status) base.status = item.status;
-      return base;
-    });
+    const summaries = projectFields
+      ? items
+      : items.map(item => {
+          const base: Record<string, any> = { id: item.id, title: item.title };
+          if (item.links?.length) base.links = item.links.length;
+          if (item.source) base.source = item.source;
+          if (item.source_type) base.source_type = item.source_type;
+          if (item.word_count) base.word_count = item.word_count;
+          if (item.url) base.url = item.url;
+          if (item.status) base.status = item.status;
+          return base;
+        });
     const result: Record<string, any> = { type: typeName, total: totalCount, count: summaries.length, items: summaries };
     if (flags.inbox) result.filter = "inbox";
+    if (projectFields) result.fields = projectFields;
     if (offset > 0) result.offset = offset;
     if (limit !== undefined) result.limit = limit;
     respondSuccess(result);
