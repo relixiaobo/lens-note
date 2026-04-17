@@ -170,6 +170,29 @@ function buildShow(id: string): unknown {
     const reason = sourceLink?.reason;
     return { id: l.from_id, rel: l.rel, title, ...(reason ? { reason } : {}) };
   });
+
+  // When viewing a source, surface notes derived from it (notes whose
+  // `source` frontmatter field points here). This is orthogonal to the
+  // link graph — it's a parent/child relationship, not a typed edge.
+  let derivedNotes: { id: string; title: string; preview?: string }[] | undefined;
+  let sourceTitle: string | undefined; // when this IS a note with a source, show the source title
+  if (data.type === "source") {
+    const rows = getDb().prepare(
+      `SELECT id, data, body FROM objects
+       WHERE type = 'note' AND json_extract(data, '$.source') = ?
+       ORDER BY json_extract(data, '$.created_at') ASC`,
+    ).all(id) as { id: string; data: string; body: string }[];
+    derivedNotes = rows.map(r => {
+      const d = JSON.parse(r.data);
+      const body = (r.body || "").trim();
+      const preview = body ? body.replace(/\s+/g, " ").slice(0, 140) : undefined;
+      return { id: r.id, title: (d.title || "").toString().slice(0, 140), ...(preview ? { preview } : {}) };
+    });
+  } else if (data.source) {
+    const parent = readObject(data.source);
+    if (parent) sourceTitle = (parent.data.title || "").toString().slice(0, 120);
+  }
+
   return {
     id: data.id,
     type: data.type,
@@ -177,12 +200,14 @@ function buildShow(id: string): unknown {
     body: content.trim(),
     status: data.status,
     source: data.source,
+    source_title: sourceTitle,
     source_type: data.source_type,
     url: data.url,
     created_at: data.created_at,
     updated_at: data.updated_at,
     forward_links: forward,
     backward_links: backward,
+    ...(derivedNotes ? { derived_notes: derivedNotes } : {}),
   };
 }
 

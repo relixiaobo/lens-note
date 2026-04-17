@@ -50,11 +50,13 @@ interface ShowPayload {
   status?: string;
   url?: string;
   source?: string;
+  source_title?: string;
   source_type?: string;
   created_at?: string;
   updated_at?: string;
   forward_links: Array<{ id: string; rel: string; title: string; reason?: string }>;
   backward_links: Array<{ id: string; rel: string; title: string; reason?: string }>;
+  derived_notes?: Array<{ id: string; title: string; preview?: string }>;
 }
 
 interface LandingPayload {
@@ -245,7 +247,13 @@ async function renderCard(id: string) {
   meta.push(escapeHtml(show.type));
   if (show.source_type) meta.push(escapeHtml(show.source_type));
   if (show.status) meta.push(escapeHtml(show.status));
-  if (show.url) meta.push(`<a href="${escapeAttr(show.url)}" target="_blank" rel="noopener">source ↗</a>`);
+  // For notes: show the parent source as a clickable link back to provenance.
+  if (show.type === "note" && show.source) {
+    const label = show.source_title || show.source;
+    meta.push(`from <a href="/view/${escapeAttr(show.source)}">${escapeHtml(label)}</a>`);
+  }
+  // For sources: the `url` field points to the original web location, external.
+  if (show.url) meta.push(`<a href="${escapeAttr(show.url)}" target="_blank" rel="noopener">original ↗</a>`);
   if (show.updated_at) meta.push(`<span class="meta-date">updated ${escapeHtml(show.updated_at.slice(0, 10))}</span>`);
 
   const linkRow = (arrow: "→" | "←", l: { id: string; rel: string; title: string; reason?: string }) =>
@@ -270,18 +278,34 @@ async function renderCard(id: string) {
     </section>`;
   };
 
+  // Notes derived from this source (source cards only; parent/child, not a typed edge).
+  const derivedSection = (show.derived_notes && show.derived_notes.length > 0)
+    ? `<section class="derived-notes">
+         <h3 class="rel-section-title">Notes from this source (${show.derived_notes.length})</h3>
+         <ul class="derived-list">
+           ${show.derived_notes.map(n => `
+             <li class="derived-row">
+               <a class="derived-title" href="/view/${escapeAttr(n.id)}">${escapeHtml(n.title || n.id)}</a>
+               ${n.preview ? `<div class="derived-preview">${escapeHtml(n.preview)}</div>` : ""}
+             </li>
+           `).join("")}
+         </ul>
+       </section>`
+    : (show.type === "source" ? `<section class="derived-notes"><p class="isolated">No notes extracted from this source yet.</p></section>` : "");
+
   card.innerHTML = `
     <header class="card-header">
       <h1 class="card-title">${escapeHtml(show.title || "(untitled)")}</h1>
       <div class="card-meta">${meta.join(" · ")}</div>
     </header>
     <div class="card-body markdown">${bodyHtml || '<p class="empty-body">(no body)</p>'}</div>
+    ${derivedSection}
     ${forwardGroups.length + backwardGroups.length > 0
       ? `<div class="card-links">
            ${relSection("forward", forwardGroups)}
            ${relSection("backward", backwardGroups)}
          </div>`
-      : `<div class="card-links"><p class="isolated">This card is isolated — no links yet.</p></div>`}
+      : (show.type === "source" ? "" : `<div class="card-links"><p class="isolated">This card is isolated — no links yet.</p></div>`)}
     ${currentGraph
       ? `<footer class="card-footer">${currentGraph.stats.total} objects · ${currentGraph.stats.edges} links · <a href="/graph">full graph</a></footer>`
       : `<footer class="card-footer"><a href="/graph">full graph</a></footer>`}

@@ -314,6 +314,37 @@ a:hover { text-decoration: underline; }
   font-style: italic;
 }
 
+/* Notes derived from a source card */
+.derived-notes {
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+.derived-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.derived-row {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--bg-panel);
+}
+.derived-row:last-child { border-bottom: none; }
+.derived-title {
+  display: block;
+  color: var(--text);
+  font-weight: 500;
+  font-size: 14px;
+  text-decoration: none;
+}
+.derived-title:hover { color: var(--accent); }
+.derived-preview {
+  color: var(--text-faint);
+  font-size: 12.5px;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
 /* Keyboard-focused link (j/k nav in card mode) */
 .card-nav-focus {
   outline: 2px solid var(--accent);
