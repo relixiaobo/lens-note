@@ -214,6 +214,12 @@ async function doctorCommand(args: string[], opts: CommandOptions) {
   await runDoctor(args, opts);
 }
 
+async function boardCommand(args: string[], opts: CommandOptions) {
+  const sub = args[0];
+  const { handleBoard } = await import("./board");
+  await handleBoard(sub, args.slice(1), opts);
+}
+
 async function viewCommand(args: string[], opts: CommandOptions) {
   const { runView } = await import("./view");
   await runView(args, opts);
@@ -243,6 +249,7 @@ export const commands: Record<string, CommandHandler> = {
   schema: schemaCommand,
   doctor: doctorCommand,
   view: viewCommand,
+  board: boardCommand,
   "rebuild-index": rebuildIndexCommand,
 };
 

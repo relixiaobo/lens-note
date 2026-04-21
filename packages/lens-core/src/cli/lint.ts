@@ -139,11 +139,8 @@ export async function runLint(args: string[], opts: CommandOptions) {
   });
 
   // ── 4. Missing reasons ────────────────────────────────────
-  // Check note files via the objects table (data column has JSON frontmatter)
-  // Structural rels (indexes) are exempt — their meaning is self-explanatory.
-  // Semantic rels (supports, contradicts, refines, related) benefit from reasons.
-  const STRUCTURAL_RELS = new Set(["indexes"]);
-
+  // Check note files via the objects table (data column has JSON frontmatter).
+  // Semantic rels (supports, contradicts, refines, related, continues) benefit from reasons.
   const allLinkedObjects = db.prepare(
     "SELECT id, data FROM objects WHERE type IN ('note', 'task')"
   ).all() as { id: string; data: string }[];
@@ -156,7 +153,6 @@ export async function runLint(args: string[], opts: CommandOptions) {
       const parsed = JSON.parse(obj.data);
       if (!Array.isArray(parsed.links)) continue;
       for (const link of parsed.links) {
-        if (STRUCTURAL_RELS.has(link.rel)) continue;
         if (!link.reason || !link.reason.trim()) {
           missingReasonCount++;
           if (missingReasonSamples.length < 50) {
@@ -196,7 +192,6 @@ export async function runLint(args: string[], opts: CommandOptions) {
       const parsed = JSON.parse(obj.data);
       if (!Array.isArray(parsed.links)) continue;
       for (const link of parsed.links) {
-        if (STRUCTURAL_RELS.has(link.rel)) continue;
         if (!link.reason) continue; // missing_reasons catches these
         const reason = link.reason.trim();
         const isTopicProximity = link.rel === "supports" && SUPPORTS_TOPIC_PROXIMITY_PATTERN.test(reason);
@@ -235,14 +230,14 @@ export async function runLint(args: string[], opts: CommandOptions) {
   `).all() as { from_id: string; to_id: string; rels: string; cnt: number }[];
 
   // Rel strength for suggesting which to keep in duplicate pairs
-  const REL_STRENGTH: Record<string, number> = { indexes: 4, contradicts: 4, continues: 4, refines: 3, supports: 2, related: 1 };
+  const REL_STRENGTH: Record<string, number> = { contradicts: 4, continues: 4, refines: 3, supports: 2, related: 1 };
 
   checks.push({
     name: "duplicate_links",
     status: dupes.length > 0 ? "warn" : "ok",
     value: dupes.length,
     message: dupes.length > 0
-      ? `${dupes.length} note pairs with multiple rels. Keep the strongest, unlink the weaker (strength: indexes/contradicts > refines > supports > related).`
+      ? `${dupes.length} note pairs with multiple rels. Keep the strongest, unlink the weaker (strength: contradicts/continues > refines > supports > related).`
       : "No duplicate link pairs.",
     ...(dupes.length > 0 ? {
       offenders: dupes.map(d => {
@@ -328,7 +323,7 @@ export async function runLint(args: string[], opts: CommandOptions) {
     ).all(obj.id) as { from_id: string; rel: string }[];
 
     // Active inbound: links that treat this note as current knowledge
-    const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "indexes" || l.rel === "continues");
+    const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "continues");
     if (activeInbound.length > 0) {
       try {
         const parsed = JSON.parse(obj.data);
@@ -544,7 +539,7 @@ const VALID_AUDIT_CHECKS = new Set([
   "super_connectors", "dead_links", "orphan_notes", "dangling_source", "keyword_coverage",
 ]);
 
-const AUDIT_REL_STRENGTH: Record<string, number> = { indexes: 4, contradicts: 4, continues: 4, refines: 3, supports: 2, related: 1 };
+const AUDIT_REL_STRENGTH: Record<string, number> = { contradicts: 4, continues: 4, refines: 3, supports: 2, related: 1 };
 
 async function runAudit(checkName: string, flags: Record<string, any>, opts: CommandOptions) {
   if (!VALID_AUDIT_CHECKS.has(checkName)) {
@@ -557,9 +552,6 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
   // --target <id> scopes inbound-edge audits (missing_reasons, vague_reasons, supports_density)
   // to links pointing AT the given node. Used for per-target audit of a single hub/thesis.
   const targetFilter = flags.target ? String(flags.target) : undefined;
-
-  // Structural rels exempt from reason checks (same as main lint)
-  const STRUCTURAL_RELS = new Set(["indexes"]);
 
   switch (checkName) {
     // ── supports_density: all supports links for evidence backbone review ──
@@ -692,7 +684,6 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
           const parsed = JSON.parse(obj.data);
           if (!Array.isArray(parsed.links)) continue;
           for (const link of parsed.links) {
-            if (STRUCTURAL_RELS.has(link.rel)) continue;
             if (targetFilter && link.to !== targetFilter) continue;
             if (!link.reason || !link.reason.trim()) {
               offenders.push({
@@ -740,7 +731,6 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
           const parsed = JSON.parse(obj.data);
           if (!Array.isArray(parsed.links)) continue;
           for (const link of parsed.links) {
-            if (STRUCTURAL_RELS.has(link.rel)) continue;
             if (targetFilter && link.to !== targetFilter) continue;
             if (!link.reason) continue;
             const reason = link.reason.trim();
@@ -868,7 +858,7 @@ async function runAudit(checkName: string, flags: Record<string, any>, opts: Com
           "SELECT from_id, rel FROM links WHERE to_id = ?"
         ).all(obj.id) as { from_id: string; rel: string }[];
 
-        const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "indexes" || l.rel === "continues");
+        const activeInbound = inbound.filter(l => l.rel === "supports" || l.rel === "refines" || l.rel === "continues");
         if (activeInbound.length > 0) {
           try {
             const parsed = JSON.parse(obj.data);

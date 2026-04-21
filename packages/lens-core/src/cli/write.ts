@@ -26,7 +26,7 @@ import { SUPER_CONNECTOR_THRESHOLD, SUPER_CONNECTOR_SOFT_THRESHOLD } from "./lin
 // Validation
 // ============================================================
 
-const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "related", "indexes", "continues"]);
+const VALID_RELS = new Set<LinkRel>(["supports", "contradicts", "refines", "related", "continues"]);
 const VALID_SOURCE_TYPES = new Set<SourceType>(["book", "paper", "report", "video", "podcast", "course", "web_article", "newsletter", "social_post", "conversation", "manual_note", "note_batch", "markdown", "plain_text"]);
 const VALID_STATUSES = new Set<TaskStatus>(["open", "done"]);
 
@@ -137,7 +137,7 @@ interface WriteResult {
   object?: Record<string, any>;
 }
 
-function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
+export function writeNote(input: any, batchIds?: Map<string, string>): WriteResult {
   const title = input.title;
   if (!title || typeof title !== "string" || title.trim().length === 0) {
     throw new Error("note: title is required");
@@ -307,7 +307,7 @@ function writeTask(input: any, batchIds?: Map<string, string>): WriteResult {
   return { id, type: "task", action: "created", object: { ...task, body } };
 }
 
-function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
+export function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   let from = resolveReference(input.from, batchIds);
   let to = resolveReference(input.to, batchIds);
   const rel = input.rel as LinkRel;
@@ -375,10 +375,6 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
       "SELECT rel, COUNT(*) as cnt FROM links WHERE to_id = ? GROUP BY rel ORDER BY cnt DESC"
     ).all(to) as { rel: string; cnt: number }[];
     const supportsCount = relBreakdown.find(r => r.rel === "supports")?.cnt ?? 0;
-    const indexesCount = relBreakdown.find(r => r.rel === "indexes")?.cnt ?? 0;
-    // Healthy hub: target is genuinely a structural index (indexes > 0 AND indexes >= supports).
-    // A node with 0 indexes but many supports/related/refines inbounds is NOT a healthy hub.
-    const isHealthyHub = indexesCount > 0 && indexesCount >= supportsCount;
     const advisory: Record<string, any> = {
       warning_code: "approaching_super_connector",
       target_id: to,
@@ -386,8 +382,7 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
       soft_threshold: SUPER_CONNECTOR_SOFT_THRESHOLD,
       hard_threshold: SUPER_CONNECTOR_THRESHOLD,
       rel_breakdown: Object.fromEntries(relBreakdown.map(r => [r.rel, r.cnt])),
-      is_healthy_hub: isHealthyHub,
-      message: `Target has ${inboundCount} inbound links (${supportsCount} supports, ${indexesCount} indexes).`,
+      message: `Target has ${inboundCount} inbound links (${supportsCount} supports).`,
     };
     return { type: "link", action: "created", object: { from, rel, to, reason }, ...relatedExtra, advisory };
   }
@@ -395,7 +390,7 @@ function writeLink(input: any, batchIds?: Map<string, string>): WriteResult {
   return { type: "link", action: "created", object: { from, rel, to, reason }, ...relatedExtra };
 }
 
-function writeUnlink(input: any): WriteResult {
+export function writeUnlink(input: any): WriteResult {
   const { rel } = input;
   if (!input.from || !input.to || !rel) throw new Error("unlink: from, to, and rel are required");
   if (!VALID_RELS.has(rel)) throw new Error(`unlink: rel "${rel}" is invalid. Valid: ${[...VALID_RELS].join(", ")}`);

@@ -17,6 +17,7 @@ const PROJECTABLE_FIELDS: Record<ObjectType, string[]> = {
   source: ["id", "title", "source_type", "url", "author", "word_count", "raw_file", "ingested_at", "created_at", "inbox"],
   note:   ["id", "title", "source", "links", "created_at", "updated_at"],
   task:   ["id", "title", "status", "source", "links", "created_at", "updated_at"],
+  whiteboard: ["id", "title", "body", "members", "created_at", "updated_at"],
 };
 
 function parseFields(raw: string, objType: ObjectType): string[] {

@@ -48,7 +48,7 @@ export async function showLinks(input: string, opts: CommandOptions) {
 
   // --rel filter: only show links of a specific relationship type
   const relFilter = opts.rel ? String(opts.rel) : undefined;
-  const validRels = new Set(["supports", "contradicts", "refines", "related", "indexes", "continues"]);
+  const validRels = new Set(["supports", "contradicts", "refines", "related", "continues"]);
   if (relFilter && !validRels.has(relFilter)) {
     throw new Error(`--rel "${relFilter}" is invalid. Valid: ${[...validRels].join(", ")}`);
   }

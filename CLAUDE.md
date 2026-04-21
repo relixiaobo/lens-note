@@ -4,7 +4,7 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — stores, queries, and links. No API keys, no LLM dependencies.
 
-**Status**: v1.23.0. **Methodology**: Collision Method — Spark → Collide → Crystallize.
+**Status**: v1.32.0. **Methodology**: Collision Method — Spark → Collide → Crystallize.
 
 **Key docs**: `docs/product-vision.md`, `docs/product-evolution.md`, `docs/task-design.md`, `docs/tool-redesign-v2.md`.
 

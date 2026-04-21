@@ -41,7 +41,7 @@ interface CommandSpec {
   examples: { description: string; request: object }[];
 }
 
-const LINK_RELS = ["supports", "contradicts", "refines", "related", "indexes", "continues"] as const;
+const LINK_RELS = ["supports", "contradicts", "refines", "related", "continues"] as const;
 const SOURCE_TYPES = ["web_article", "paper", "book", "video", "podcast", "conversation", "other"] as const;
 const TASK_STATUSES = ["open", "done"] as const;
 const OBJECT_TYPES = ["note", "source", "task"] as const;
@@ -67,7 +67,7 @@ const COMMANDS: Record<string, CommandSpec> = {
     description: "Fetch one or more objects with body, forward links, and backward links.",
     readonly: true,
     positional: [{ name: "id_or_title", type: "string", description: "Object ID or title (batch supported)", required: true, variadic: true }],
-    output: "Single: {id, type, title, body, forward_links, backward_links, ...}\nBatch: {count, items: [...], errors?: [...]}",
+    output: "Single: {id, type, title, body, forward_links, backward_links, ...}\nNotes also include: same_day_siblings[], related_unlinked[] (top 3 TF-IDF, similarity).\nBatch: {count, items: [...], errors?: [...]}",
     examples: [
       { description: "Show by ID", request: { command: "show", positional: ["note_01ABC..."] } },
       { description: "Batch", request: { command: "show", positional: ["note_01ABC...", "note_01DEF..."] } },
@@ -93,10 +93,10 @@ const COMMANDS: Record<string, CommandSpec> = {
     description: "Structural overview of a note's cluster: subtopics, evidence, tensions, cluster size.",
     readonly: true,
     positional: [{ name: "id_or_title", type: "string", description: "Note ID or title", required: true }],
-    output: "{id, title, cluster_size, direct_links, subtopics?, evidence?, tensions?, continuations?, indexes?, indexed_by?, related?}",
+    output: "{id, title, cluster_size, direct_links, subtopics?, evidence?, tensions?, continuations?, related?}",
     examples: [
       { description: "Cluster overview", request: { command: "map", positional: ["note_01ABC..."] } },
-      { description: "By title", request: { command: "map", positional: ["上下文管理三策略"] } },
+      { description: "By title", request: { command: "map", positional: ["Three strategies for context management"] } },
     ],
   },
 
@@ -152,11 +152,13 @@ const COMMANDS: Record<string, CommandSpec> = {
     positional: [{ name: "window", type: "string", description: "Time window: week | month | year" }],
     flags: {
       days: { type: "integer", description: "Custom day count (overrides window)" },
+      html: { type: "string", description: "Write self-contained HTML snapshot. Pass a path, or omit value to default to ~/.lens/digest-<period>-<date>.html." },
     },
-    output: "{period, total, tensions, connected, seeds, new_links?, gained_evidence?}",
+    output: "{period, total, tensions, connected, seeds, new_links?, gained_evidence?}  — or {period, path, bytes, ...} when --html",
     examples: [
       { description: "Weekly digest", request: { command: "digest", positional: ["week"] } },
       { description: "Monthly", request: { command: "digest", positional: ["month"] } },
+      { description: "Weekly static HTML snapshot", request: { command: "digest", positional: ["week"], flags: { html: true } } },
     ],
   },
 
@@ -313,6 +315,31 @@ const COMMANDS: Record<string, CommandSpec> = {
     examples: [
       { description: "Open the full graph", request: { command: "view" } },
       { description: "Get the URL in JSON (scripts)", request: { command: "view", flags: { json: true } } },
+    ],
+  },
+
+  board: {
+    description: "Whiteboard workspace commands. A whiteboard aggregates notes/sources/tasks for topic research. Independent from the graph — adding a card to a whiteboard does NOT create any typed link. Subcommands: create, list, show, add, remove, layout, update, delete, find.",
+    readonly: false,
+    positional: [
+      { name: "subcommand", type: "string", description: "One of: create, list, show, add, remove, layout, update, delete, find", required: true },
+      { name: "args", type: "string", description: "Subcommand arguments (e.g., <wb-id> for show/add/remove/layout; <card-id> for find)", variadic: true },
+    ],
+    flags: {
+      title: { type: "string", description: "Title for create/update" },
+      body: { type: "string", description: "Body (research log) for create/update" },
+      positions: { type: "string", description: "JSON map of card_id → {x, y} for layout subcommand" },
+    },
+    output: "Each subcommand returns a JSON envelope. create/show/add/remove/layout/update return the updated whiteboard state. list returns {count, items}. find returns {card_id, count, items}. delete returns {id, deleted:true}.",
+    examples: [
+      { description: "Create a new whiteboard", request: { command: "board", positional: ["create"], flags: { title: "Sider 交互研究", body: "Research log..." } } },
+      { description: "Add cards (batch)", request: { command: "board", positional: ["add", "wb_01ABC...", "note_01X...", "note_01Y..."] } },
+      { description: "Remove a card", request: { command: "board", positional: ["remove", "wb_01ABC...", "note_01X..."] } },
+      { description: "Update positions", request: { command: "board", positional: ["layout", "wb_01ABC..."], flags: { positions: '{"note_01X":{"x":0,"y":0}}' } } },
+      { description: "List all whiteboards", request: { command: "board", positional: ["list"] } },
+      { description: "Show a whiteboard's full state", request: { command: "board", positional: ["show", "wb_01ABC..."] } },
+      { description: "Find which boards a card is on", request: { command: "board", positional: ["find", "note_01X..."] } },
+      { description: "Rename / edit body", request: { command: "board", positional: ["update", "wb_01ABC..."], flags: { title: "New name" } } },
     ],
   },
 };

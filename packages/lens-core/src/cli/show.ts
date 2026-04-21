@@ -3,7 +3,7 @@
  * Supports batch mode: multiple IDs return {count, items} array.
  */
 
-import { readObject, getBacklinks, ensureInitialized, extractBodyRefs, resolveBodyRefs, resolveIdOrTitle, setReadonly } from "../core/storage";
+import { readObject, getBacklinks, ensureInitialized, extractBodyRefs, resolveBodyRefs, resolveIdOrTitle, setReadonly, findSimilarExcluding, getDb, previewOf } from "../core/storage";
 import type { CommandOptions } from "./commands";
 import { respondSuccess } from "./response";
 
@@ -99,6 +99,52 @@ function buildJsonOutput(id: string, result: { data: any; content: string }) {
   if (bodyRefs.length > 0) output.body_refs = bodyRefs;
   output.forward_links = forwardLinks;
   output.backward_links = backwardLinks;
+
+  // Provenance extras (notes only) — mirror what the view layer surfaces so
+  // agents using CLI see the same signal as humans using the GUI (P4).
+  if (data.type === "note") {
+    // Same-day siblings: other notes created the same calendar day
+    const createdAt: string | undefined = data.created_at;
+    if (createdAt) {
+      const dayPrefix = createdAt.slice(0, 10);
+      const rows = getDb().prepare(
+        `SELECT id, data, body FROM objects
+         WHERE type = 'note' AND id != ?
+           AND json_extract(data, '$.created_at') LIKE ?
+         ORDER BY json_extract(data, '$.created_at') ASC
+         LIMIT 10`,
+      ).all(id, dayPrefix + "%") as { id: string; data: string; body: string }[];
+      if (rows.length > 0) {
+        output.same_day_siblings = rows.map(r => {
+          const d = JSON.parse(r.data);
+          const preview = previewOf(r.body);
+          return {
+            id: r.id,
+            title: (d.title || "").toString().slice(0, 120),
+            ...(preview ? { preview } : {}),
+          };
+        });
+      }
+    }
+
+    // Related but unlinked: top 3 TF-IDF neighbors excluding 1-hop links
+    const exclude = new Set<string>([id]);
+    for (const l of data.links || []) exclude.add(l.to);
+    for (const l of getBacklinks(id)) exclude.add(l.from_id);
+    const similar = findSimilarExcluding(id, exclude, 3, 0.15);
+    if (similar.length > 0) {
+      output.related_unlinked = similar.map(s => {
+        const target = readObject(s.id);
+        const preview = previewOf(target?.content);
+        return {
+          id: s.id,
+          title: s.title,
+          similarity: s.similarity,
+          ...(preview ? { preview } : {}),
+        };
+      });
+    }
+  }
 
   return output;
 }

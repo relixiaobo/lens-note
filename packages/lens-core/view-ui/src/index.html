@@ -9,30 +9,24 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/">lens</a>
+    <div class="stats" id="stats">—</div>
+    <div class="mode-badge hidden" id="mode-badge"></div>
     <input class="search" id="search" type="text" placeholder="search title…" autocomplete="off" />
     <nav class="top-nav">
-      <a class="top-nav-link" id="nav-graph" href="/graph">graph</a>
+      <button class="btn btn-primary" id="new-whiteboard-top" title="New whiteboard (⌘⇧N)">+ Whiteboard</button>
+      <button class="btn" id="relayout" title="Re-run layout">⟳</button>
     </nav>
   </header>
 
-  <!-- Card mode ─────────────────────────────────────────── -->
-  <main id="card-view" class="card-view hidden">
-    <article class="card" id="card">
-      <div class="card-loading">Loading…</div>
-    </article>
-  </main>
-
-  <!-- Graph mode (panoramic, secondary) ─────────────────── -->
-  <div id="graph-view" class="graph-view hidden">
-    <div class="graph-topbar">
-      <div class="stats" id="stats">—</div>
+  <!-- Main stage: canvas on the left, reader panel slides in from the right -->
+  <main id="stage" class="stage">
+    <div id="canvas-holder" class="canvas-holder">
+      <div id="graph" class="graph"></div>
       <div class="filters" id="filters">
-        <span class="label">type</span>
         <label><input type="checkbox" data-filter="type" value="note" checked> note</label>
         <label><input type="checkbox" data-filter="type" value="source" checked> source</label>
         <label><input type="checkbox" data-filter="type" value="task" checked> task</label>
         <span class="sep"></span>
-        <span class="label">rel</span>
         <label><input type="checkbox" data-filter="rel" value="supports" checked> supports</label>
         <label><input type="checkbox" data-filter="rel" value="contradicts" checked> contradicts</label>
         <label><input type="checkbox" data-filter="rel" value="refines" checked> refines</label>
@@ -40,35 +34,22 @@
         <label><input type="checkbox" data-filter="rel" value="indexes" checked> indexes</label>
         <label><input type="checkbox" data-filter="rel" value="continues" checked> continues</label>
       </div>
-      <button class="btn" id="relayout" title="Re-run layout">⟳</button>
     </div>
 
-    <div class="graph-layout">
-      <div id="graph" class="graph"></div>
-      <aside id="node-panel" class="panel panel-node hidden">
-        <button class="panel-close" id="panel-close" aria-label="Close">✕</button>
-        <div id="node-panel-body"></div>
-      </aside>
-      <aside id="links-panel" class="panel panel-links hidden">
-        <div id="links-panel-body"></div>
-      </aside>
-    </div>
+    <aside id="reader-panel" class="reader-panel hidden" aria-label="Card reader">
+      <header class="panel-toolbar">
+        <button id="panel-max" title="Maximize" aria-label="Maximize">⤢</button>
+        <button id="panel-close" title="Close" aria-label="Close">✕</button>
+      </header>
+      <article id="card" class="card">
+        <div class="card-loading">Loading…</div>
+      </article>
+    </aside>
 
-    <div class="legend" id="legend">
-      <div class="legend-row"><span class="dot type-note"></span>note</div>
-      <div class="legend-row"><span class="dot type-source"></span>source</div>
-      <div class="legend-row"><span class="dot type-task"></span>task</div>
-      <div class="legend-sep"></div>
-      <div class="legend-row"><span class="bar rel-supports"></span>supports</div>
-      <div class="legend-row"><span class="bar rel-contradicts"></span>contradicts</div>
-      <div class="legend-row"><span class="bar rel-refines"></span>refines</div>
-      <div class="legend-row"><span class="bar rel-related"></span>related</div>
-      <div class="legend-row"><span class="bar rel-indexes"></span>indexes</div>
-      <div class="legend-row"><span class="bar rel-continues"></span>continues</div>
-    </div>
-  </div>
+    <!-- Edge reason tooltip floats above the canvas -->
+    <div id="edge-tooltip" class="edge-tooltip hidden"></div>
+  </main>
 
-  <!-- Landing / empty ───────────────────────────────────── -->
   <div id="empty" class="empty hidden">
     <h2>No notes yet</h2>
     <p>Write your first one from the terminal:</p>

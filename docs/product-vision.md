@@ -139,9 +139,11 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 | contradicts | Conflicts (always bidirectional) |
 | refines | More precise version |
 | related | Loose association (with optional reason) |
-| indexes | MOC/index entry point (index → child) |
+| continues | Next step in target's line of thought (Folgezettel chain) |
 
-No folders, no tags, no categories. Structure emerges from links.
+Topic organization (what other systems call MOC / structure note / hub note) lives on **whiteboards** (`lens board`) — independent workspaces that aggregate cards by ID, not through typed graph links.
+
+No folders, no tags, no categories. Structure emerges from links and whiteboards.
 
 ### File-as-Truth
 

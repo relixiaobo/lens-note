@@ -159,9 +159,11 @@ updated_at: '2026-04-13T02:50:14.932Z'
 Evidence and reasoning in markdown body.
 ```
 
-**Link types**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related` (requires `reason`), `indexes`, `continues` (Folgezettel continuation chain).
+**Link types**: `supports`, `contradicts` (auto-bidirectional), `refines`, `related` (requires `reason`), `continues` (Folgezettel continuation chain).
 
-**IDs**: `<prefix>_<ULID>` — 26 uppercase characters. Never truncate.
+**Whiteboards** (`lens board`): a spatial workspace for topic research that aggregates Notes/Sources/Tasks by ID. Independent from the graph — adding a card to a whiteboard does NOT create a link. Stored as JSON in `.lens/whiteboards/`.
+
+**IDs**: `<prefix>_<ULID>` — 26 uppercase characters. Prefixes: `note`, `src`, `task`, `wb`. Never truncate.
 
 ## Write API
 

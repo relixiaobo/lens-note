@@ -1,10 +1,13 @@
 /**
  * Lens core types.
  *
- * 3 types: Source, Note, Task.
+ * 4 types: Source, Note, Task, Whiteboard.
  * Note is the universal knowledge card — minimal frontmatter, rich body.
  * Task is a Note with status — the collaboration protocol between human and agent.
- * Structure emerges from links, not from categories.
+ * Whiteboard is a research workspace — aggregates cards with spatial layout,
+ *   independent from the knowledge graph. Does NOT participate in link rels.
+ * Structure emerges from links (between notes) and from whiteboards (between
+ * cards in a workspace).
  */
 
 import { ulid } from "ulid";
@@ -15,7 +18,7 @@ import { ulid } from "ulid";
 
 export type ISODate = string;
 
-export type ObjectType = "source" | "note" | "task";
+export type ObjectType = "source" | "note" | "task" | "whiteboard";
 
 export type SourceType =
   | "book" | "paper" | "report"                              // published works
@@ -24,7 +27,7 @@ export type SourceType =
   | "conversation" | "manual_note" | "note_batch"            // input
   | "markdown" | "plain_text";                               // raw format
 
-export type LinkRel = "supports" | "contradicts" | "refines" | "related" | "indexes" | "continues";
+export type LinkRel = "supports" | "contradicts" | "refines" | "related" | "continues";
 
 export interface NoteLink {
   to: string;
@@ -64,7 +67,7 @@ export interface Note {
   type: "note";
   title: string;       // the thought in one sentence
   source?: string;     // source ID this note comes from
-  links?: NoteLink[];  // all relationships (supports/contradicts/refines/related/indexes/continues + reason)
+  links?: NoteLink[];  // all relationships (supports/contradicts/refines/related/continues + reason)
   created_at: ISODate;
   updated_at: ISODate;
 }
@@ -89,10 +92,39 @@ export interface Task {
 }
 
 // ============================================================
+// Whiteboard — research workspace
+//
+// A place where notes/sources/tasks are pulled together to think about
+// a topic. Independent from the graph: members are referenced by ID,
+// NOT via NoteLink edges. Layout (x,y) is first-class to the whiteboard,
+// not a separate view concern.
+//
+// Data lives in .lens/whiteboards/wb_<ULID>.json — not in markdown, since
+// a whiteboard is mostly structured data (members, positions) with a small
+// prose body.
+// ============================================================
+
+export interface WhiteboardMember {
+  id: string;              // note / source / task ID
+  x: number;               // position on the canvas (logical, pre-transform)
+  y: number;
+}
+
+export interface Whiteboard {
+  id: string;
+  type: "whiteboard";
+  title: string;
+  body?: string;           // optional research log / framing / hypotheses
+  members: WhiteboardMember[];
+  created_at: ISODate;
+  updated_at: ISODate;
+}
+
+// ============================================================
 // Union type
 // ============================================================
 
-export type LensObject = Source | Note | Task;
+export type LensObject = Source | Note | Task | Whiteboard;
 
 // ============================================================
 // ID generation
@@ -102,6 +134,7 @@ const prefixes: Record<ObjectType, string> = {
   source: "src",
   note: "note",
   task: "task",
+  whiteboard: "wb",
 };
 
 export function generateId(type: ObjectType): string {

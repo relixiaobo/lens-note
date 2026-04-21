@@ -84,6 +84,10 @@ function gitCommit(filePath: string, obj: LensObject): void {
 }
 
 export function readObject(id: string): { data: Record<string, any>; content: string } | null {
+  // Whiteboards live in their own JSON storage (see core/whiteboard-storage.ts),
+  // and are not graph objects — readObject is only for markdown-backed types.
+  if (id.startsWith("wb_")) return null;
+
   const filePath = objectPath(id);
   if (!existsSync(filePath)) return null;
 
@@ -97,13 +101,15 @@ export function listObjects(type: ObjectType): string[] {
     source: paths.sources,
     note: paths.notes,
     task: paths.tasks,
+    whiteboard: paths.whiteboards,
   };
+  const ext = type === "whiteboard" ? ".json" : ".md";
   const dir = dirMap[type];
   if (!existsSync(dir)) return [];
 
   return readdirSync(dir)
-    .filter((f) => f.endsWith(".md"))
-    .map((f) => f.replace(".md", ""));
+    .filter((f) => f.endsWith(ext))
+    .map((f) => f.replace(ext, ""));
 }
 
 // ============================================================
@@ -455,13 +461,19 @@ export function getForwardLinks(id: string): { to_id: string; rel: string }[] {
   return db.prepare("SELECT to_id, rel FROM links WHERE from_id = ? ORDER BY rel").all(id) as any[];
 }
 
+/** One-line preview from a markdown body: trimmed, whitespace-collapsed, length-capped. */
+export function previewOf(content: string | null | undefined, maxLen = 120): string {
+  if (!content) return "";
+  return content.trim().replace(/\s+/g, " ").slice(0, maxLen);
+}
+
 export function getOrphanNotes(limit?: number, offset?: number): { id: string; title: string; preview: string }[] {
   const db = getDb();
   const rows = db.prepare(`
     SELECT o.id, o.data, o.body FROM objects o
     WHERE o.type = 'note'
-      AND o.id NOT IN (SELECT from_id FROM links WHERE rel IN ('supports','contradicts','refines','related','indexes') AND to_id LIKE 'note_%')
-      AND o.id NOT IN (SELECT to_id FROM links WHERE rel IN ('supports','contradicts','refines','related','indexes') AND from_id LIKE 'note_%')
+      AND o.id NOT IN (SELECT from_id FROM links WHERE rel IN ('supports','contradicts','refines','related','continues') AND to_id LIKE 'note_%')
+      AND o.id NOT IN (SELECT to_id FROM links WHERE rel IN ('supports','contradicts','refines','related','continues') AND from_id LIKE 'note_%')
     ORDER BY o.updated_at DESC
     LIMIT ? OFFSET ?
   `).all(limit ?? -1, offset ?? 0) as any[];
@@ -519,7 +531,7 @@ export function resolveIdOrTitle(rawInput: string): { id: string } | { error: st
     return { error: `Multiple objects match title "${input}".`, candidates: titleMatches.map(t => ({ id: t.id, title: t.title })) };
   }
 
-  // 2.5 Prefix match — "苦涩的教训" matches "苦涩的教训（Bitter Lesson）：计算力是..."
+  // 2.5 Prefix match — e.g. "Bitter Lesson" matches "Bitter Lesson: Compute scales better than..."
   const inputLower = input.toLowerCase();
   const db = getDb();
   const prefixRows = db.prepare(

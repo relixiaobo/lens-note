@@ -62,8 +62,6 @@ export async function runMap(input: string | undefined, opts: CommandOptions) {
   const tensions: Entry[] = [];     // contradicts (deduplicated)
   const continuations: Entry[] = []; // continues (either direction)
   const related: Entry[] = [];      // related (deduplicated)
-  const indexes: Entry[] = [];      // forward indexes (children this organizes)
-  const indexed_by: Entry[] = [];   // backward indexes (parents that organize this)
 
   // Forward links (what this note links TO)
   for (const l of rawForward) {
@@ -74,7 +72,6 @@ export async function runMap(input: string | undefined, opts: CommandOptions) {
       case "supports": evidence.push(entry); break;
       case "contradicts": tensions.push(entry); break;
       case "continues": continuations.push(entry); break;
-      case "indexes": indexes.push(entry); break;
       case "related": related.push(entry); break;
     }
   }
@@ -93,7 +90,6 @@ export async function runMap(input: string | undefined, opts: CommandOptions) {
         if (!tensions.some(t => t.id === entry.id)) tensions.push(entry);
         break;
       case "continues": continuations.push(entry); break;
-      case "indexes": indexed_by.push(entry); break;
       case "related":
         if (!related.some(r => r.id === entry.id)) related.push(entry);
         break;
@@ -116,8 +112,6 @@ export async function runMap(input: string | undefined, opts: CommandOptions) {
     if (evidence.length) output.evidence = evidence;
     if (tensions.length) output.tensions = tensions;
     if (continuations.length) output.continuations = continuations;
-    if (indexes.length) output.indexes = indexes;
-    if (indexed_by.length) output.indexed_by = indexed_by;
     if (related.length) output.related = related;
     respondSuccess(output);
   } else {
@@ -136,8 +130,6 @@ export async function runMap(input: string | undefined, opts: CommandOptions) {
     printGroup("Evidence", evidence);
     printGroup("Tensions", tensions);
     printGroup("Continuations", continuations);
-    printGroup("Indexes", indexes);
-    printGroup("Indexed by", indexed_by);
     printGroup("Related", related);
   }
 }

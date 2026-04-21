@@ -60,7 +60,8 @@ lens — Knowledge graph CLI. 3 types, typed links, full-text search.
 Data model:
   Types:    note (one idea), source (provenance), task (action item)
   IDs:      note_<ULID>, src_<ULID>, task_<ULID>   (26 uppercase chars)
-  Links:    supports, contradicts, refines, related, indexes, continues
+  Links:    supports, contradicts, refines, related, continues
+  Workspace: whiteboard (wb_<ULID>) — spatial aggregation, independent from graph
   Storage:  ~/.lens/  (markdown files + SQLite cache + git history)
 
 Agent mode (recommended for programmatic use):
@@ -106,6 +107,7 @@ Shell mode:
     discover <id> --duplicates --json    Near-duplicates (+ --threshold 0.0-1.0)
     discover --all --duplicates --json   Scan all notes, group duplicates
     digest [week|month|year] --json      Recent insights (+ --days N)
+    digest week --html                   Static HTML snapshot at ~/.lens/digest-<period>-<date>.html
     lint --json                          Graph quality checks (12 checks) with offender IDs + auditable flag
     lint --audit <check> --json          Full offender export with context (all 12 checks auditable)
     lint --audit <check> --target <id>   Scope edge-shaped audits to one target (per-thesis audit)
@@ -124,6 +126,18 @@ Shell mode:
     feed list --json                 List subscriptions
     feed check [--dry-run] --json    Check for new articles
     feed remove <id|url> --json      Unsubscribe
+
+  Board (whiteboards):
+    board create --title "<t>" [--body <b>]  Create a new whiteboard
+    board list --json                Show all whiteboards
+    board show <wb-id> --json        Show one whiteboard (with members)
+    board add <wb-id> <card-id>...   Add card(s) to a whiteboard
+    board remove <wb-id> <card-id>   Remove a card from a whiteboard
+    board layout <wb-id> --positions '{"note_X":{"x":0,"y":0}}'
+                                     Update card positions
+    board update <wb-id> [--title X] [--body Y]  Update metadata
+    board delete <wb-id>             Delete a whiteboard
+    board find <card-id> --json      Which whiteboards contain this card?
 
   Index:
     index --json                     List all keyword entry points
@@ -158,7 +172,7 @@ Envelope (stable, schema_version: 1):
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.31.0");
+  console.log("lens v1.32.0");
   process.exit(0);
 }
 

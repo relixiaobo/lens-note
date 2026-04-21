@@ -13,6 +13,7 @@ export const paths = {
   notes: join(LENS_HOME, "notes"),
   sources: join(LENS_HOME, "sources"),
   tasks: join(LENS_HOME, "tasks"),
+  whiteboards: join(LENS_HOME, "whiteboards"),
   raw: join(LENS_HOME, "raw"),
   db: join(LENS_HOME, "index.sqlite"),
   config: join(LENS_HOME, "config.yaml"),
@@ -21,12 +22,21 @@ export const paths = {
 } as const;
 
 /** Strict ID format: prefix_ULID */
-const VALID_ID_PATTERN = /^(src|note|task)_[A-Z0-9]{26}$/;
+const VALID_ID_PATTERN = /^(src|note|task|wb)_[A-Z0-9]{26}$/;
 
 const dirMap: Record<string, string> = {
   src: paths.sources,
   note: paths.notes,
   task: paths.tasks,
+  wb: paths.whiteboards,
+};
+
+/** File extension per prefix. Whiteboards store as JSON; everything else is markdown. */
+const extMap: Record<string, string> = {
+  src: ".md",
+  note: ".md",
+  task: ".md",
+  wb: ".json",
 };
 
 /** Get the file path for a lens object by its ID. Validates against path traversal. */
@@ -38,8 +48,9 @@ export function objectPath(id: string): string {
   const prefix = id.split("_")[0];
   const dir = dirMap[prefix];
   if (!dir) throw new Error(`Unknown ID prefix: ${prefix} (from ${id})`);
+  const ext = extMap[prefix];
 
-  const filePath = join(dir, `${id}.md`);
+  const filePath = join(dir, `${id}${ext}`);
   const resolved = resolve(filePath);
   if (!resolved.startsWith(resolve(dir))) {
     throw new Error(`Path traversal detected: ${id}`);
@@ -53,5 +64,6 @@ export const objectDirs = [
   paths.notes,
   paths.sources,
   paths.tasks,
+  paths.whiteboards,
   paths.raw,
 ] as const;
