@@ -890,225 +890,129 @@ a:hover { text-decoration: underline; }
   z-index: 10;
 }
 
-.wb-root {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  cursor: grab;
-  user-select: none;
-}
-.wb-root.panning { cursor: grabbing; }
+/* React Flow owns all per-card / per-edge styling. Only the canvas host and
+ * the floating toolbar live in this file. */
 
-.wb-world {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 0;
-  height: 0;
-  transform-origin: 0 0;
-  will-change: transform;
+/* Whiteboard controls come from React Flow's <Controls>; no lens-owned
+ * toolbar. See whiteboard-rf.tsx for the auto-layout <ControlButton>. */
+
+/* LensCard — custom React Flow node showing title + truncated markdown body.
+ * Dimensions are fixed (matched to CARD_W / CARD_H in whiteboard-rf.tsx)
+ * because dagre relies on known sizes to avoid layout overlaps. */
+.react-flow__node-lensCard {
+  /* Let the LensCard itself own all visuals — RF's default node shell would
+   * add a duplicate border/background on top. */
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+  font-family: inherit;
+  color: inherit;
+  width: auto;
+  height: auto;
 }
 
-.wb-edges {
-  position: absolute;
-  overflow: visible;
-  pointer-events: none;
-}
-.wb-edges .wb-edge {
-  opacity: 0.7;
-  transition: stroke-width 0.14s ease, opacity 0.14s ease;
-}
-.wb-edges .wb-edge.dim { opacity: 0.12; }
-.wb-edges .wb-edge.highlight-card,
-.wb-edges .wb-edge.highlight-edge { opacity: 1; }
-.wb-edges .wb-edge.dim.highlight-edge { opacity: 1; }
-
-.wb-pair-indicator { transition: transform 0.12s ease; }
-.wb-pair-indicator:hover { filter: brightness(1.25); }
-.wb-pair-indicator rect { transition: stroke 0.12s, fill-opacity 0.12s; }
-.wb-pair-indicator:hover rect { stroke: var(--accent); }
-
-.wb-card {
-  position: absolute;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
-  cursor: grab;
+.lens-card {
   display: flex;
   flex-direction: row;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: pointer;
 }
-.wb-card:hover {
+.lens-card:hover {
   border-color: var(--accent);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
 }
-.wb-card.dragging { cursor: grabbing; z-index: 10; transition: none; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7); }
-.wb-card.focused {
+.lens-card.selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent), 0 4px 14px rgba(0, 0, 0, 0.55);
-  z-index: 5;
-}
-.wb-card.hover-incident {
-  border-color: var(--text);
-  z-index: 4;
 }
 
-.wb-card-accent {
+.lens-card-accent {
   width: 4px;
   flex-shrink: 0;
 }
-.wb-card-inner {
+
+.lens-card-inner {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: 12px 14px 14px;
-  max-height: 320px;
-  overflow: hidden;
   position: relative;
-  mask-image: linear-gradient(to bottom, black calc(100% - 40px), transparent);
-  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 40px), transparent);
-}
-.wb-card-inner.no-fade { mask-image: none; -webkit-mask-image: none; }
-
-.wb-card.is-anchor {
-  background: #1a1726;
-  border-color: rgba(163, 113, 247, 0.45);
-}
-.wb-card.is-anchor .wb-card-inner { max-height: 420px; }
-
-.wb-card.is-ghost {
-  background: rgba(22, 27, 34, 0.75);
-  border-style: dashed;
-  border-color: rgba(139, 148, 158, 0.4);
-  opacity: 0.7;
-  box-shadow: none;
-}
-.wb-card.is-ghost:hover {
-  opacity: 1;
-  border-style: solid;
-  border-color: var(--accent);
-}
-.wb-card.is-ghost .wb-card-inner {
-  padding: 8px 10px 9px;
-  max-height: none;
-}
-.wb-card.is-ghost .wb-card-title {
-  font-size: 12.5px;
-  font-weight: 500;
-  margin-bottom: 2px;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-.wb-ghost-hint {
-  font-size: 10px;
-  color: var(--text-faint);
-  font-style: italic;
-  letter-spacing: 0.03em;
+/* Fade the last few lines, but ONLY when content actually overflows. The
+ * .truncated class is toggled by the React component after measuring
+ * scrollHeight vs clientHeight, so short cards stay clean. */
+.lens-card-inner.truncated::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 36px;
+  background: linear-gradient(to bottom, transparent, var(--bg-panel));
+  pointer-events: none;
 }
 
-.wb-card-title {
-  font-size: 14px;
+.lens-card-title {
+  font-size: 13.5px;
   font-weight: 600;
   color: var(--text);
   line-height: 1.35;
   margin-bottom: 4px;
   word-break: break-word;
 }
-.wb-card.is-anchor .wb-card-title { font-size: 16px; color: var(--rel-indexes); }
-
-.wb-card-meta {
+.lens-card-meta {
   font-size: 10.5px;
   color: var(--text-faint);
   text-transform: lowercase;
   letter-spacing: 0.04em;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
-
-.wb-card-body {
-  font-size: 12.5px;
+.lens-card-body {
+  font-size: 12px;
   color: var(--text-dim);
-  line-height: 1.5;
+  line-height: 1.45;
 }
-.wb-card-body > :first-child { margin-top: 0; }
-.wb-card-body > :last-child { margin-bottom: 0; }
-.wb-card-body h1, .wb-card-body h2, .wb-card-body h3, .wb-card-body h4 {
-  font-size: 12.5px;
+.lens-card-body > :first-child { margin-top: 0; }
+.lens-card-body > :last-child { margin-bottom: 0; }
+.lens-card-body h1, .lens-card-body h2, .lens-card-body h3, .lens-card-body h4 {
+  font-size: 12px;
   color: var(--text);
-  margin: 0.9em 0 0.4em;
+  margin: 0.8em 0 0.3em;
   font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
 }
-.wb-card-body h1 { font-size: 13.5px; }
-.wb-card-body p { margin: 0 0 0.7em; }
-.wb-card-body p:last-child { margin-bottom: 0; }
-.wb-card-body ul, .wb-card-body ol { padding-left: 1.3em; margin: 0 0 0.7em; }
-.wb-card-body li { margin: 0.2em 0; }
-.wb-card-body code {
+.lens-card-body p { margin: 0 0 0.5em; }
+.lens-card-body p:last-child { margin-bottom: 0; }
+.lens-card-body ul, .lens-card-body ol { padding-left: 1.2em; margin: 0 0 0.5em; }
+.lens-card-body li { margin: 0.15em 0; }
+.lens-card-body code {
   background: var(--bg);
-  padding: 0 4px;
+  padding: 0 3px;
   border-radius: 3px;
   font-family: "SF Mono", Menlo, monospace;
   font-size: 0.9em;
 }
-.wb-card-body pre {
+.lens-card-body pre {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 8px 10px;
-  font-size: 11px;
-  overflow-x: auto;
-  margin: 0.6em 0;
+  padding: 6px 8px;
+  font-size: 10.5px;
+  overflow: hidden;
+  margin: 0.5em 0;
 }
-.wb-card-body pre code { background: none; padding: 0; }
-.wb-card-body blockquote {
-  margin: 0.6em 0;
-  padding: 2px 0 2px 10px;
+.lens-card-body blockquote {
+  margin: 0.5em 0;
+  padding: 0 0 0 8px;
   border-left: 2px solid var(--border);
   color: var(--text-faint);
-}
-.wb-card-body a.inline-ref {
-  color: var(--accent);
-  background: rgba(88, 166, 255, 0.1);
-  padding: 0 3px;
-  border-radius: 2px;
-  text-decoration: none;
-  cursor: pointer;
-}
-.wb-card-body a.inline-ref:hover { background: rgba(88, 166, 255, 0.22); }
-
-
-/* Whiteboard toolbar (bottom-right) */
-.wb-toolbar {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  z-index: 5;
-  display: flex;
-  gap: 2px;
-  padding: 4px;
-  background: rgba(22, 27, 34, 0.9);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  backdrop-filter: blur(6px);
-}
-.wb-toolbar button {
-  background: transparent;
-  border: none;
-  color: var(--text-dim);
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 0;
-}
-.wb-toolbar button:hover {
-  background: var(--bg);
-  color: var(--text);
 }
 
 /* Edge tooltip — floats above everything on hover */

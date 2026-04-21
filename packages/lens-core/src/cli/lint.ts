@@ -482,6 +482,38 @@ export async function runLint(args: string[], opts: CommandOptions) {
     ...(keywordCoverageOffenders.length > 0 ? { offenders: keywordCoverageOffenders } : {}),
   });
 
+  // ── Whiteboard dangling members ───────────────────────────
+  // A whiteboard member ID that no longer resolves to any note/source/task.
+  // Usually happens when a referenced card was deleted from the graph. The
+  // renderer silently filters these out, but surfacing them here lets the
+  // user decide whether to re-add the card or remove the stale reference.
+  const { listWhiteboards, findDanglingMembers } = await import("../core/whiteboard-storage");
+  const liveIds = new Set(
+    (db.prepare(`SELECT id FROM objects`).all() as { id: string }[]).map(r => r.id),
+  );
+  const danglingOffenders: LintOffender[] = [];
+  let danglingTotal = 0;
+  for (const wb of listWhiteboards()) {
+    const dangling = findDanglingMembers(wb, liveIds);
+    if (dangling.length === 0) continue;
+    danglingTotal += dangling.length;
+    danglingOffenders.push({
+      id: wb.id,
+      title: wb.title,
+      detail: `${dangling.length} dangling member(s): ${dangling.slice(0, 3).join(", ")}${dangling.length > 3 ? ` …+${dangling.length - 3}` : ""}`,
+    });
+  }
+  checks.push({
+    name: "whiteboard_dangling_member",
+    status: danglingTotal > 0 ? "warn" : "ok",
+    value: danglingTotal,
+    threshold: 0,
+    message: danglingTotal > 0
+      ? `${danglingTotal} dangling member(s) across ${danglingOffenders.length} whiteboard(s). Remove with \`lens board remove <wb-id> <card-id>\` or re-create the missing card.`
+      : "All whiteboard members resolve to existing objects.",
+    ...(danglingOffenders.length > 0 ? { offenders: danglingOffenders } : {}),
+  });
+
   // Annotate checks with auditable flag so agents know which support --audit
   for (const check of checks) {
     check.auditable = VALID_AUDIT_CHECKS.has(check.name);

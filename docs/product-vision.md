@@ -141,9 +141,20 @@ An agent reads the skill file → knows how to use lens. No integration code nee
 | related | Loose association (with optional reason) |
 | continues | Next step in target's line of thought (Folgezettel chain) |
 
-Topic organization (what other systems call MOC / structure note / hub note) lives on **whiteboards** (`lens board`) — independent workspaces that aggregate cards by ID, not through typed graph links.
+### Whiteboard: the Primary Workspace
 
-No folders, no tags, no categories. Structure emerges from links and whiteboards.
+Whiteboards (`wb_<ULID>`) are where users actually work. The graph view is for navigation and audit; the whiteboard is where cards get arranged, grouped, connected with board-local arrows, and annotated with sticky notes.
+
+**Two-layer model** — the whiteboard layer is independent from the graph:
+- Graph rels (`note.links[]`) are universal, cross-board, committed knowledge
+- Whiteboard arrows are local, contextual, free-text-labeled drafts
+- Promotion from whiteboard arrow → graph rel is explicit, never automatic
+
+Topic organization (what other systems call MOC / structure note / hub note) lives on whiteboards, not through typed graph links.
+
+No folders, no tags, no categories. Structure emerges from links (graph layer) and whiteboards (workspace layer).
+
+See `docs/whiteboard-model.md` for the full data model and CLI family.
 
 ### File-as-Truth
 

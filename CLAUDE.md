@@ -4,9 +4,29 @@
 
 **lens** is a knowledge graph CLI for humans and agents. Like Git for knowledge — stores, queries, and links. No API keys, no LLM dependencies.
 
-**Status**: v1.32.0. **Methodology**: Collision Method — Spark → Collide → Crystallize.
+**Status**: v1.33.0. **Methodology**: Collision Method — Spark → Collide → Crystallize.
 
-**Key docs**: `docs/product-vision.md`, `docs/product-evolution.md`, `docs/task-design.md`, `docs/tool-redesign-v2.md`.
+**Primary workspace**: the whiteboard. The graph view is for navigation and audit; the whiteboard is where users actually arrange, connect, and annotate thinking. See `docs/whiteboard-model.md`.
+
+**Key docs**: `docs/product-vision.md`, `docs/product-evolution.md`, `docs/task-design.md`, `docs/tool-redesign-v2.md`, `docs/whiteboard-model.md`.
+
+## Two-Layer Invariant
+
+**Graph layer** (`note.links[]`) and **whiteboard layer** (`wb_*.json`) are independent. Never cross-populate:
+- A whiteboard arrow is NOT a typed graph rel. It has a free-text label.
+- A graph rel does NOT auto-render as a whiteboard arrow.
+- Promotion is an explicit act (`lens whiteboard arrow-promote`).
+
+This rule has bitten us before — see `docs/whiteboard-model.md` "Two-Layer Invariant" for the reasoning.
+
+## Schema Posture
+
+lens currently has a single real user. **Do not write backward-compat shims for data-model changes.** Prefer:
+- Required fields over optional ones where the absence has no meaning
+- Breaking changes + one-off in-place migration over permanent dual-reading
+- Renaming / restructuring freely when the new shape is clearly better
+
+Reserve compat work for when lens has multiple production users. Until then, schema clarity beats transition ergonomics.
 
 ## Ecosystem
 
@@ -54,18 +74,28 @@ cd packages/lens-core && npx tsup && npm publish --access public  # Publish
 ### When modifying the data model (`types.ts`)
 
 ```bash
-grep -rn 'ObjectType\|NoteLink\|LinkRel\|TaskStatus\|SourceType\|LensObject' \
+grep -rn 'ObjectType\|NoteLink\|LinkRel\|TaskStatus\|SourceType\|LensObject\|Whiteboard' \
   packages/lens-core/src/ --include='*.ts' | grep -v node_modules
 ```
 
 Downstream references (this repo):
 - `README.md` — Commands, Data Model, Write API, JSON Output, Agent Mode
 - `docs/product-vision.md` — Data Model table
+- `docs/whiteboard-model.md` — if Whiteboard / WhiteboardMember / related types change
 
 Downstream references (other repos):
 - `../lens-note-plugin/plugin/skills/lens/SKILL.md` — Commands, Write API Reference
 - `../lens-note-plugin/plugin/skills/lens/references/` — note-fields.md, tasks.md, compilation.md, curation.md
 - `../lens-clipper/CLAUDE.md` — Data model for annotations
+
+### When modifying whiteboard state
+
+`packages/lens-core/src/core/whiteboard-storage.ts` owns all whiteboard-local state (members, groups, arrows, camera). Changes here must:
+
+1. Preserve the two-layer invariant — no whiteboard operation should mutate `note.links[]` implicitly.
+2. Mirror into `cli/whiteboard.ts` command handlers.
+3. Update `docs/whiteboard-model.md` if the data shape changes.
+4. Keep the view-ui renderer reading the same shape (`cli/view.ts` builds the payload).
 
 ### When modifying commands or flags
 

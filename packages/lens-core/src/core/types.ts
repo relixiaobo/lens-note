@@ -92,30 +92,74 @@ export interface Task {
 }
 
 // ============================================================
-// Whiteboard — research workspace
+// Whiteboard — primary workspace
 //
-// A place where notes/sources/tasks are pulled together to think about
-// a topic. Independent from the graph: members are referenced by ID,
-// NOT via NoteLink edges. Layout (x,y) is first-class to the whiteboard,
-// not a separate view concern.
+// Where a user arranges, connects, and annotates cards while thinking.
+// The graph layer (note.links[]) captures committed universal knowledge;
+// the whiteboard layer (this file) captures local, contextual, draft state:
+// positions, groupings, sticky annotations, and board-local arrows.
 //
-// Data lives in .lens/whiteboards/wb_<ULID>.json — not in markdown, since
-// a whiteboard is mostly structured data (members, positions) with a small
-// prose body.
+// The two layers are independent — a whiteboard arrow is NOT a typed graph
+// rel; a graph rel does NOT auto-render as a whiteboard arrow. Promotion
+// from arrow → rel is an explicit operation. See docs/whiteboard-model.md.
+//
+// Data lives in .lens/whiteboards/wb_<ULID>.json — structured data, small
+// optional prose body.
 // ============================================================
 
 export interface WhiteboardMember {
   id: string;              // note / source / task ID
-  x: number;               // position on the canvas (logical, pre-transform)
+  x: number;
   y: number;
+  parent?: string;         // group ID if nested inside one
+}
+
+export interface WhiteboardGroup {
+  id: string;              // grp_<ULID>
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;
+}
+
+/**
+ * Board-local arrow between two members. Endpoints must be existing member
+ * IDs — never groups (ambiguous) and never note-to-note graph rels. The
+ * label is free text; it is NOT a LinkRel. An arrow becomes a graph rel
+ * only via explicit arrow-promote, which records the promotion here for
+ * rendering purposes.
+ */
+export interface WhiteboardArrow {
+  id: string;              // arr_<ULID>
+  from: string;            // member ID
+  to: string;              // member ID
+  label?: string;
+  color?: string;
+  style?: "solid" | "dashed";
+  promoted_to?: {
+    rel: LinkRel;
+    from_note: string;
+    to_note: string;
+  };
+}
+
+export interface WhiteboardCamera {
+  x: number;
+  y: number;
+  scale: number;
 }
 
 export interface Whiteboard {
   id: string;
   type: "whiteboard";
   title: string;
-  body?: string;           // optional research log / framing / hypotheses
+  body?: string;
   members: WhiteboardMember[];
+  groups: WhiteboardGroup[];
+  arrows: WhiteboardArrow[];
+  camera: WhiteboardCamera;
   created_at: ISODate;
   updated_at: ISODate;
 }
@@ -128,6 +172,11 @@ export type LensObject = Source | Note | Task | Whiteboard;
 
 // ============================================================
 // ID generation
+//
+// Top-level objects use ObjectType prefixes. Whiteboard-local children
+// (groups, annotations, arrows) use their own prefixes — they are never
+// indexed into the graph, never queried by `lens show`, and live only
+// inside a single wb_*.json file.
 // ============================================================
 
 const prefixes: Record<ObjectType, string> = {
@@ -140,3 +189,16 @@ const prefixes: Record<ObjectType, string> = {
 export function generateId(type: ObjectType): string {
   return `${prefixes[type]}_${ulid()}`;
 }
+
+export type WhiteboardChildKind = "group" | "arrow";
+
+const childPrefixes: Record<WhiteboardChildKind, string> = {
+  group: "grp",
+  arrow: "arr",
+};
+
+export function generateChildId(kind: WhiteboardChildKind): string {
+  return `${childPrefixes[kind]}_${ulid()}`;
+}
+
+export const DEFAULT_CAMERA: WhiteboardCamera = { x: 0, y: 0, scale: 1 };

@@ -22,17 +22,20 @@ import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 import { paths, LENS_HOME } from "../core/paths";
 import { getDb, ensureInitialized, readObject, getBacklinks, getForwardLinks, resolveIdOrTitle, getLinkNeighborhood, extractBodyRefs, findSimilarExcluding, searchIndex, previewOf } from "../core/storage";
-import { writeNote, writeLink, writeUnlink } from "./write";
 import {
   readWhiteboard,
   listWhiteboards,
   createWhiteboard,
   addMembers,
   removeMember,
-  updatePositions,
+  updateMembers,
   updateWhiteboardMeta,
   deleteWhiteboard,
+  setCamera,
+  addArrow,
+  removeArrow,
 } from "../core/whiteboard-storage";
+import { promoteArrow } from "./arrow-promote";
 import type { CommandOptions } from "./commands";
 import { LensError, respondSuccess } from "./response";
 
@@ -54,11 +57,6 @@ function uiDir(): string {
 
 function layoutFile(): string {
   return join(LENS_HOME, "view-layout.json");
-}
-
-function whiteboardLayoutFile(id: string): string {
-  const safe = id.replace(/[^A-Za-z0-9_-]/g, "_");
-  return join(LENS_HOME, `whiteboard-${safe}.json`);
 }
 
 function sendJson(res: ServerResponse, payload: unknown, status = 200) {
@@ -288,31 +286,40 @@ function titleOf(id: string): string {
  * Build a whiteboard payload for wb_<ULID>.
  *
  * Whiteboards are independent entities (JSON files in .lens/whiteboards/),
- * distinct from the graph. Members are notes/sources/tasks placed on the board
- * by the user; positions come from the whiteboard entity itself. Edges are
- * derived from the graph (for the `show-links` toggle) but carry no authority —
- * whiteboard membership is purely workspace-local.
+ * distinct from the graph. Only whiteboard members render as cards — we
+ * deliberately do NOT pull in 1-hop graph neighbors. Whiteboards are a
+ * spatial aggregation surface, not a graph view. Edges between members are
+ * included so the UI can optionally display them.
  */
 interface WhiteboardNode extends GraphNode {
   body: string;
   x: number;
   y: number;
-  is_ghost?: boolean;
+  parent?: string;
 }
 
-function buildWhiteboard(wbId: string, promoted: string[] = []): {
+/** Board-local arrow shape exposed to the UI. Distinct from graph edges. */
+interface WhiteboardArrowPayload {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+  color?: string;
+  style?: "solid" | "dashed";
+  promoted?: { rel: string; from_note: string; to_note: string };
+}
+
+function buildWhiteboard(wbId: string, _promoted: string[] = []): {
   whiteboard: { id: string; title: string; body?: string; updated_at: string };
   nodes: WhiteboardNode[];
   edges: GraphEdge[];
+  arrows: WhiteboardArrowPayload[];
 } | null {
   const wb = readWhiteboard(wbId);
   if (!wb) return null;
 
-  const posById = new Map<string, { x: number; y: number }>();
-  for (const m of wb.members) posById.set(m.id, { x: m.x, y: m.y });
-
-  const memberIds = new Set<string>([...wb.members.map(m => m.id), ...promoted]);
-  if (memberIds.size === 0) {
+  const memberIds = wb.members.map(m => m.id);
+  if (memberIds.length === 0) {
     return {
       whiteboard: {
         id: wb.id,
@@ -322,62 +329,56 @@ function buildWhiteboard(wbId: string, promoted: string[] = []): {
       },
       nodes: [],
       edges: [],
+      arrows: [],
     };
   }
 
   const db = getDb();
-  const memberPlaceholders = [...memberIds].map(() => "?").join(",");
+  const placeholders = memberIds.map(() => "?").join(",");
+  const rows = db.prepare(
+    `SELECT id, type, data, body FROM objects WHERE id IN (${placeholders})`,
+  ).all(...memberIds) as { id: string; type: string; data: string; body: string }[];
 
-  // Edges involving any member (member↔member or member↔ghost)
-  const edgeRows = db.prepare(
-    `SELECT from_id, to_id, rel FROM links
-     WHERE from_id IN (${memberPlaceholders}) OR to_id IN (${memberPlaceholders})`,
-  ).all(...memberIds, ...memberIds) as { from_id: string; to_id: string; rel: string }[];
+  const rowById = new Map<string, typeof rows[number]>();
+  for (const r of rows) rowById.set(r.id, r);
 
-  const ghostIds = new Set<string>();
-  for (const e of edgeRows) {
-    if (!memberIds.has(e.from_id)) ghostIds.add(e.from_id);
-    if (!memberIds.has(e.to_id)) ghostIds.add(e.to_id);
-  }
-
-  const allIds = new Set<string>([...memberIds, ...ghostIds]);
-  const allPlaceholders = [...allIds].map(() => "?").join(",");
-  const rows = allIds.size > 0 ? db.prepare(
-    `SELECT id, type, data, body FROM objects WHERE id IN (${allPlaceholders})`,
-  ).all(...allIds) as { id: string; type: string; data: string; body: string }[] : [];
-
-  const inbound = new Map<string, number>();
-  for (const r of db.prepare("SELECT to_id, COUNT(*) AS c FROM links GROUP BY to_id").all() as { to_id: string; c: number }[]) {
-    inbound.set(r.to_id, r.c);
-  }
-
-  const nodes: WhiteboardNode[] = rows.map(r => {
+  // Preserve whiteboard member order so the UI's grid layout is stable.
+  const nodes: WhiteboardNode[] = [];
+  for (const m of wb.members) {
+    const r = rowById.get(m.id);
+    if (!r) continue; // dangling member (referenced object was deleted) — skip
     const data = JSON.parse(r.data);
     const body = (r.body || "").trim();
-    const isGhost = !memberIds.has(r.id);
-    const pos = posById.get(r.id) || { x: 0, y: 0 };
     const node: WhiteboardNode = {
       id: r.id,
       type: r.type as GraphNode["type"],
       title: data.title || "(untitled)",
-      degree: inbound.get(r.id) ?? 0,
+      degree: 0,
       body,
-      x: pos.x,
-      y: pos.y,
+      x: m.x,
+      y: m.y,
     };
     if (body) node.preview = body.slice(0, 140);
     if (data.status) node.status = data.status;
     if (data.source_type) node.source_type = data.source_type;
-    if (isGhost) node.is_ghost = true;
-    return node;
-  });
+    if (m.parent) node.parent = m.parent;
+    nodes.push(node);
+  }
+
+  // Edges strictly between members (no ghosts) — so the UI can optionally
+  // render member-to-member relationships without pulling in graph neighbors.
+  const memberSet = new Set(memberIds);
+  const edgeRows = db.prepare(
+    `SELECT from_id, to_id, rel FROM links
+     WHERE from_id IN (${placeholders}) AND to_id IN (${placeholders})`,
+  ).all(...memberIds, ...memberIds) as { from_id: string; to_id: string; rel: string }[];
 
   const reasonByKey = new Map<string, string>();
   for (const r of rows) {
     const data = JSON.parse(r.data);
     if (!Array.isArray(data.links)) continue;
     for (const l of data.links) {
-      if (l.reason) reasonByKey.set(`${r.id}→${l.to}:${l.rel}`, l.reason);
+      if (l.reason && memberSet.has(l.to)) reasonByKey.set(`${r.id}→${l.to}:${l.rel}`, l.reason);
     }
   }
   const edges: GraphEdge[] = edgeRows.map(e => {
@@ -386,6 +387,20 @@ function buildWhiteboard(wbId: string, promoted: string[] = []): {
     if (reason) edge.reason = reason;
     return edge;
   });
+
+  // Board-local arrows: only include those whose endpoints are still members
+  // (addArrow validates this but the UI should still be defensive).
+  const arrows: WhiteboardArrowPayload[] = wb.arrows
+    .filter(a => memberSet.has(a.from) && memberSet.has(a.to))
+    .map(a => ({
+      id: a.id,
+      from: a.from,
+      to: a.to,
+      ...(a.label ? { label: a.label } : {}),
+      ...(a.color ? { color: a.color } : {}),
+      ...(a.style ? { style: a.style } : {}),
+      ...(a.promoted_to ? { promoted: a.promoted_to } : {}),
+    }));
 
   return {
     whiteboard: {
@@ -396,32 +411,8 @@ function buildWhiteboard(wbId: string, promoted: string[] = []): {
     },
     nodes,
     edges,
+    arrows,
   };
-}
-
-interface WhiteboardLayout {
-  nodes: Record<string, { x: number; y: number }>;
-  camera?: { x: number; y: number; scale: number };
-  expanded?: string[]; // ghost notes the user has promoted to full members
-}
-
-async function loadWhiteboardLayout(id: string): Promise<WhiteboardLayout> {
-  const f = whiteboardLayoutFile(id);
-  if (!existsSync(f)) return { nodes: {} };
-  try {
-    const raw = JSON.parse(await readFile(f, "utf-8"));
-    // Accept either new shape or legacy plain {id: pos} shape
-    if (raw && typeof raw === "object") {
-      if (raw.nodes && typeof raw.nodes === "object") return raw as WhiteboardLayout;
-      // Legacy: flat positions map
-      return { nodes: raw as Record<string, { x: number; y: number }> };
-    }
-  } catch { /* fall through */ }
-  return { nodes: {} };
-}
-
-async function saveWhiteboardLayout(id: string, layout: WhiteboardLayout): Promise<void> {
-  await writeFile(whiteboardLayoutFile(id), JSON.stringify(layout), "utf-8");
 }
 
 /**
@@ -940,46 +931,138 @@ export async function runView(args: string[], opts: CommandOptions) {
         const offset = Math.max(0, parseInt(url.searchParams.get("offset") || "0", 10) || 0);
         return sendJson(res, { ok: true, data: buildLibrary(q, filter, limit, offset) });
       }
-      // GET /api/whiteboard-layout?id=wb_... — returns positions from whiteboard + camera/expanded sidecar.
+      // GET /api/whiteboard-layout?id=wb_... — returns user-placed positions
+      // plus the saved camera. Members at origin (0, 0) are considered unplaced
+      // and omitted so the client's default layout can kick in.
       if (path === "/api/whiteboard-layout" && req.method === "GET") {
         const id = url.searchParams.get("id");
         if (!id) return sendError(res, 400, "missing ?id");
         const wb = readWhiteboard(id);
         if (!wb) return sendError(res, 404, `whiteboard not found: ${id}`);
         const nodes: Record<string, { x: number; y: number }> = {};
-        for (const m of wb.members) nodes[m.id] = { x: m.x, y: m.y };
-        const sidecar = await loadWhiteboardLayout(id);
-        const layout: WhiteboardLayout = { nodes };
-        if (sidecar.camera) layout.camera = sidecar.camera;
-        if (sidecar.expanded) layout.expanded = sidecar.expanded;
-        return sendJson(res, { ok: true, data: layout });
+        for (const m of wb.members) {
+          if (m.x === 0 && m.y === 0) continue;
+          nodes[m.id] = { x: m.x, y: m.y };
+        }
+        return sendJson(res, { ok: true, data: { nodes, camera: wb.camera } });
       }
-      // POST /api/whiteboard-layout?id=wb_... — writes positions to whiteboard entity, camera/expanded to sidecar.
+      // POST /api/whiteboard-layout?id=wb_... — writes member positions and
+      // optional camera to the whiteboard JSON. Camera now lives on the
+      // whiteboard itself; there is no sidecar file.
       if (path === "/api/whiteboard-layout" && req.method === "POST") {
         const id = url.searchParams.get("id");
         if (!id) return sendError(res, 400, "missing ?id");
         let body = "";
         req.on("data", chunk => { body += chunk; });
-        req.on("end", async () => {
+        req.on("end", () => {
           try {
             const parsed = JSON.parse(body);
             if (!parsed || typeof parsed !== "object") return sendError(res, 400, "expected object");
-            const positions: Record<string, { x: number; y: number }> = parsed.nodes
-              ? parsed.nodes
-              : parsed;
-            const updated = updatePositions(id, positions);
-            if (!updated) return sendError(res, 404, `whiteboard not found: ${id}`);
-            // Persist camera/expanded to sidecar if provided
-            const sidecarPatch: Partial<WhiteboardLayout> = {};
-            if (parsed.camera) sidecarPatch.camera = parsed.camera;
-            if (parsed.expanded) sidecarPatch.expanded = parsed.expanded;
-            if (Object.keys(sidecarPatch).length > 0) {
-              const existing = await loadWhiteboardLayout(id);
-              await saveWhiteboardLayout(id, { ...existing, ...sidecarPatch, nodes: {} });
+            const raw: Record<string, any> = parsed.nodes ? parsed.nodes : parsed;
+            const updates: Record<string, { x?: number; y?: number }> = {};
+            for (const [key, val] of Object.entries(raw)) {
+              if (!val || typeof val !== "object") continue;
+              const u: { x?: number; y?: number } = {};
+              if (typeof val.x === "number") u.x = val.x;
+              if (typeof val.y === "number") u.y = val.y;
+              updates[key] = u;
             }
-            sendJson(res, { ok: true, data: { saved: Object.keys(positions).length } });
+            const updated = updateMembers(id, updates);
+            if (!updated) return sendError(res, 404, `whiteboard not found: ${id}`);
+            if (parsed.camera
+                && typeof parsed.camera.x === "number"
+                && typeof parsed.camera.y === "number"
+                && typeof parsed.camera.scale === "number") {
+              setCamera(id, parsed.camera);
+            }
+            sendJson(res, { ok: true, data: { saved: Object.keys(updates).length } });
           } catch (e: any) {
             sendError(res, 400, e.message);
+          }
+        });
+        return;
+      }
+      // POST /api/whiteboard/arrows — create a board-local arrow between
+      // two existing members. Body: { whiteboard_id, from, to, label?, style? }.
+      // Returns the newly-created arrow object so the UI can reconcile without
+      // a full reload.
+      if (path === "/api/whiteboard/arrows" && req.method === "POST") {
+        let body = "";
+        req.on("data", chunk => { body += chunk; });
+        req.on("end", () => {
+          try {
+            const parsed = JSON.parse(body);
+            const wbId = parsed?.whiteboard_id;
+            const from = parsed?.from;
+            const to = parsed?.to;
+            if (!wbId || !from || !to) return sendError(res, 400, "whiteboard_id, from, to required");
+            const result = addArrow(wbId, {
+              from,
+              to,
+              ...(typeof parsed.label === "string" ? { label: parsed.label } : {}),
+              ...(parsed.style === "dashed" || parsed.style === "solid" ? { style: parsed.style } : {}),
+            });
+            if (!result) return sendError(res, 404, `whiteboard not found: ${wbId}`);
+            sendJson(res, { ok: true, data: { arrow: result.arrow } });
+          } catch (e: any) {
+            sendError(res, 400, e.message);
+          }
+        });
+        return;
+      }
+      // DELETE /api/whiteboard/arrows?whiteboard_id=...&arrow_id=... —
+      // remove a board-local arrow. Does NOT touch any promoted graph rel.
+      if (path === "/api/whiteboard/arrows" && req.method === "DELETE") {
+        const wbId = url.searchParams.get("whiteboard_id");
+        const arrowId = url.searchParams.get("arrow_id");
+        if (!wbId || !arrowId) return sendError(res, 400, "whiteboard_id and arrow_id required");
+        const updated = removeArrow(wbId, arrowId);
+        if (!updated) return sendError(res, 404, `whiteboard not found: ${wbId}`);
+        return sendJson(res, { ok: true, data: { arrow_id: arrowId } });
+      }
+      // POST /api/whiteboard/arrow-promote — create a graph rel between the
+      // arrow's endpoints and record it on the arrow. Both endpoints must be
+      // notes. Body: { whiteboard_id, arrow_id, rel, reason? }. All the
+      // validation, conflict handling, and compensation lives in
+      // `cli/arrow-promote.ts` so the CLI and the view server agree.
+      if (path === "/api/whiteboard/arrow-promote" && req.method === "POST") {
+        let body = "";
+        req.on("data", chunk => { body += chunk; });
+        req.on("end", () => {
+          try {
+            const parsed = JSON.parse(body);
+            const wbId = parsed?.whiteboard_id;
+            const arrowId = parsed?.arrow_id;
+            const rel = parsed?.rel;
+            const reason = typeof parsed?.reason === "string" ? parsed.reason : undefined;
+            if (!wbId || !arrowId || typeof rel !== "string") {
+              return sendError(res, 400, "whiteboard_id, arrow_id, rel required");
+            }
+            const result = promoteArrow(wbId, arrowId, rel, reason);
+            sendJson(res, {
+              ok: true,
+              data: {
+                arrow_id: arrowId,
+                rel,
+                from: result.arrow.from,
+                to: result.arrow.to,
+                arrow: result.arrow,
+                link: result.link,
+              },
+            });
+          } catch (e: any) {
+            // Map LensError codes onto HTTP status. Conflicts get 409 so the
+            // UI can distinguish "already promoted differently" from generic
+            // validation failures.
+            const code = e?.code;
+            const status = code === "promotion_conflict"
+              ? 409
+              : code === "concurrent_modification"
+              ? 409
+              : code === "not_found"
+              ? 404
+              : 400;
+            sendError(res, status, e.message);
           }
         });
         return;

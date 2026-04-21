@@ -127,17 +127,25 @@ Shell mode:
     feed check [--dry-run] --json    Check for new articles
     feed remove <id|url> --json      Unsubscribe
 
-  Board (whiteboards):
+  Board (whiteboards — primary workspace layer, independent from graph):
     board create --title "<t>" [--body <b>]  Create a new whiteboard
-    board list --json                Show all whiteboards
-    board show <wb-id> --json        Show one whiteboard (with members)
+    board list --json                List all whiteboards
+    board show <wb-id> --json        Show full board state (incl. groups / arrows)
     board add <wb-id> <card-id>...   Add card(s) to a whiteboard
-    board remove <wb-id> <card-id>   Remove a card from a whiteboard
+    board remove <wb-id> <card-id>   Remove a card
+    board move <wb-id> <card-id> --x N --y N [--parent <grp>]
     board layout <wb-id> --positions '{"note_X":{"x":0,"y":0}}'
-                                     Update card positions
-    board update <wb-id> [--title X] [--body Y]  Update metadata
+    board update <wb-id> [--title X] [--body Y]
     board delete <wb-id>             Delete a whiteboard
     board find <card-id> --json      Which whiteboards contain this card?
+    board camera <wb-id> --x N --y N --scale N    Set default viewport
+    board group <wb-id> --label "..." --x N --y N --width N --height N
+                        [--color X] [--members id,id,...]
+    board ungroup <wb-id> <grp-id>
+    board arrow <wb-id> --from <member-id> --to <member-id> [--label "..." --style solid|dashed]
+    board arrow-remove <wb-id> <arr-id>
+    board arrow-promote <wb-id> <arr-id> --rel <supports|contradicts|refines|related|continues>
+                        [--reason "..."]   Convert local arrow to a graph rel
 
   Index:
     index --json                     List all keyword entry points
@@ -172,7 +180,7 @@ Envelope (stable, schema_version: 1):
 }
 
 if (command === "--version" || command === "-v") {
-  console.log("lens v1.32.0");
+  console.log("lens v1.34.0");
   process.exit(0);
 }
 

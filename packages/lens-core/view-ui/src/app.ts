@@ -17,7 +17,18 @@
 import { marked } from "marked";
 import cytoscape from "cytoscape";
 import fcose from "cytoscape-fcose";
-import { Whiteboard, type WhiteboardPayload, type WhiteboardCamera } from "./whiteboard";
+import type { WhiteboardPayload, WhiteboardCamera, WhiteboardOptions } from "./whiteboard";
+import { WhiteboardRF } from "./whiteboard-rf";
+
+/** Public renderer API used by the host. */
+interface WhiteboardRenderer {
+  destroy(): void;
+  focusCard(id: string | null): void;
+  fit(): void;
+  zoomBy(factor: number): void;
+  tidy(): void;
+  snapshot(): { nodes: Record<string, { x: number; y: number }>; camera: WhiteboardCamera };
+}
 
 cytoscape.use(fcose);
 
@@ -149,7 +160,12 @@ let currentGraph: GraphPayload | null = null;
 let currentMode: ViewMode = { kind: "graph" };
 let currentCardId: string | null = null;
 let saveLayoutTimer: number | null = null;
-let whiteboard: Whiteboard | null = null;
+let whiteboard: WhiteboardRenderer | null = null;
+// Monotonic token for whiteboard load requests. Every call to
+// `ensureWhiteboardMode` takes a new token; only the most recent one may
+// actually mount a renderer. Protects against overlapping reloads (e.g.,
+// user drops a card + triggers an arrow create in quick succession).
+let whiteboardLoadToken = 0;
 
 const typeFilter = new Set(["note", "source", "task"]);
 const relFilter = new Set(["supports", "contradicts", "refines", "related", "indexes", "continues"]);
@@ -759,10 +775,14 @@ async function saveLayout(positions: Record<string, { x: number; y: number }>) {
   });
 }
 
+interface WhiteboardLayoutEntry {
+  x: number;
+  y: number;
+}
+
 interface WhiteboardLayout {
-  nodes: Record<string, { x: number; y: number }>;
+  nodes: Record<string, WhiteboardLayoutEntry>;
   camera?: WhiteboardCamera;
-  expanded?: string[];
 }
 
 async function loadWhiteboardLayout(id: string): Promise<WhiteboardLayout> {
@@ -1701,22 +1721,26 @@ async function ensureGraphMode() {
 async function ensureWhiteboardMode(wbId: string) {
   if (currentMode.kind === "whiteboard" && currentMode.id === wbId && whiteboard) return;
 
-  // Fetch saved layout FIRST so we can pass any previously-promoted ghosts to the server.
+  const myToken = ++whiteboardLoadToken;
+
   const layout = await loadWhiteboardLayout(wbId);
-  const expandedParam = (layout.expanded || []).length > 0
-    ? `&expand=${encodeURIComponent((layout.expanded || []).join(","))}`
-    : "";
+  if (myToken !== whiteboardLoadToken) return; // superseded
 
   let wb: WhiteboardPayload;
   try {
-    wb = await fetchJson<WhiteboardPayload>(`/api/whiteboard?id=${encodeURIComponent(wbId)}${expandedParam}`);
+    wb = await fetchJson<WhiteboardPayload>(`/api/whiteboard?id=${encodeURIComponent(wbId)}`);
   } catch (err) {
+    if (myToken !== whiteboardLoadToken) return; // superseded
     console.warn("[lens view] whiteboard load failed — falling back to /view/:id", err);
     history.replaceState({}, "", `/view/${encodeURIComponent(wbId)}`);
     await ensureGraphMode();
     await openPanel(wbId, false);
     return;
   }
+
+  // Another load raced past us while we awaited the payload — discard our
+  // now-stale snapshot rather than mount it over the newer one.
+  if (myToken !== whiteboardLoadToken) return;
 
   // Tear down any existing whiteboard (switching between whiteboards)
   if (whiteboard) {
@@ -1730,29 +1754,7 @@ async function ensureWhiteboardMode(wbId: string) {
   const canvasHost = document.getElementById("wb-canvas-host")!;
   canvasHost.innerHTML = "";
 
-  // Floating toolbar (fit / zoom out / zoom in)
-  const tb = document.createElement("div");
-  tb.className = "wb-toolbar";
-  tb.innerHTML = `
-    <button data-wb-action="tidy" title="Tidy overlapping cards">✦</button>
-    <button data-wb-action="zoom-out" title="Zoom out">−</button>
-    <button data-wb-action="fit" title="Fit to view">⤢</button>
-    <button data-wb-action="zoom-in" title="Zoom in">+</button>
-  `;
-  tb.addEventListener("click", (ev) => {
-    const btn = (ev.target as HTMLElement).closest("button");
-    if (!btn || !whiteboard) return;
-    const action = btn.getAttribute("data-wb-action");
-    if (action === "zoom-in") whiteboard.zoomBy(1.2);
-    else if (action === "zoom-out") whiteboard.zoomBy(1 / 1.2);
-    else if (action === "fit") whiteboard.fit();
-    else if (action === "tidy") whiteboard.tidy();
-  });
-  canvasHost.appendChild(tb);
-
-  const edgeTooltip = document.getElementById("edge-tooltip")!;
-
-  whiteboard = new Whiteboard({
+  whiteboard = new WhiteboardRF({
     container: canvasHost,
     payload: wb,
     layout: layout.nodes,
@@ -1761,30 +1763,12 @@ async function ensureWhiteboardMode(wbId: string) {
       // Canvas → library sidebar detail, via the shared URL-driven helper.
       navigateToWhiteboardCard(id);
     },
-    onCardPromote: async (id) => {
-      if (currentMode.kind !== "whiteboard" || !whiteboard) return;
-      const snap = whiteboard.snapshot();
-      const current = await loadWhiteboardLayout(currentMode.id);
-      const expanded = new Set<string>(current.expanded || []);
-      if (expanded.has(id)) return;
-      expanded.add(id);
-      await saveWhiteboardLayout(currentMode.id, {
-        nodes: snap.nodes,
-        camera: snap.camera,
-        expanded: [...expanded],
-      });
-      // Reload whiteboard so the server adds this node's neighbors as new ghosts
-      const wbId = currentMode.id;
-      currentMode = { kind: "graph" }; // force re-init path
-      await ensureWhiteboardMode(wbId);
-    },
     onLayoutChange: (nodes) => {
       if (currentMode.kind !== "whiteboard" || !whiteboard) return;
       const snap = whiteboard.snapshot();
       saveWhiteboardLayout(currentMode.id, {
         nodes,
         camera: snap.camera,
-        expanded: layout.expanded,
       }).catch(() => {});
     },
     onCameraChange: (camera) => {
@@ -1793,20 +1777,7 @@ async function ensureWhiteboardMode(wbId: string) {
       saveWhiteboardLayout(currentMode.id, {
         nodes: snap.nodes,
         camera,
-        expanded: layout.expanded,
       }).catch(() => {});
-    },
-    onEdgeHover: (edge, x, y) => {
-      if (!edge) { edgeTooltip.classList.add("hidden"); return; }
-      const relColor = REL_COLOR[edge.rel] || "#8b949e";
-      // Multi-line reason (from the pair-indicator synthetic edge) renders each line separately.
-      const reasonHtml = edge.reason
-        ? edge.reason.split("\n").map(line => `<div class="edge-reason-line">${escapeHtml(line)}</div>`).join("")
-        : "";
-      edgeTooltip.innerHTML = `<span class="edge-rel" style="color:${relColor}">${escapeHtml(edge.rel)}</span>${reasonHtml}`;
-      edgeTooltip.style.left = `${x + 14}px`;
-      edgeTooltip.style.top = `${y + 14}px`;
-      edgeTooltip.classList.remove("hidden");
     },
     onBackgroundTap: () => {
       if (currentCardId && currentMode.kind === "whiteboard") {
@@ -1814,7 +1785,93 @@ async function ensureWhiteboardMode(wbId: string) {
         route().catch(console.error);
       }
     },
-    tooltipEl: edgeTooltip,
+    onCardRemove: async (id) => {
+      if (currentMode.kind !== "whiteboard") return;
+      const wbId = currentMode.id;
+      try {
+        const resp = await fetch(
+          `/api/whiteboard/cards?whiteboard_id=${encodeURIComponent(wbId)}&card_id=${encodeURIComponent(id)}`,
+          { method: "DELETE" },
+        );
+        const json = await resp.json();
+        if (!json.ok) { console.warn("[lens view] card remove failed", json); return; }
+        currentMode = { kind: "graph" };
+        await ensureWhiteboardMode(wbId);
+      } catch (err) {
+        console.error("[lens view] card remove error", err);
+      }
+    },
+    onArrowCreate: async (from, to) => {
+      if (currentMode.kind !== "whiteboard") return;
+      const wbId = currentMode.id;
+      try {
+        const resp = await fetch("/api/whiteboard/arrows", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ whiteboard_id: wbId, from, to }),
+        });
+        const json = await resp.json();
+        if (!json.ok) { console.warn("[lens view] arrow create failed", json); return; }
+        currentMode = { kind: "graph" };
+        await ensureWhiteboardMode(wbId);
+      } catch (err) {
+        console.error("[lens view] arrow create error", err);
+      }
+    },
+    onArrowDelete: async (arrowId) => {
+      if (currentMode.kind !== "whiteboard") return;
+      const wbId = currentMode.id;
+      try {
+        const resp = await fetch(
+          `/api/whiteboard/arrows?whiteboard_id=${encodeURIComponent(wbId)}&arrow_id=${encodeURIComponent(arrowId)}`,
+          { method: "DELETE" },
+        );
+        const json = await resp.json();
+        if (!json.ok) { console.warn("[lens view] arrow delete failed", json); return; }
+        currentMode = { kind: "graph" };
+        await ensureWhiteboardMode(wbId);
+      } catch (err) {
+        console.error("[lens view] arrow delete error", err);
+      }
+    },
+    onArrowPromote: async (arrowId) => {
+      if (currentMode.kind !== "whiteboard") return;
+      const wbId = currentMode.id;
+      // Minimal promotion picker: a browser prompt for the rel, optionally a
+      // second prompt for the reason. Staying true to the "no custom UI"
+      // directive; a richer picker can land later. The list MUST stay in
+      // sync with the LinkRel type (src/core/types.ts) — `indexes` is not a
+      // user-promotable rel and is intentionally excluded.
+      const rel = window.prompt(
+        "Promote to graph rel. One of: supports, contradicts, refines, related, continues",
+        "supports",
+      );
+      if (!rel) return;
+      const trimmed = rel.trim();
+      const reason = window.prompt("Reason (optional)") || "";
+      try {
+        const resp = await fetch("/api/whiteboard/arrow-promote", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            whiteboard_id: wbId,
+            arrow_id: arrowId,
+            rel: trimmed,
+            ...(reason.trim() ? { reason: reason.trim() } : {}),
+          }),
+        });
+        const json = await resp.json();
+        if (!json.ok) {
+          const msg = json.error?.message || "unknown error";
+          window.alert(resp.status === 409 ? `Conflict — ${msg}` : `Promotion failed: ${msg}`);
+          return;
+        }
+        currentMode = { kind: "graph" };
+        await ensureWhiteboardMode(wbId);
+      } catch (err) {
+        console.error("[lens view] arrow promote error", err);
+      }
+    },
   });
 
   currentMode = { kind: "whiteboard", id: wb.whiteboard.id, title: wb.whiteboard.title };
